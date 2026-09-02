@@ -14,25 +14,32 @@ class AuditLog(db.Model):
 
     @classmethod
     def log(cls, action: str, details: str = None, user_id: int = None, commit: bool = True):
-        client_ip = None
         try:
-            if request:
-                client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
-                if client_ip and ',' in client_ip:
-                    client_ip = client_ip.split(',')[0].strip()
-        except Exception:
-            client_ip = '127.0.0.1'
+            client_ip = None
+            try:
+                if request:
+                    client_ip = request.headers.get('X-Forwarded-For', request.remote_addr)
+                    if client_ip and ',' in client_ip:
+                        client_ip = client_ip.split(',')[0].strip()
+            except Exception:
+                client_ip = '127.0.0.1'
 
-        entry = cls(
-            user_id=user_id,
-            action=action,
-            details=details,
-            ip_address=client_ip
-        )
-        db.session.add(entry)
-        if commit:
-            db.session.commit()
-        return entry
+            entry = cls(
+                user_id=user_id,
+                action=action,
+                details=details,
+                ip_address=client_ip
+            )
+            db.session.add(entry)
+            if commit:
+                db.session.commit()
+            return entry
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+            return None
 
     def __repr__(self):
         return f"<AuditLog {self.action} by User:{self.user_id} at {self.created_at}>"

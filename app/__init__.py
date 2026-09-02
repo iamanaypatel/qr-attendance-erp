@@ -87,13 +87,15 @@ def create_app(config_name=None):
 def _auto_bootstrap_database(app):
     with app.app_context():
         try:
-            db.create_all()
+            from app.models.audit import AuditLog
+            from app.models.attendance import AttendanceRecord
             from app.models.user import User
             from app.models.department import Department
             from app.models.student import Student
             from app.models.teacher import Teacher
             from app.models.settings import SystemSetting
             from app.models.session import AcademicSession
+            db.create_all()
             from datetime import date
 
             # 1. System Settings
@@ -238,4 +240,5 @@ def register_error_handlers(app):
     @app.errorhandler(500)
     def internal_error(e):
         db.session.rollback()
-        return make_error_response(500, 'Server Error', 'An unexpected internal server error occurred. Our team has been notified.')
+        app.logger.error(f"500 Internal Server Error: {e}", exc_info=True)
+        return make_error_response(500, 'Server Error', 'An unexpected internal server error occurred. Please try again or check the details.')

@@ -173,46 +173,60 @@ def student_create():
 
         photo_filename = save_uploaded_photo(form.photo.data)
 
-        # Create portal user account if requested
-        user_account = None
-        if form.create_user_account.data:
-            account_email = clean_email or f"{custom_username.lower()}@student.apex.edu"
-            user_account = User(
-                username=custom_username,
-                email=account_email,
-                role='student',
+        try:
+            # Create portal user account if requested
+            user_account = None
+            if form.create_user_account.data:
+                account_email = clean_email or f"{custom_username.lower()}@student.apex.edu"
+                if User.query.filter(func.lower(User.email) == account_email.lower()).first():
+                    account_email = f"{custom_username.lower()}.{int(datetime.utcnow().timestamp())}@student.apex.edu"
+
+                user_account = User(
+                    username=custom_username,
+                    email=account_email,
+                    role='student',
+                    is_active=True
+                )
+                user_account.set_password(custom_password)
+                db.session.add(user_account)
+                db.session.flush()
+
+            student = Student(
+                user_id=user_account.id if user_account else None,
+                student_id=raw_sid,
+                full_name=form.full_name.data.strip(),
+                father_name=form.father_name.data.strip() if form.father_name.data else None,
+                mother_name=form.mother_name.data.strip() if form.mother_name.data else None,
+                email=clean_email,
+                phone=form.phone.data.strip() if form.phone.data else None,
+                date_of_birth=form.date_of_birth.data,
+                gender=form.gender.data,
+                department_id=form.department_id.data,
+                course=form.course.data.strip(),
+                semester=form.semester.data,
+                section=form.section.data.strip() if form.section.data else 'A',
+                roll_number=form.roll_number.data.strip(),
+                address=form.address.data.strip() if form.address.data else None,
+                photo=photo_filename,
+                qr_token=Student.generate_qr_token(),
                 is_active=True
             )
-            user_account.set_password(custom_password)
-            db.session.add(user_account)
-            db.session.flush()
+            db.session.add(student)
+            db.session.commit()
 
-        student = Student(
-            user_id=user_account.id if user_account else None,
-            student_id=raw_sid,
-            full_name=form.full_name.data.strip(),
-            father_name=form.father_name.data.strip() if form.father_name.data else None,
-            mother_name=form.mother_name.data.strip() if form.mother_name.data else None,
-            email=clean_email,
-            phone=form.phone.data.strip() if form.phone.data else None,
-            date_of_birth=form.date_of_birth.data,
-            gender=form.gender.data,
-            department_id=form.department_id.data,
-            course=form.course.data.strip(),
-            semester=form.semester.data,
-            section=form.section.data.strip() if form.section.data else 'A',
-            roll_number=form.roll_number.data.strip(),
-            address=form.address.data.strip() if form.address.data else None,
-            photo=photo_filename,
-            qr_token=Student.generate_qr_token(),
-            is_active=True
-        )
-        db.session.add(student)
-        db.session.commit()
+            try:
+                AuditLog.log('STUDENT_CREATE', f"Created student {student.full_name} ({student.student_id})", user_id=current_user.id)
+            except Exception:
+                pass
 
-        AuditLog.log('STUDENT_CREATE', f"Created student {student.full_name} ({student.student_id})", user_id=current_user.id)
-        flash(f"Student '{student.full_name}' added successfully! (Login: {custom_username if user_account else 'None'})", 'success')
-        return redirect(url_for('admin.student_detail', id=student.id))
+            flash(f"Student '{student.full_name}' added successfully! (Login: {custom_username if user_account else 'None'})", 'success')
+            return redirect(url_for('admin.student_detail', id=student.id))
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating student: {e}", exc_info=True)
+            flash(f"Could not create student: {str(e)}", 'danger')
+            return render_template('admin/students/form.html', form=form, title='Add New Student')
 
     return render_template('admin/students/form.html', form=form, title='Add New Student')
 
@@ -282,47 +296,66 @@ def student_edit(id):
         student.roll_number = form.roll_number.data.strip()
         student.address = form.address.data.strip() if form.address.data else None
 
-        # Manage Portal Login Account & Password
-        target_username = form.portal_username.data.strip() if form.portal_username.data and form.portal_username.data.strip() else student.student_id
-        if student.user:
-            # Check username collision if changed
-            if target_username.lower() != student.user.username.lower():
-                conflict = User.query.filter(
-                    (func.lower(User.username) == target_username.lower()) & (User.id != student.user.id)
-                ).first()
+        try:
+            # Manage Portal Login Account & Password
+            target_username = form.portal_username.data.strip() if form.portal_username.data and form.portal_username.data.strip() else student.student_id
+            if student.user:
+                # Check username collision if changed
+                if target_username.lower() != student.user.username.lower():
+                    conflict = User.query.filter(
+                        (func.lower(User.username) == target_username.lower()) & (User.id != student.user.id)
+                    ).first()
+                    if conflict:
+                        flash(f"Username '{target_username}' is already in use by another user.", 'danger')
+                        return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
+                    student.user.username = target_username
+
+                # If student's email was updated and is unique, sync user account email
+                if student.email:
+                    email_conflict = User.query.filter((func.lower(User.email) == student.email.lower()) & (User.id != student.user.id)).first()
+                    if not email_conflict:
+                        student.user.email = student.email
+
+                if form.portal_password.data and form.portal_password.data.strip():
+                    student.user.set_password(form.portal_password.data.strip())
+                    flash(f"Updated portal password for student {student.full_name}.", 'info')
+            elif form.create_user_account.data or (form.portal_username.data and form.portal_username.data.strip()):
+                # Create user account for student
+                conflict = User.query.filter(func.lower(User.username) == target_username.lower()).first()
                 if conflict:
                     flash(f"Username '{target_username}' is already in use by another user.", 'danger')
                     return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
-                student.user.username = target_username
 
-            if form.portal_password.data and form.portal_password.data.strip():
-                student.user.set_password(form.portal_password.data.strip())
-                flash(f"Updated portal password for student {student.full_name}.", 'info')
-        elif form.create_user_account.data or (form.portal_username.data and form.portal_username.data.strip()):
-            # Create user account for student
-            conflict = User.query.filter(func.lower(User.username) == target_username.lower()).first()
-            if conflict:
-                flash(f"Username '{target_username}' is already in use by another user.", 'danger')
-                return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
+                new_pass = form.portal_password.data.strip() if form.portal_password.data and form.portal_password.data.strip() else 'Student@1234'
+                acc_email = student.email or f"{target_username.lower()}@student.apex.edu"
+                if User.query.filter(func.lower(User.email) == acc_email.lower()).first():
+                    acc_email = f"{target_username.lower()}.{student.id}@student.apex.edu"
 
-            new_pass = form.portal_password.data.strip() if form.portal_password.data and form.portal_password.data.strip() else 'Student@1234'
-            acc_email = student.email or f"{target_username.lower()}@student.apex.edu"
-            new_user = User(
-                username=target_username,
-                email=acc_email,
-                role='student',
-                is_active=True
-            )
-            new_user.set_password(new_pass)
-            db.session.add(new_user)
-            db.session.flush()
-            student.user_id = new_user.id
-            flash(f"Created new portal login account for {student.full_name} (Username: {target_username}).", 'info')
+                new_user = User(
+                    username=target_username,
+                    email=acc_email,
+                    role='student',
+                    is_active=True
+                )
+                new_user.set_password(new_pass)
+                db.session.add(new_user)
+                db.session.flush()
+                student.user_id = new_user.id
+                flash(f"Created new portal login account for {student.full_name} (Username: {target_username}).", 'info')
 
-        db.session.commit()
-        AuditLog.log('STUDENT_UPDATE', f"Updated student {student.student_id}", user_id=current_user.id)
-        flash(f"Student details updated successfully.", 'success')
-        return redirect(url_for('admin.student_detail', id=student.id))
+            db.session.commit()
+            try:
+                AuditLog.log('STUDENT_UPDATE', f"Updated student {student.student_id}", user_id=current_user.id)
+            except Exception:
+                pass
+            flash(f"Student details updated successfully.", 'success')
+            return redirect(url_for('admin.student_detail', id=student.id))
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error updating student: {e}", exc_info=True)
+            flash(f"Could not update student: {str(e)}", 'danger')
+            return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
 
     return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
 
@@ -347,29 +380,44 @@ def student_credentials_update(id):
         flash(f"Username '{new_username}' is already taken by another user.", 'danger')
         return redirect(url_for('admin.student_detail', id=student.id))
 
-    if student.user:
-        student.user.username = new_username
-        if new_password:
-            student.user.set_password(new_password)
-        db.session.commit()
-        AuditLog.log('CREDENTIALS_UPDATE', f"Updated credentials for student {student.student_id}", user_id=current_user.id)
-        flash(f"Login credentials for {student.full_name} updated successfully! (Username: {new_username})", 'success')
-    else:
-        pwd = new_password if new_password else 'Student@1234'
-        u_email = student.email or f"{new_username.lower()}@student.apex.edu"
-        user = User(
-            username=new_username,
-            email=u_email,
-            role='student',
-            is_active=True
-        )
-        user.set_password(pwd)
-        db.session.add(user)
-        db.session.flush()
-        student.user_id = user.id
-        db.session.commit()
-        AuditLog.log('CREDENTIALS_CREATE', f"Created login for student {student.student_id}", user_id=current_user.id)
-        flash(f"Portal login account created for {student.full_name}! (Username: {new_username})", 'success')
+    try:
+        if student.user:
+            student.user.username = new_username
+            if new_password:
+                student.user.set_password(new_password)
+            db.session.commit()
+            try:
+                AuditLog.log('CREDENTIALS_UPDATE', f"Updated credentials for student {student.student_id}", user_id=current_user.id)
+            except Exception:
+                pass
+            flash(f"Login credentials for {student.full_name} updated successfully! (Username: {new_username})", 'success')
+        else:
+            pwd = new_password if new_password else 'Student@1234'
+            u_email = (student.email.strip() if student.email and student.email.strip() else f"{new_username.lower()}@student.apex.edu")
+            if User.query.filter(func.lower(User.email) == u_email.lower()).first():
+                u_email = f"{new_username.lower()}.{student.id}@student.apex.edu"
+
+            user = User(
+                username=new_username,
+                email=u_email,
+                role='student',
+                is_active=True
+            )
+            user.set_password(pwd)
+            db.session.add(user)
+            db.session.flush()
+            student.user_id = user.id
+            db.session.commit()
+            try:
+                AuditLog.log('CREDENTIALS_CREATE', f"Created login for student {student.student_id}", user_id=current_user.id)
+            except Exception:
+                pass
+            flash(f"Portal login account created for {student.full_name}! (Username: {new_username})", 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Failed to update credentials for student {student.id}: {e}", exc_info=True)
+        flash(f"Failed to update credentials: {str(e)}", 'danger')
 
     return redirect(url_for('admin.student_detail', id=student.id))
 
@@ -484,32 +532,50 @@ def teacher_create():
             flash(f"Portal Username '{custom_username}' is already taken. Please choose another username.", 'danger')
             return render_template('admin/teachers/form.html', form=form, title='Add New Teacher')
 
-        user = User(
-            username=custom_username,
-            email=form.email.data.strip(),
-            role='teacher',
-            is_active=form.is_active.data
-        )
-        user.set_password(password_to_set)
-        db.session.add(user)
-        db.session.flush()
+        # Check unique email across User table
+        teacher_email = form.email.data.strip()
+        existing_email_u = User.query.filter(func.lower(User.email) == teacher_email.lower()).first()
+        if existing_email_u:
+            flash(f"Email '{teacher_email}' is already associated with another user account.", 'danger')
+            return render_template('admin/teachers/form.html', form=form, title='Add New Teacher')
 
-        teacher = Teacher(
-            user_id=user.id,
-            employee_id=form.employee_id.data.strip(),
-            full_name=form.full_name.data.strip(),
-            email=form.email.data.strip(),
-            phone=form.phone.data.strip() if form.phone.data else None,
-            department_id=form.department_id.data,
-            designation=form.designation.data.strip(),
-            is_active=form.is_active.data
-        )
-        db.session.add(teacher)
-        db.session.commit()
+        try:
+            user = User(
+                username=custom_username,
+                email=teacher_email,
+                role='teacher',
+                is_active=form.is_active.data
+            )
+            user.set_password(password_to_set)
+            db.session.add(user)
+            db.session.flush()
 
-        AuditLog.log('TEACHER_CREATE', f"Created teacher {teacher.full_name} ({teacher.employee_id})", user_id=current_user.id)
-        flash(f"Teacher '{teacher.full_name}' added successfully! (Login: {custom_username})", 'success')
-        return redirect(url_for('admin.teachers'))
+            teacher = Teacher(
+                user_id=user.id,
+                employee_id=form.employee_id.data.strip(),
+                full_name=form.full_name.data.strip(),
+                email=teacher_email,
+                phone=form.phone.data.strip() if form.phone.data else None,
+                department_id=form.department_id.data,
+                designation=form.designation.data.strip(),
+                is_active=form.is_active.data
+            )
+            db.session.add(teacher)
+            db.session.commit()
+
+            try:
+                AuditLog.log('TEACHER_CREATE', f"Created teacher {teacher.full_name} ({teacher.employee_id})", user_id=current_user.id)
+            except Exception:
+                pass
+
+            flash(f"Teacher '{teacher.full_name}' added successfully! (Login: {custom_username})", 'success')
+            return redirect(url_for('admin.teachers'))
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error creating teacher: {e}", exc_info=True)
+            flash(f"Could not create teacher: {str(e)}", 'danger')
+            return render_template('admin/teachers/form.html', form=form, title='Add New Teacher')
 
     return render_template('admin/teachers/form.html', form=form, title='Add New Teacher')
 
@@ -536,53 +602,73 @@ def teacher_edit(id):
                 flash(f"Email '{form.email.data}' already exists.", 'danger')
                 return render_template('admin/teachers/form.html', form=form, title='Edit Teacher', teacher=teacher)
 
-        teacher.employee_id = form.employee_id.data.strip()
-        teacher.full_name = form.full_name.data.strip()
-        teacher.email = form.email.data.strip()
-        teacher.phone = form.phone.data.strip() if form.phone.data else None
-        teacher.department_id = form.department_id.data
-        teacher.designation = form.designation.data.strip()
-        teacher.is_active = form.is_active.data
+        try:
+            teacher.employee_id = form.employee_id.data.strip()
+            teacher.full_name = form.full_name.data.strip()
+            teacher.email = form.email.data.strip()
+            teacher.phone = form.phone.data.strip() if form.phone.data else None
+            teacher.department_id = form.department_id.data
+            teacher.designation = form.designation.data.strip()
+            teacher.is_active = form.is_active.data
 
-        # Update Portal Username & Password
-        target_username = form.portal_username.data.strip() if form.portal_username.data and form.portal_username.data.strip() else teacher.employee_id.lower()
-        if teacher.user:
-            if target_username.lower() != teacher.user.username.lower():
-                conflict = User.query.filter(
-                    (func.lower(User.username) == target_username.lower()) & (User.id != teacher.user.id)
-                ).first()
+            # Update Portal Username & Password
+            target_username = form.portal_username.data.strip() if form.portal_username.data and form.portal_username.data.strip() else teacher.employee_id.lower()
+            if teacher.user:
+                if target_username.lower() != teacher.user.username.lower():
+                    conflict = User.query.filter(
+                        (func.lower(User.username) == target_username.lower()) & (User.id != teacher.user.id)
+                    ).first()
+                    if conflict:
+                        flash(f"Portal Username '{target_username}' is already taken by another user.", 'danger')
+                        return render_template('admin/teachers/form.html', form=form, title='Edit Teacher', teacher=teacher)
+                    teacher.user.username = target_username
+
+                teacher.user.is_active = form.is_active.data
+                # Update user email if unique
+                email_conflict = User.query.filter((func.lower(User.email) == teacher.email.lower()) & (User.id != teacher.user.id)).first()
+                if not email_conflict:
+                    teacher.user.email = teacher.email
+
+                if form.password.data and form.password.data.strip():
+                    teacher.user.set_password(form.password.data.strip())
+                    flash(f"Updated portal password for teacher {teacher.full_name}.", 'info')
+            else:
+                conflict = User.query.filter(func.lower(User.username) == target_username.lower()).first()
                 if conflict:
-                    flash(f"Portal Username '{target_username}' is already taken by another user.", 'danger')
+                    flash(f"Portal Username '{target_username}' is already taken.", 'danger')
                     return render_template('admin/teachers/form.html', form=form, title='Edit Teacher', teacher=teacher)
-                teacher.user.username = target_username
+                
+                acc_email = teacher.email
+                if User.query.filter(func.lower(User.email) == acc_email.lower()).first():
+                    acc_email = f"{target_username.lower()}.{teacher.id}@faculty.apex.edu"
 
-            teacher.user.is_active = form.is_active.data
-            teacher.user.email = teacher.email
-            if form.password.data and form.password.data.strip():
-                teacher.user.set_password(form.password.data.strip())
-                flash(f"Updated portal password for teacher {teacher.full_name}.", 'info')
-        else:
-            conflict = User.query.filter(func.lower(User.username) == target_username.lower()).first()
-            if conflict:
-                flash(f"Portal Username '{target_username}' is already taken.", 'danger')
-                return render_template('admin/teachers/form.html', form=form, title='Edit Teacher', teacher=teacher)
-            new_u = User(
-                username=target_username,
-                email=teacher.email,
-                role='teacher',
-                is_active=teacher.is_active
-            )
-            new_pass = form.password.data.strip() if form.password.data and form.password.data.strip() else 'Teacher@1234'
-            new_u.set_password(new_pass)
-            db.session.add(new_u)
-            db.session.flush()
-            teacher.user_id = new_u.id
-            flash(f"Created portal login account for teacher {teacher.full_name} (Username: {target_username}).", 'info')
+                new_u = User(
+                    username=target_username,
+                    email=acc_email,
+                    role='teacher',
+                    is_active=teacher.is_active
+                )
+                new_pass = form.password.data.strip() if form.password.data and form.password.data.strip() else 'Teacher@1234'
+                new_u.set_password(new_pass)
+                db.session.add(new_u)
+                db.session.flush()
+                teacher.user_id = new_u.id
+                flash(f"Created portal login account for teacher {teacher.full_name} (Username: {target_username}).", 'info')
 
-        db.session.commit()
-        AuditLog.log('TEACHER_UPDATE', f"Updated teacher {teacher.employee_id}", user_id=current_user.id)
-        flash('Teacher updated successfully.', 'success')
-        return redirect(url_for('admin.teachers'))
+            db.session.commit()
+            try:
+                AuditLog.log('TEACHER_UPDATE', f"Updated teacher {teacher.employee_id}", user_id=current_user.id)
+            except Exception:
+                pass
+
+            flash('Teacher updated successfully.', 'success')
+            return redirect(url_for('admin.teachers'))
+
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Error updating teacher: {e}", exc_info=True)
+            flash(f"Could not update teacher: {str(e)}", 'danger')
+            return render_template('admin/teachers/form.html', form=form, title='Edit Teacher', teacher=teacher)
 
     return render_template('admin/teachers/form.html', form=form, title='Edit Teacher', teacher=teacher)
 
@@ -596,7 +682,7 @@ def teacher_credentials_update(id):
 
     if not new_username:
         flash("Username cannot be empty.", 'danger')
-        return redirect(url_for('admin.teacher_edit', id=teacher.id))
+        return redirect(request.referrer or url_for('admin.teachers'))
 
     conflict = User.query.filter(
         (func.lower(User.username) == new_username.lower()) &
@@ -604,32 +690,48 @@ def teacher_credentials_update(id):
     ).first()
     if conflict:
         flash(f"Username '{new_username}' is already taken by another user.", 'danger')
-        return redirect(url_for('admin.teacher_edit', id=teacher.id))
+        return redirect(request.referrer or url_for('admin.teachers'))
 
-    if teacher.user:
-        teacher.user.username = new_username
-        if new_password:
-            teacher.user.set_password(new_password)
-        db.session.commit()
-        AuditLog.log('CREDENTIALS_UPDATE', f"Updated credentials for teacher {teacher.employee_id}", user_id=current_user.id)
-        flash(f"Login credentials for teacher {teacher.full_name} updated successfully! (Username: {new_username})", 'success')
-    else:
-        pwd = new_password if new_password else 'Teacher@1234'
-        user = User(
-            username=new_username,
-            email=teacher.email,
-            role='teacher',
-            is_active=teacher.is_active
-        )
-        user.set_password(pwd)
-        db.session.add(user)
-        db.session.flush()
-        teacher.user_id = user.id
-        db.session.commit()
-        AuditLog.log('CREDENTIALS_CREATE', f"Created login for teacher {teacher.employee_id}", user_id=current_user.id)
-        flash(f"Portal login account created for teacher {teacher.full_name}! (Username: {new_username})", 'success')
+    try:
+        if teacher.user:
+            teacher.user.username = new_username
+            if new_password:
+                teacher.user.set_password(new_password)
+            db.session.commit()
+            try:
+                AuditLog.log('CREDENTIALS_UPDATE', f"Updated credentials for teacher {teacher.employee_id}", user_id=current_user.id)
+            except Exception:
+                pass
+            flash(f"Login credentials for teacher {teacher.full_name} updated successfully! (Username: {new_username})", 'success')
+        else:
+            pwd = new_password if new_password else 'Teacher@1234'
+            acc_email = teacher.email if teacher.email else f"{new_username.lower()}@faculty.apex.edu"
+            if User.query.filter(func.lower(User.email) == acc_email.lower()).first():
+                acc_email = f"{new_username.lower()}.{teacher.id}@faculty.apex.edu"
 
-    return redirect(url_for('admin.teacher_edit', id=teacher.id))
+            user = User(
+                username=new_username,
+                email=acc_email,
+                role='teacher',
+                is_active=teacher.is_active
+            )
+            user.set_password(pwd)
+            db.session.add(user)
+            db.session.flush()
+            teacher.user_id = user.id
+            db.session.commit()
+            try:
+                AuditLog.log('CREDENTIALS_CREATE', f"Created login for teacher {teacher.employee_id}", user_id=current_user.id)
+            except Exception:
+                pass
+            flash(f"Portal login account created for teacher {teacher.full_name}! (Username: {new_username})", 'success')
+
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f"Failed to update credentials for teacher {teacher.id}: {e}", exc_info=True)
+        flash(f"Failed to update credentials: {str(e)}", 'danger')
+
+    return redirect(request.referrer or url_for('admin.teachers'))
 
 
 @admin_bp.route('/teachers/<int:id>/delete', methods=['POST'])
