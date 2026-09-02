@@ -241,4 +241,6 @@ def register_error_handlers(app):
     def internal_error(e):
         db.session.rollback()
         app.logger.error(f"500 Internal Server Error: {e}", exc_info=True)
-        return make_error_response(500, 'Server Error', 'An unexpected internal server error occurred. Please try again or check the details.')
+        original = getattr(e, 'original_exception', e)
+        error_msg = f"{type(original).__name__}: {str(original)}" if original else str(e)
+        return make_error_response(500, 'Server Error', f"An unexpected internal server error occurred. Details: {error_msg}")
