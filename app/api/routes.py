@@ -1,15 +1,17 @@
 from datetime import date, datetime
 from flask import jsonify, request
-from flask_login import current_user, login_required
+from flask_login import current_user, login_required, login_user, logout_user
+from sqlalchemy import func
 from app.api import api_bp
 from app.extensions import csrf, db
+from app.models.user import User
 from app.models.student import Student
 from app.models.teacher import Teacher
 from app.models.department import Department
 from app.models.attendance import Attendance
 from app.attendance.services import process_qr_attendance
 
-# Exempt API blueprint from form CSRF so JavaScript fetch() can easily post
+# Exempt API blueprint from form CSRF so mobile apps and fetch() can easily post
 csrf.exempt(api_bp)
 
 @api_bp.route('/health')
@@ -18,6 +20,61 @@ def health():
         'status': 'healthy',
         'system': 'QR Attendance ERP V2.0',
         'timestamp': datetime.utcnow().isoformat()
+    })
+
+@api_bp.route('/auth/login', methods=['POST'])
+def api_login():
+    """
+    POST /api/auth/login
+    Accepts JSON: {"identity": "...", "password": "..."} or form data.
+    """
+    data = request.get_json(silent=True) or request.form
+    identity = (data.get('identity') or data.get('username') or '').strip()
+    password = data.get('password') or ''
+
+    if not identity or not password:
+        return jsonify({
+            'success': False,
+            'message': 'Identity and password are required.'
+        }), 400
+
+    user = User.query.filter(
+        (func.lower(User.username) == func.lower(identity)) |
+        (func.lower(User.email) == func.lower(identity))
+    ).first()
+
+    if not user or not user.check_password(password):
+        return jsonify({
+            'success': False,
+            'message': 'Invalid credentials. Please verify your username/email and password.'
+        }), 401
+
+    if not user.is_active:
+        return jsonify({
+            'success': False,
+            'message': 'Your account has been deactivated. Please contact the administrator.'
+        }), 403
+
+    login_user(user, remember=True)
+
+    return jsonify({
+        'success': True,
+        'message': f'Welcome back, {user.get_display_name()}!',
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'display_name': user.get_display_name()
+        }
+    }), 200
+
+@api_bp.route('/auth/logout', methods=['POST', 'GET'])
+def api_logout():
+    logout_user()
+    return jsonify({
+        'success': True,
+        'message': 'Logged out successfully.'
     })
 
 @api_bp.route('/attendance/scan', methods=['POST'])

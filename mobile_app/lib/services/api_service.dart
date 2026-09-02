@@ -84,43 +84,48 @@ class ApiService {
 
   Future<Map<String, dynamic>> login(String identity, String password) async {
     try {
-      final uri = Uri.parse('$_baseUrl/auth/login');
-      // Use form-encoded data to authenticate with Flask-Login
+      final uri = Uri.parse('$_baseUrl/api/auth/login');
       final response = await http
           .post(
             uri,
-            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
-            body: {'identity': identity, 'password': password},
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode({'identity': identity, 'password': password}),
           )
-          .timeout(const Duration(seconds: 7));
+          .timeout(const Duration(seconds: 10));
 
       _updateCookie(response);
 
-      // On successful Flask login, server returns 302 redirect to dashboard
-      // Or 200 with dashboard if redirect is followed by HTTP client
-      final success = response.statusCode == 200 || response.statusCode == 302;
-      if (success) {
-        await getDashboardStats();
-        _currentUser = {
-          'username': identity,
-          'role': identity == 'admin' ? 'admin' : (identity == 'teacher' ? 'teacher' : 'student'),
-        };
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          _currentUser = data['user'];
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('current_user', jsonEncode(_currentUser));
+          return {
+            'success': true,
+            'message': data['message'] ?? 'Welcome back, $identity!',
+            'user': _currentUser,
+          };
+        }
+      }
 
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('current_user', jsonEncode(_currentUser));
-
-        return {
-          'success': true,
-          'message': 'Welcome back, $identity!',
-          'user': _currentUser,
-        };
-      } else {
+      try {
+        final err = jsonDecode(response.body);
         return {
           'success': false,
-          'message': 'Invalid credentials or connection rejected.',
+          'message': err['message'] ?? 'Invalid credentials. Please verify your username and password.',
+        };
+      } catch (_) {
+        return {
+          'success': false,
+          'message': 'Invalid credentials. Please verify your username and password.',
         };
       }
     } catch (e) {
+      debugPrint("Login exception: $e");
       return {
         'success': false,
         'message': 'Connection error: $e',

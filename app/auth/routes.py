@@ -93,7 +93,10 @@ def init_system():
         flash(f'Initialization note: {str(e)}', 'warning')
     return redirect(url_for('auth.login'))
 
+from app.extensions import csrf, db
+
 @auth_bp.route('/login', methods=['GET', 'POST'])
+@csrf.exempt
 def login():
     if current_user.is_authenticated:
         if current_user.is_admin:
@@ -102,6 +105,53 @@ def login():
             return redirect(url_for('teacher.dashboard'))
         elif current_user.is_student:
             return redirect(url_for('student.dashboard'))
+
+    # Check for direct form POST without CSRF (e.g. mobile client)
+    if request.method == 'POST' and (request.is_json or not request.form.get('csrf_token')):
+        data = request.get_json(silent=True) or request.form
+        identity = (data.get('identity') or data.get('username') or '').strip()
+        password = data.get('password') or ''
+
+        if identity and password:
+            user = User.query.filter(
+                (func.lower(User.username) == func.lower(identity)) |
+                (func.lower(User.email) == func.lower(identity))
+            ).first()
+
+            if user and user.check_password(password):
+                if not user.is_active:
+                    if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                        return jsonify({'success': False, 'message': 'Account deactivated.'}), 403
+                    flash('Your account has been deactivated.', 'danger')
+                    return render_template('auth/login.html', form=LoginForm())
+
+                login_user(user, remember=True)
+                AuditLog.log('USER_LOGIN', f'User logged in: {user.username} [{user.role}]', user_id=user.id)
+
+                if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                    return jsonify({
+                        'success': True,
+                        'message': f'Welcome back, {user.get_display_name()}!',
+                        'user': {
+                            'id': user.id,
+                            'username': user.username,
+                            'role': user.role,
+                            'display_name': user.get_display_name()
+                        }
+                    })
+
+                flash(f'Welcome back, {user.get_display_name()}!', 'success')
+                if user.is_admin:
+                    return redirect(url_for('admin.dashboard'))
+                elif user.is_teacher:
+                    return redirect(url_for('teacher.dashboard'))
+                elif user.is_student:
+                    return redirect(url_for('student.dashboard'))
+            else:
+                if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                    return jsonify({'success': False, 'message': 'Invalid credentials.'}), 401
+                flash('Invalid credentials. Please verify your username/email and password.', 'danger')
+                return render_template('auth/login.html', form=LoginForm())
 
     form = LoginForm()
     if form.validate_on_submit():
