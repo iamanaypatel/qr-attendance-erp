@@ -75,10 +75,134 @@ def create_app(config_name=None):
             'now': datetime.now()
         }
 
+    # Auto-bootstrap database tables and default accounts if missing
+    if not app.config.get('TESTING'):
+        _auto_bootstrap_database(app)
+
     # Error handlers
     register_error_handlers(app)
 
     return app
+
+def _auto_bootstrap_database(app):
+    with app.app_context():
+        try:
+            db.create_all()
+            from app.models.user import User
+            from app.models.department import Department
+            from app.models.student import Student
+            from app.models.teacher import Teacher
+            from app.models.settings import SystemSetting
+            from app.models.session import AcademicSession
+            from datetime import date
+
+            # 1. System Settings
+            settings_data = [
+                ('institution_name', 'Apex Institute of Technology & Management', 'Full legal institution name'),
+                ('institution_email', 'contact@apex-institute.edu', 'Official administrative contact email'),
+                ('institution_phone', '+1-555-0199', 'Institution contact telephone'),
+                ('institution_address', '100 Academic Way, Tech Corridor, Metro City', 'Physical campus address'),
+                ('attendance_start_time', '08:00', 'Earliest permitted check-in time'),
+                ('attendance_end_time', '18:00', 'Latest permitted check-out time'),
+                ('duplicate_scan_cooldown_seconds', '60', 'Minimum seconds before accepting another scan for the same student')
+            ]
+            for key, val, desc in settings_data:
+                if not SystemSetting.query.filter_by(key=key).first():
+                    db.session.add(SystemSetting(key=key, value=val, description=desc))
+
+            # 2. Academic Session
+            if not AcademicSession.query.filter_by(name='2025-2026').first():
+                db.session.add(AcademicSession(
+                    name='2025-2026',
+                    start_date=date(2025, 8, 1),
+                    end_date=date(2026, 6, 30),
+                    is_active=True
+                ))
+
+            # 3. Departments
+            departments_data = [
+                ('Computer Science & Engineering', 'CSE', 'Department of Computer Science and Software Engineering'),
+                ('Electronics & Communication', 'ECE', 'Department of Electronics and Communications Engineering'),
+                ('Mechanical Engineering', 'MECH', 'Department of Mechanical Engineering & Robotics'),
+                ('Business Administration', 'BBA', 'Department of Management and Business Studies')
+            ]
+            depts = {}
+            for name, code, desc in departments_data:
+                dept = Department.query.filter_by(code=code).first()
+                if not dept:
+                    dept = Department(name=name, code=code, description=desc)
+                    db.session.add(dept)
+                    db.session.flush()
+                depts[code] = dept
+
+            # 4. Admin User
+            admin = User.query.filter_by(username='admin').first()
+            if not admin:
+                admin = User(username='admin', email='admin@apex-institute.edu', role='admin', is_active=True)
+                admin.set_password('Admin@1234')
+                db.session.add(admin)
+                app.logger.info("Auto-bootstrap: Created admin user.")
+
+            # 5. Teacher User
+            teacher_user = User.query.filter_by(username='teacher').first()
+            if not teacher_user:
+                teacher_user = User(username='teacher', email='teacher@apex-institute.edu', role='teacher', is_active=True)
+                teacher_user.set_password('Teacher@1234')
+                db.session.add(teacher_user)
+                db.session.flush()
+
+                cse = depts.get('CSE') or Department.query.filter_by(code='CSE').first()
+                if cse:
+                    teacher_profile = Teacher(
+                        user_id=teacher_user.id,
+                        employee_id='TCH101',
+                        full_name='Dr. Alan Turing',
+                        email='teacher@apex-institute.edu',
+                        phone='+1-555-0101',
+                        department_id=cse.id,
+                        designation='Associate Professor'
+                    )
+                    db.session.add(teacher_profile)
+                app.logger.info("Auto-bootstrap: Created teacher user.")
+
+            # 6. Student User
+            student_user = User.query.filter_by(username='student').first()
+            if not student_user:
+                student_user = User(username='student', email='student@apex-institute.edu', role='student', is_active=True)
+                student_user.set_password('Student@1234')
+                db.session.add(student_user)
+                db.session.flush()
+
+                cse = depts.get('CSE') or Department.query.filter_by(code='CSE').first()
+                if cse:
+                    student_profile = Student(
+                        user_id=student_user.id,
+                        student_id='STU2026001',
+                        full_name='Alex Johnson',
+                        father_name='Robert Johnson',
+                        mother_name='Mary Johnson',
+                        email='student@apex-institute.edu',
+                        phone='+1-555-0202',
+                        date_of_birth=date(2004, 5, 14),
+                        gender='Male',
+                        department_id=cse.id,
+                        course='B.Tech Computer Science',
+                        semester='4th',
+                        section='A',
+                        roll_number='CS-2024-042',
+                        address='42 Innovation Drive, Tech City',
+                        qr_token=Student.generate_qr_token(),
+                        admission_date=date(2024, 8, 1),
+                        is_active=True
+                    )
+                    db.session.add(student_profile)
+                app.logger.info("Auto-bootstrap: Created student user.")
+
+            db.session.commit()
+            app.logger.info("✓ Database auto-bootstrap completed.")
+        except Exception as e:
+            db.session.rollback()
+            app.logger.warning(f"Database auto-bootstrap skipped: {e}")
 
 def register_error_handlers(app):
     def make_error_response(error_code, title, message):
