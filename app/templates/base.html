@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en" data-bs-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light dark">
+  <title>{% block title %}Dashboard{% endblock %} — {{ institution_name or 'QR Attendance ERP' }}</title>
+
+  <!-- Prevent FOUC: Apply user saved theme before render -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem('theme');
+      const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const theme = savedTheme || (prefersDark ? 'dark' : 'light');
+      document.documentElement.setAttribute('data-bs-theme', theme);
+    })();
+  </script>
+
+  <!-- Google Fonts: Inter & Outfit -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap 5.3 CSS & Icons -->
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+
+  <!-- Application Custom CSS -->
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/main.css') }}">
+  {% block extra_css %}{% endblock %}
+</head>
+<body>
+
+  <!-- Toast Notification Container -->
+  <div class="toast-container" id="toastContainer">
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+        {% for category, message in messages %}
+          <div class="toast align-items-center {% if category == 'danger' %}bg-danger text-white{% elif category == 'success' %}bg-success text-white{% elif category == 'warning' %}bg-warning text-dark{% else %}bg-primary text-white{% endif %} border-0 mb-2 shadow" role="alert" aria-live="assertive" aria-atomic="true" data-bs-delay="4500">
+            <div class="d-flex">
+              <div class="toast-body d-flex align-items-center gap-2">
+                <i class="bi {% if category == 'danger' %}bi-exclamation-octagon-fill{% elif category == 'success' %}bi-check-circle-fill{% elif category == 'warning' %}bi-exclamation-triangle-fill{% else %}bi-info-circle-fill{% endif %} fs-5"></i>
+                <div>{{ message }}</div>
+              </div>
+              <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" aria-label="Close"></button>
+            </div>
+          </div>
+        {% endfor %}
+      {% endif %}
+    {% endwith %}
+  </div>
+
+  <div class="app-wrapper">
+    {% if current_user.is_authenticated %}
+      <!-- Mobile Backdrop -->
+      <div class="sidebar-backdrop" id="sidebarBackdrop"></div>
+
+      <!-- App Sidebar -->
+      <aside class="app-sidebar" id="appSidebar">
+        <div class="sidebar-header">
+          <a href="/" class="sidebar-brand">
+            <div class="sidebar-brand-icon">
+              <i class="bi bi-qr-code-scan"></i>
+            </div>
+            <div>
+              <div class="fw-bold lh-1 brand-font" style="font-size: 1.05rem;">ATTENDANCE</div>
+              <small class="text-primary fw-semibold" style="font-size: 0.72rem; letter-spacing: 0.1em;">ERP V2.0</small>
+            </div>
+          </a>
+        </div>
+
+        <ul class="sidebar-nav">
+          {% if current_user.is_admin %}
+            <li class="nav-section-title">ADMINISTRATION</li>
+            <li>
+              <a href="{{ url_for('admin.dashboard') }}" class="sidebar-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span>Dashboard</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('admin.students') }}" class="sidebar-link {% if 'admin.student' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-people-fill"></i>
+                <span>Students</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('admin.teachers') }}" class="sidebar-link {% if 'admin.teacher' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-person-badge-fill"></i>
+                <span>Teachers</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if request.endpoint == 'attendance.scanner' %}active{% endif %}">
+                <i class="bi bi-qr-code-scan"></i>
+                <span>Take Attendance</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('reports.index') }}" class="sidebar-link {% if 'reports.' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-file-earmark-bar-graph-fill"></i>
+                <span>Reports & Exports</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('admin.qr_generator') }}" class="sidebar-link {% if request.endpoint == 'admin.qr_generator' %}active{% endif %}">
+                <i class="bi bi-upc-scan"></i>
+                <span>QR Generator</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('attendance.calendar') }}" class="sidebar-link {% if request.endpoint == 'attendance.calendar' %}active{% endif %}">
+                <i class="bi bi-calendar3"></i>
+                <span>Calendar & Holidays</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('admin.settings') }}" class="sidebar-link {% if request.endpoint == 'admin.settings' %}active{% endif %}">
+                <i class="bi bi-gear-fill"></i>
+                <span>Settings</span>
+              </a>
+            </li>
+
+          {% elif current_user.is_teacher %}
+            <li class="nav-section-title">TEACHER PORTAL</li>
+            <li>
+              <a href="{{ url_for('teacher.dashboard') }}" class="sidebar-link {% if request.endpoint == 'teacher.dashboard' %}active{% endif %}">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span>Dashboard</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if request.endpoint == 'attendance.scanner' %}active{% endif %}">
+                <i class="bi bi-qr-code-scan"></i>
+                <span>Take Attendance</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('teacher.students') }}" class="sidebar-link {% if request.endpoint == 'teacher.students' %}active{% endif %}">
+                <i class="bi bi-people-fill"></i>
+                <span>My Students</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('reports.index') }}" class="sidebar-link {% if 'reports.' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-file-earmark-bar-graph-fill"></i>
+                <span>Reports</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('attendance.calendar') }}" class="sidebar-link {% if request.endpoint == 'attendance.calendar' %}active{% endif %}">
+                <i class="bi bi-calendar3"></i>
+                <span>Calendar</span>
+              </a>
+            </li>
+
+          {% elif current_user.is_student %}
+            <li class="nav-section-title">STUDENT PORTAL</li>
+            <li>
+              <a href="{{ url_for('student.dashboard') }}" class="sidebar-link {% if request.endpoint == 'student.dashboard' %}active{% endif %}">
+                <i class="bi bi-grid-1x2-fill"></i>
+                <span>Dashboard</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('student.profile') }}" class="sidebar-link {% if request.endpoint == 'student.profile' %}active{% endif %}">
+                <i class="bi bi-person-circle"></i>
+                <span>My Profile</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('student.qr_code') }}" class="sidebar-link {% if request.endpoint == 'student.qr_code' %}active{% endif %}">
+                <i class="bi bi-qr-code"></i>
+                <span>My QR Code</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('student.history') }}" class="sidebar-link {% if request.endpoint == 'student.history' %}active{% endif %}">
+                <i class="bi bi-clock-history"></i>
+                <span>Attendance History</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('student.id_card') }}" class="sidebar-link {% if request.endpoint == 'student.id_card' %}active{% endif %}">
+                <i class="bi bi-person-vcard"></i>
+                <span>Download ID Card</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('attendance.calendar') }}" class="sidebar-link {% if request.endpoint == 'attendance.calendar' %}active{% endif %}">
+                <i class="bi bi-calendar3"></i>
+                <span>My Calendar</span>
+              </a>
+            </li>
+          {% endif %}
+        </ul>
+
+        <!-- Sidebar footer with user info and logout -->
+        <div class="sidebar-footer">
+          <div class="d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-2 overflow-hidden">
+              <div class="bg-primary text-white rounded-circle d-flex align-items-center justify-content-center fw-bold" style="width: 34px; height: 34px; min-width: 34px;">
+                {{ current_user.get_display_name()[0] | upper }}
+              </div>
+              <div class="overflow-hidden">
+                <div class="text-white text-truncate fw-medium" style="font-size: 0.88rem;">{{ current_user.get_display_name() }}</div>
+                <div class="text-muted text-capitalize" style="font-size: 0.75rem;">{{ current_user.role }}</div>
+              </div>
+            </div>
+            <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-outline-danger border-0" data-bs-toggle="tooltip" title="Log Out">
+              <i class="bi bi-box-arrow-right fs-5"></i>
+            </a>
+          </div>
+        </div>
+      </aside>
+    {% endif %}
+
+    <!-- Main Content Area -->
+    <div class="main-content">
+      {% if current_user.is_authenticated %}
+        <!-- Top Navbar -->
+        <nav class="navbar glass-nav px-3 px-lg-4">
+          <div class="container-fluid p-0 d-flex align-items-center justify-content-between">
+            <div class="d-flex align-items-center gap-3">
+              <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" id="sidebarToggleBtn" aria-label="Toggle navigation">
+                <i class="bi bi-list fs-5"></i>
+              </button>
+              <span class="d-none d-md-inline fw-semibold text-muted" style="font-size: 0.9rem;">
+                <i class="bi bi-buildings me-1"></i> {{ institution_name }}
+              </span>
+              {% if active_session %}
+                <span class="badge badge-soft-info d-none d-sm-inline">
+                  <i class="bi bi-clock me-1"></i> Session: {{ active_session.name }}
+                </span>
+              {% endif %}
+            </div>
+
+            <div class="d-flex align-items-center gap-2">
+              <!-- Dark / Light Mode Switch -->
+              <button class="btn btn-sm btn-outline-secondary rounded-circle" id="theme-toggle-btn" type="button" title="Toggle Theme" style="width: 38px; height: 38px;">
+                <i class="bi bi-moon-stars-fill" id="theme-toggle-icon"></i>
+              </button>
+
+              <!-- Role Badge -->
+              <span class="badge {% if current_user.is_admin %}bg-primary{% elif current_user.is_teacher %}bg-success{% else %}bg-secondary{% endif %} px-2.5 py-1.5 text-uppercase" style="letter-spacing: 0.05em; font-size: 0.72rem;">
+                {{ current_user.role }}
+              </span>
+
+              <!-- Quick Log Out Button -->
+              <a href="{{ url_for('auth.logout') }}" class="btn btn-sm btn-outline-danger d-none d-md-flex align-items-center gap-1 ms-1">
+                <i class="bi bi-box-arrow-right"></i> Logout
+              </a>
+            </div>
+          </div>
+        </nav>
+      {% endif %}
+
+      <!-- Page Content -->
+      <main class="page-container">
+        {% block content %}{% endblock %}
+      </main>
+
+      <!-- Footer -->
+      <footer class="mt-auto py-3 px-4 border-top text-center text-muted" style="font-size: 0.82rem; border-color: var(--border-glass) !important;">
+        <div class="container-fluid d-flex flex-column flex-sm-row justify-content-between align-items-center gap-2">
+          <div>
+            &copy; {{ current_year }} <strong>{{ institution_name }}</strong>. All rights reserved.
+          </div>
+          <div>
+            <span class="text-primary fw-semibold">QR Attendance ERP V2.0</span> &bull; Production Grade
+          </div>
+        </div>
+      </footer>
+    </div>
+  </div>
+
+  <!-- Bootstrap 5.3 Bundle with Popper -->
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <!-- Chart.js 4.4 -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Application JS -->
+  <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+
+  <!-- Auto-show flash toasts -->
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const flashToasts = document.querySelectorAll('#toastContainer .toast');
+      flashToasts.forEach(el => {
+        new bootstrap.Toast(el).show();
+      });
+    });
+  </script>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>

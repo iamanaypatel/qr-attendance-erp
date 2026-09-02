@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block title %}Student Dashboard — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Student Portal</h2>
+      <p class="text-muted mb-0">Welcome, {{ current_user.get_display_name() }} ({{ current_user.student_profile.student_id if current_user.student_profile else '' }}).</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('student.qr_code') }}" class="btn btn-primary-glow">
+        <i class="bi bi-qr-code me-1"></i> View My QR Code
+      </a>
+      <a href="{{ url_for('student.id_card') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-person-vcard me-1"></i> Digital ID Card
+      </a>
+    </div>
+  </div>
+
+  <!-- Stats Grid -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card kpi-card" style="--card-accent: #3b82f6;">
+        <div class="text-muted small fw-semibold text-uppercase">Attendance Percentage</div>
+        <div class="kpi-value text-primary mt-1">{{ stats.percentage|default(0.0) }}%</div>
+        <small class="text-muted">Target minimum: 75%</small>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card kpi-card" style="--card-accent: #10b981;">
+        <div class="text-muted small fw-semibold text-uppercase">Total Present</div>
+        <div class="kpi-value text-success mt-1">{{ stats.present_count|default(0) }}</div>
+        <small class="text-muted">Days attended</small>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card kpi-card" style="--card-accent: #ef4444;">
+        <div class="text-muted small fw-semibold text-uppercase">Total Absent</div>
+        <div class="kpi-value text-danger mt-1">{{ stats.absent_count|default(0) }}</div>
+        <small class="text-muted">Days missed</small>
+      </div>
+    </div>
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card kpi-card" style="--card-accent: #6366f1;">
+        <div class="text-muted small fw-semibold text-uppercase">Total Sessions</div>
+        <div class="kpi-value text-info mt-1">{{ stats.total_sessions|default(0) }}</div>
+        <small class="text-muted">Class days recorded</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Recent Attendance History -->
+  <div class="glass-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0">Recent Attendance History</h5>
+      <a href="{{ url_for('student.history') }}" class="btn btn-sm btn-outline-primary">View Full History</a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Check In (Time In)</th>
+            <th>Check Out (Time Out)</th>
+            <th>Status</th>
+            <th>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if recent_records %}
+            {% for rec in recent_records %}
+              <tr>
+                <td class="fw-semibold">{{ rec.date.strftime('%a, %d %b %Y') }}</td>
+                <td>{{ rec.time_in.strftime('%I:%M %p') if rec.time_in else '-' }}</td>
+                <td>{{ rec.time_out.strftime('%I:%M %p') if rec.time_out else '-' }}</td>
+                <td>
+                  {% if rec.status == 'Present' %}
+                    <span class="badge badge-soft-success">Present</span>
+                  {% elif rec.status == 'Absent' %}
+                    <span class="badge badge-soft-danger">Absent</span>
+                  {% else %}
+                    <span class="badge badge-soft-warning">{{ rec.status }}</span>
+                  {% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ rec.method }}</span></td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="text-center py-4 text-muted">
+                <i class="bi bi-clock-history fs-2 d-block mb-1"></i>
+                No attendance sessions recorded yet.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

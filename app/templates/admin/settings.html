@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}System Settings & Audits — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="mb-4">
+    <h2 class="fw-bold brand-font mb-1">System Settings & Governance</h2>
+    <p class="text-muted mb-0">Configure institution profile, attendance policies, and audit logs.</p>
+  </div>
+
+  <div class="row g-4">
+    <!-- Left Column: Settings Form -->
+    <div class="col-lg-7">
+      <div class="glass-card p-4 p-md-5 mb-4">
+        <h5 class="fw-bold brand-font mb-3"><i class="bi bi-gear-fill me-2 text-primary"></i>Institution Configuration</h5>
+        <form method="POST" action="{{ url_for('admin.settings') }}">
+          {{ form.hidden_tag() }}
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">LEGAL INSTITUTION NAME</label>
+            {{ form.institution_name(class="form-control", required=True) }}
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">OFFICIAL EMAIL</label>
+              {{ form.institution_email(class="form-control", required=True) }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">CONTACT PHONE</label>
+              {{ form.institution_phone(class="form-control", required=True) }}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">CAMPUS ADDRESS</label>
+            {{ form.institution_address(class="form-control", rows=2, required=True) }}
+          </div>
+
+          <h5 class="fw-bold brand-font mb-3 mt-4"><i class="bi bi-clock-history me-2 text-primary"></i>Attendance Timing Rules</h5>
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">CHECK-IN START</label>
+              {{ form.attendance_start_time(class="form-control", placeholder="08:00") }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">CHECK-OUT END</label>
+              {{ form.attendance_end_time(class="form-control", placeholder="18:00") }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">COOLDOWN (SECS)</label>
+              {{ form.duplicate_scan_cooldown_seconds(class="form-control", placeholder="60") }}
+            </div>
+          </div>
+
+          <button type="submit" class="btn btn-primary-glow px-5">
+            <i class="bi bi-check2-circle me-1"></i> Save Configuration
+          </button>
+        </form>
+      </div>
+
+      <!-- Academic Sessions -->
+      <div class="glass-card p-4">
+        <h5 class="fw-bold brand-font mb-3"><i class="bi bi-calendar-event me-2 text-primary"></i>Academic Sessions</h5>
+        <div class="table-responsive">
+          <table class="table table-glass align-middle">
+            <thead>
+              <tr>
+                <th>Session Name</th>
+                <th>Start Date</th>
+                <th>End Date</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if sessions %}
+                {% for s in sessions %}
+                  <tr>
+                    <td class="fw-semibold">{{ s.name }}</td>
+                    <td>{{ s.start_date.strftime('%d %b %Y') }}</td>
+                    <td>{{ s.end_date.strftime('%d %b %Y') }}</td>
+                    <td>
+                      {% if s.is_active %}
+                        <span class="badge badge-soft-success">Active Session</span>
+                      {% else %}
+                        <span class="badge bg-secondary">Archived</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="4" class="text-center py-3 text-muted">No academic sessions defined.</td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Audit Logs -->
+    <div class="col-lg-5">
+      <div class="glass-card p-4 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold brand-font mb-0"><i class="bi bi-shield-check me-2 text-primary"></i>System Audit Trail</h5>
+          <span class="badge badge-soft-info">Live</span>
+        </div>
+        <p class="text-muted small mb-3">Immutable record of logins, attendance modifications, and admin actions.</p>
+
+        <div class="overflow-y-auto" style="max-height: 600px;">
+          {% if audit_logs %}
+            <div class="timeline">
+              {% for log in audit_logs %}
+                <div class="p-3 mb-2 rounded bg-body-tertiary border">
+                  <div class="d-flex justify-content-between align-items-center mb-1">
+                    <span class="badge bg-secondary font-monospace" style="font-size: 0.7rem;">{{ log.action }}</span>
+                    <small class="text-muted" style="font-size: 0.72rem;">{{ log.created_at.strftime('%d %b, %I:%M %p') }}</small>
+                  </div>
+                  <div class="small fw-semibold text-body mb-1">{{ log.details or '-' }}</div>
+                  <div class="text-muted small" style="font-size: 0.72rem;">
+                    User: {{ log.user.username if log.user else 'System' }} &bull; IP: {{ log.ip_address or '127.0.0.1' }}
+                  </div>
+                </div>
+              {% endfor %}
+            </div>
+          {% else %}
+            <div class="text-center py-5 text-muted">
+              <i class="bi bi-journal-text fs-2 d-block mb-2"></i>
+              No audit records generated yet.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+
+{% block title %}My Student Profile — {{ student.full_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">My Student Profile</h2>
+      <p class="text-muted mb-0">Official academic enrollment and attendance records.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('student.qr_code') }}" class="btn btn-outline-primary">
+        <i class="bi bi-qr-code me-1"></i> My QR Code
+      </a>
+      <a href="{{ url_for('student.id_card') }}" class="btn btn-primary-glow">
+        <i class="bi bi-person-vcard me-1"></i> Digital ID Card
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Left Column: Photo & QR -->
+    <div class="col-lg-4">
+      <div class="glass-card p-4 text-center mb-4">
+        {% if student.photo %}
+          <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="{{ student.full_name }}" class="rounded-4 object-fit-cover shadow-sm mb-3" style="width: 130px; height: 130px; border: 3px solid var(--border-glass);">
+        {% else %}
+          <div class="rounded-4 bg-primary text-white d-inline-flex align-items-center justify-content-center fw-bold shadow-sm mb-3" style="width: 130px; height: 130px; font-size: 3.5rem;">
+            {{ student.full_name[0] | upper }}
+          </div>
+        {% endif %}
+
+        <h4 class="fw-bold mb-1">{{ student.full_name }}</h4>
+        <div class="badge bg-secondary font-monospace mb-2">{{ student.student_id }}</div>
+        <div class="text-muted small">{{ student.course }} &bull; Sem {{ student.semester }}</div>
+
+        <hr class="my-3" style="border-color: var(--border-glass) !important;">
+
+        <div class="p-2 bg-white rounded-3 d-inline-block shadow-sm mb-2">
+          <img src="{{ qr_uri }}" alt="QR" style="width: 140px; height: 140px; display: block;">
+        </div>
+        <div class="d-block">
+          <a href="{{ url_for('student.qr_download') }}" class="btn btn-sm btn-outline-primary mt-1">
+            <i class="bi bi-download me-1"></i> Download QR Image
+          </a>
+        </div>
+      </div>
+
+      <!-- Attendance Percentage Card -->
+      <div class="glass-card p-4">
+        <h6 class="fw-bold text-uppercase text-muted small mb-2">Attendance Standing</h6>
+        <div class="d-flex justify-content-between align-items-baseline mb-1">
+          <span class="fs-4 fw-bold {% if stats.percentage >= 75 %}text-success{% else %}text-danger{% endif %}">
+            {{ stats.percentage }}%
+          </span>
+          <small class="text-muted">Target: 75%</small>
+        </div>
+        <div class="progress mb-3" style="height: 8px;">
+          <div class="progress-bar {% if stats.percentage >= 75 %}bg-success{% else %}bg-danger{% endif %}" style="width: {{ stats.percentage }}%;"></div>
+        </div>
+
+        <div class="row text-center g-2 pt-2 border-top">
+          <div class="col-6">
+            <div class="fw-bold text-success">{{ stats.present_count }}</div>
+            <small class="text-muted" style="font-size: 0.72rem;">DAYS ATTENDED</small>
+          </div>
+          <div class="col-6">
+            <div class="fw-bold text-danger">{{ stats.absent_count }}</div>
+            <small class="text-muted" style="font-size: 0.72rem;">DAYS ABSENT</small>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Right Column: Academic & Personal Data -->
+    <div class="col-lg-8">
+      <div class="glass-card p-4 p-md-5 mb-4">
+        <h5 class="fw-bold brand-font mb-4"><i class="bi bi-mortarboard text-primary me-2"></i>Academic Enrollment Details</h5>
+        
+        <div class="row g-4 mb-4">
+          <div class="col-sm-6">
+            <div class="text-muted small">Department</div>
+            <div class="fw-semibold fs-6">{{ student.department.name if student.department else '-' }} ({{ student.department.code if student.department else '' }})</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Program / Course</div>
+            <div class="fw-semibold fs-6">{{ student.course }}</div>
+          </div>
+          <div class="col-sm-4">
+            <div class="text-muted small">Roll Number</div>
+            <div class="fw-semibold fs-6 font-monospace">{{ student.roll_number }}</div>
+          </div>
+          <div class="col-sm-4">
+            <div class="text-muted small">Current Semester</div>
+            <div class="fw-semibold fs-6">{{ student.semester }} Semester</div>
+          </div>
+          <div class="col-sm-4">
+            <div class="text-muted small">Section</div>
+            <div class="fw-semibold fs-6">{{ student.section or 'A' }}</div>
+          </div>
+        </div>
+
+        <h5 class="fw-bold brand-font mb-4 border-top pt-4" style="border-color: var(--border-glass) !important;">
+          <i class="bi bi-person-lines-fill text-primary me-2"></i>Personal Information
+        </h5>
+
+        <div class="row g-4">
+          <div class="col-sm-6">
+            <div class="text-muted small">Email Address</div>
+            <div class="fw-semibold">{{ student.email or '-' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Contact Phone</div>
+            <div class="fw-semibold">{{ student.phone or '-' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Date of Birth</div>
+            <div class="fw-semibold">{{ student.date_of_birth.strftime('%d %B %Y') if student.date_of_birth else '-' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Gender</div>
+            <div class="fw-semibold">{{ student.gender or '-' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Father's Name</div>
+            <div class="fw-semibold">{{ student.father_name or '-' }}</div>
+          </div>
+          <div class="col-sm-6">
+            <div class="text-muted small">Mother's Name</div>
+            <div class="fw-semibold">{{ student.mother_name or '-' }}</div>
+          </div>
+          <div class="col-12">
+            <div class="text-muted small">Residential Address</div>
+            <div class="fw-semibold">{{ student.address or '-' }}</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

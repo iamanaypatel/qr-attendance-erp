@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex align-items-center gap-2 mb-4">
+    <a href="{{ url_for('admin.teachers') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Back to Directory
+    </a>
+    <h2 class="fw-bold brand-font mb-0">{{ title }}</h2>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="glass-card p-4 p-md-5">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">EMPLOYEE ID *</label>
+              {{ form.employee_id(class="form-control font-monospace", placeholder="e.g. TCH101", required=True) }}
+              {% for err in form.employee_id.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">FULL NAME *</label>
+              {{ form.full_name(class="form-control", placeholder="Dr. / Prof. Full Name", required=True) }}
+              {% for err in form.full_name.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">EMAIL ADDRESS *</label>
+              {{ form.email(class="form-control", placeholder="teacher@university.edu", required=True) }}
+              {% for err in form.email.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">PHONE NUMBER</label>
+              {{ form.phone(class="form-control", placeholder="+1 555-0101") }}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">ASSIGNED DEPARTMENT *</label>
+              {{ form.department_id(class="form-select") }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">DESIGNATION *</label>
+              {{ form.designation(class="form-control", placeholder="e.g. Associate Professor, HOD") }}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">PORTAL PASSWORD</label>
+              {{ form.password(class="form-control", placeholder="Leave blank for default: Teacher@1234") }}
+              <small class="text-muted">Allows teacher to log in to scan student QR codes.</small>
+            </div>
+            <div class="col-md-6 d-flex align-items-center">
+              <div class="form-check p-3 rounded bg-body-tertiary w-100 border mt-3">
+                {{ form.is_active(class="form-check-input") }}
+                <label class="form-check-label small fw-semibold" for="is_active">
+                  Account Active
+                  <div class="text-muted fw-normal" style="font-size: 0.75rem;">Enable or suspend portal access for this teacher</div>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 border-top pt-4" style="border-color: var(--border-glass) !important;">
+            <a href="{{ url_for('admin.teachers') }}" class="btn btn-outline-secondary px-4">Cancel</a>
+            <button type="submit" class="btn btn-primary-glow px-5">
+              <i class="bi bi-check-lg me-1"></i> Save Teacher
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

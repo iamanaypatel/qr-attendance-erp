@@ -1,0 +1,230 @@
+{% extends "base.html" %}
+
+{% block title %}Admin Dashboard — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Administrative Overview</h2>
+      <p class="text-muted mb-0">Live attendance status, institutional counters, and analytics.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('attendance.scanner') }}" class="btn btn-primary-glow">
+        <i class="bi bi-qr-code-scan me-1"></i> Scan Attendance
+      </a>
+      <a href="{{ url_for('reports.index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-download me-1"></i> Generate Report
+      </a>
+    </div>
+  </div>
+
+  <!-- KPI Metrics Grid -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+      <div class="glass-card kpi-card" style="--card-accent: #3b82f6;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small fw-semibold text-uppercase">Total Students</div>
+            <div class="kpi-value text-primary mt-1" id="kpi-total-students">{{ total_students|default(0) }}</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(59, 130, 246, 0.12); --bubble-color: #3b82f6;">
+            <i class="bi bi-people-fill"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+      <div class="glass-card kpi-card" style="--card-accent: #10b981;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small fw-semibold text-uppercase">Present Today</div>
+            <div class="kpi-value text-success mt-1" id="kpi-present-today">{{ present_today|default(0) }}</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(16, 185, 129, 0.12); --bubble-color: #10b981;">
+            <i class="bi bi-check2-circle"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+      <div class="glass-card kpi-card" style="--card-accent: #ef4444;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small fw-semibold text-uppercase">Absent Today</div>
+            <div class="kpi-value text-danger mt-1" id="kpi-absent-today">{{ absent_today|default(0) }}</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(239, 68, 68, 0.12); --bubble-color: #ef4444;">
+            <i class="bi bi-x-circle"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-xl-3">
+      <div class="glass-card kpi-card" style="--card-accent: #f59e0b;">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="text-muted small fw-semibold text-uppercase">Attendance Rate</div>
+            <div class="kpi-value text-warning mt-1" id="kpi-rate">{{ attendance_rate|default(0.0) }}%</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(245, 158, 11, 0.12); --bubble-color: #f59e0b;">
+            <i class="bi bi-pie-chart-fill"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Analytics Charts Section -->
+  <div class="row g-4 mb-4">
+    <!-- Doughnut: Today's Ratio -->
+    <div class="col-lg-4">
+      <div class="glass-card p-4 h-100">
+        <h5 class="fw-bold mb-3">Today's Attendance Ratio</h5>
+        <div style="height: 260px; position: relative;" class="d-flex align-items-center justify-content-center">
+          <canvas id="ratioChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- Line: 7-Day Trend -->
+    <div class="col-lg-8">
+      <div class="glass-card p-4 h-100">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold mb-0">Attendance Trend (Last 7 Days)</h5>
+          <span class="badge badge-soft-info">Realtime</span>
+        </div>
+        <div style="height: 260px; position: relative;">
+          <canvas id="trendChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Department Wise Attendance & Quick Action -->
+  <div class="row g-4">
+    <div class="col-lg-8">
+      <div class="glass-card p-4">
+        <h5 class="fw-bold mb-3">Department-wise Breakdown</h5>
+        <div style="height: 260px; position: relative;">
+          <canvas id="deptChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-lg-4">
+      <div class="glass-card p-4 h-100">
+        <h5 class="fw-bold mb-3">Recent Scans</h5>
+        <div class="list-group list-group-flush" id="recentScansList">
+          {% if recent_scans %}
+            {% for scan in recent_scans %}
+              <div class="list-group-item bg-transparent px-0 py-2 border-bottom border-light-subtle d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold">{{ scan.student.full_name }}</div>
+                  <small class="text-muted">{{ scan.student.student_id }} &bull; {{ scan.time_in.strftime('%I:%M %p') if scan.time_in else '' }}</small>
+                </div>
+                <span class="badge badge-soft-success">{{ scan.status }}</span>
+              </div>
+            {% endfor %}
+          {% else %}
+            <div class="text-center py-4 text-muted">
+              <i class="bi bi-clock-history fs-3 d-block mb-1"></i>
+              No scans recorded today yet.
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    // 1. Ratio Chart
+    const ratioCtx = document.getElementById('ratioChart');
+    if (ratioCtx) {
+      const present = {{ present_today|default(0) }};
+      const absent = {{ absent_today|default(0) }};
+      new Chart(ratioCtx, {
+        type: 'doughnut',
+        data: {
+          labels: ['Present', 'Absent'],
+          datasets: [{
+            data: [present || (absent ? 0 : 1), absent],
+            backgroundColor: ['#10b981', '#ef4444'],
+            borderWidth: 0
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { position: 'bottom' }
+          },
+          cutout: '72%'
+        }
+      });
+    }
+
+    // 2. Trend Chart
+    const trendCtx = document.getElementById('trendChart');
+    if (trendCtx) {
+      const labels = {{ trend_labels|default(['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'])|tojson }};
+      const data = {{ trend_data|default([0, 0, 0, 0, 0, 0, 0])|tojson }};
+      new Chart(trendCtx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Attendance Count',
+            data: data,
+            borderColor: '#3b82f6',
+            backgroundColor: 'rgba(59, 130, 246, 0.1)',
+            fill: true,
+            tension: 0.35,
+            pointRadius: 4
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+
+    // 3. Dept Chart
+    const deptCtx = document.getElementById('deptChart');
+    if (deptCtx) {
+      const deptLabels = {{ dept_labels|default(['CSE', 'ECE', 'MECH', 'BBA'])|tojson }};
+      const deptData = {{ dept_data|default([0, 0, 0, 0])|tojson }};
+      new Chart(deptCtx, {
+        type: 'bar',
+        data: {
+          labels: deptLabels,
+          datasets: [{
+            label: 'Present Students',
+            data: deptData,
+            backgroundColor: '#6366f1',
+            borderRadius: 6
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+  });
+</script>
+{% endblock %}

@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+
+{% block title %}Teacher Dashboard — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Teacher Portal</h2>
+      <p class="text-muted mb-0">Welcome back, {{ current_user.get_display_name() }}. Scan student QR codes or manage attendance.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('attendance.scanner') }}" class="btn btn-primary-glow">
+        <i class="bi bi-qr-code-scan me-1"></i> Launch Scanner
+      </a>
+      <a href="{{ url_for('reports.index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-file-earmark-text me-1"></i> Class Reports
+      </a>
+    </div>
+  </div>
+
+  <!-- Quick Info Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <div class="glass-card kpi-card" style="--card-accent: #3b82f6;">
+        <div class="text-muted small fw-semibold text-uppercase">My Department</div>
+        <div class="fs-4 fw-bold mt-1 text-truncate">
+          {{ current_user.teacher_profile.department.name if current_user.teacher_profile and current_user.teacher_profile.department else 'General' }}
+        </div>
+        <small class="text-muted">{{ current_user.teacher_profile.designation if current_user.teacher_profile else '' }}</small>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="glass-card kpi-card" style="--card-accent: #10b981;">
+        <div class="text-muted small fw-semibold text-uppercase">Scans Today</div>
+        <div class="fs-4 fw-bold mt-1 text-success">{{ today_scan_count|default(0) }}</div>
+        <small class="text-muted">Recorded sessions</small>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="glass-card kpi-card" style="--card-accent: #6366f1;">
+        <div class="text-muted small fw-semibold text-uppercase">Quick Action</div>
+        <div class="mt-2">
+          <a href="{{ url_for('attendance.scanner') }}" class="btn btn-sm btn-primary w-100">
+            <i class="bi bi-camera me-1"></i> Open Attendance Camera
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Today's Attendance Table -->
+  <div class="glass-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0">Today's Class Attendance</h5>
+      <span class="badge badge-soft-info">{{ now.strftime('%d %B %Y') }}</span>
+    </div>
+    
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Student ID</th>
+            <th>Full Name</th>
+            <th>Course / Sem</th>
+            <th>Time In</th>
+            <th>Time Out</th>
+            <th>Status</th>
+            <th>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if today_records %}
+            {% for rec in today_records %}
+              <tr>
+                <td class="fw-semibold">{{ rec.student.student_id }}</td>
+                <td>{{ rec.student.full_name }}</td>
+                <td>{{ rec.student.course }} ({{ rec.student.semester }})</td>
+                <td>{{ rec.time_in.strftime('%I:%M %p') if rec.time_in else '-' }}</td>
+                <td>{{ rec.time_out.strftime('%I:%M %p') if rec.time_out else '-' }}</td>
+                <td><span class="badge badge-soft-success">{{ rec.status }}</span></td>
+                <td><span class="badge bg-secondary">{{ rec.method }}</span></td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-4 text-muted">
+                <i class="bi bi-calendar-x fs-2 d-block mb-1"></i>
+                No attendance recorded today yet. Click "Launch Scanner" to begin.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

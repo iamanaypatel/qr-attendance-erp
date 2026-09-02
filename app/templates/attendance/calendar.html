@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}Attendance Calendar — {{ month_name }} {{ year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .calendar-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    gap: 8px;
+  }
+  .calendar-day-header {
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 0.5rem;
+  }
+  .calendar-day-cell {
+    min-height: 105px;
+    background: var(--bg-card);
+    border: 1px solid var(--border-glass);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+  }
+  .calendar-day-cell:hover {
+    box-shadow: var(--shadow-sm);
+    transform: translateY(-2px);
+  }
+  .calendar-day-cell.other-month {
+    opacity: 0.35;
+    background: transparent;
+  }
+  .calendar-day-cell.is-today {
+    border: 2px solid var(--primary);
+    box-shadow: 0 0 10px var(--primary-glow);
+  }
+  .cal-badge-holiday {
+    background-color: rgba(168, 85, 247, 0.15);
+    color: #9333ea;
+    border: 1px solid rgba(168, 85, 247, 0.3);
+    font-size: 0.72rem;
+    border-radius: 4px;
+    padding: 2px 4px;
+    text-truncate: true;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <!-- Top Bar -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">{{ month_name }} {{ year }}</h2>
+      <p class="text-muted mb-0">Monthly attendance log, scheduled classes, and institutional holidays.</p>
+    </div>
+    
+    <div class="d-flex gap-2 align-items-center">
+      <!-- Month Navigation Buttons -->
+      <a href="{{ url_for('attendance.calendar', year=prev_year, month=prev_month) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-chevron-left me-1"></i> Prev
+      </a>
+      <a href="{{ url_for('attendance.calendar', year=today.year, month=today.month) }}" class="btn btn-sm btn-outline-primary">
+        Current Month
+      </a>
+      <a href="{{ url_for('attendance.calendar', year=next_year, month=next_month) }}" class="btn btn-outline-secondary">
+        Next <i class="bi bi-chevron-right ms-1"></i>
+      </a>
+
+      {% if current_user.is_admin %}
+        <button class="btn btn-primary-glow ms-2" data-bs-toggle="modal" data-bs-target="#addHolidayModal">
+          <i class="bi bi-plus-circle me-1"></i> Add Holiday
+        </button>
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Calendar Grid Column -->
+    <div class="col-lg-9">
+      <div class="glass-card p-3 p-md-4">
+        <!-- Day of Week Headers -->
+        <div class="calendar-grid mb-2">
+          <div class="calendar-day-header text-danger">Sun</div>
+          <div class="calendar-day-header">Mon</div>
+          <div class="calendar-day-header">Tue</div>
+          <div class="calendar-day-header">Wed</div>
+          <div class="calendar-day-header">Thu</div>
+          <div class="calendar-day-header">Fri</div>
+          <div class="calendar-day-header">Sat</div>
+        </div>
+
+        <!-- Month Days Matrix -->
+        {% for week in month_days %}
+          <div class="calendar-grid mb-2">
+            {% for day in week %}
+              {% set is_curr_month = (day.month == month) %}
+              {% set is_today = (day == today) %}
+              <div class="calendar-day-cell {% if not is_curr_month %}other-month{% endif %} {% if is_today %}is-today{% endif %}">
+                <div class="d-flex justify-content-between align-items-center">
+                  <span class="fw-bold small {% if day.weekday() == 6 %}text-danger{% endif %}">{{ day.day }}</span>
+                  {% if is_today %}
+                    <span class="badge bg-primary px-1.5 py-0.5" style="font-size: 0.65rem;">Today</span>
+                  {% endif %}
+                </div>
+
+                <div class="my-1">
+                  <!-- Holiday Check -->
+                  {% if day in holiday_map %}
+                    <div class="cal-badge-holiday text-truncate mb-1" title="{{ holiday_map[day] }}">
+                      <i class="bi bi-star-fill text-warning me-1"></i>{{ holiday_map[day] }}
+                    </div>
+                  {% endif %}
+
+                  <!-- Attendance indicator -->
+                  {% if day in user_attendance %}
+                    {% set att = user_attendance[day] %}
+                    {% if current_user.is_student %}
+                      {% if att == 'Present' %}
+                        <span class="badge badge-soft-success w-100"><i class="bi bi-check me-1"></i>Present</span>
+                      {% elif att == 'Absent' %}
+                        <span class="badge badge-soft-danger w-100"><i class="bi bi-x me-1"></i>Absent</span>
+                      {% else %}
+                        <span class="badge badge-soft-warning w-100">{{ att }}</span>
+                      {% endif %}
+                    {% else %}
+                      <!-- For Admin / Teacher -->
+                      <span class="badge badge-soft-info w-100" style="font-size: 0.72rem;">
+                        {{ att }} Present
+                      </span>
+                    {% endif %}
+                  {% endif %}
+                </div>
+
+                <div>
+                  {% if day.weekday() == 6 and not (day in holiday_map) and not (day in user_attendance) %}
+                    <small class="text-muted" style="font-size: 0.7rem;">Weekend</small>
+                  {% endif %}
+                </div>
+              </div>
+            {% endfor %}
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Right Sidebar: Upcoming Holidays & Legend -->
+    <div class="col-lg-3">
+      <!-- Legend Card -->
+      <div class="glass-card p-3 mb-4">
+        <h6 class="fw-bold small text-uppercase text-muted mb-3">Calendar Legend</h6>
+        <div class="d-flex flex-column gap-2 small">
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge badge-soft-success">&bull;</span>
+            <span>Present / Recorded</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge badge-soft-danger">&bull;</span>
+            <span>Absent</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge cal-badge-holiday"><i class="bi bi-star-fill text-warning"></i></span>
+            <span>Official Holiday</span>
+          </div>
+          <div class="d-flex align-items-center gap-2">
+            <span class="badge border border-primary text-primary">2px</span>
+            <span>Today's Date</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Holidays List Card -->
+      <div class="glass-card p-3">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h6 class="fw-bold small text-uppercase text-muted mb-0">Holidays ({{ all_holidays | length }})</h6>
+        </div>
+        <div class="overflow-y-auto" style="max-height: 380px;">
+          {% if all_holidays %}
+            {% for h in all_holidays %}
+              <div class="p-2 mb-2 rounded bg-body-tertiary border d-flex justify-content-between align-items-center">
+                <div>
+                  <div class="fw-semibold small">{{ h.title }}</div>
+                  <div class="text-muted" style="font-size: 0.75rem;">{{ h.date.strftime('%d %B %Y') }}</div>
+                </div>
+                {% if current_user.is_admin %}
+                  <form method="POST" action="{{ url_for('attendance.delete_holiday', id=h.id) }}" onsubmit="return confirm('Delete holiday {{ h.title }}?');">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm btn-outline-danger border-0 p-1" title="Delete">
+                      <i class="bi bi-x-lg"></i>
+                    </button>
+                  </form>
+                {% endif %}
+              </div>
+            {% endfor %}
+          {% else %}
+            <p class="text-muted small text-center py-3">No holidays defined.</p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Add Holiday Modal (Admin only) -->
+{% if current_user.is_admin %}
+<div class="modal fade" id="addHolidayModal" tabindex="-1" aria-labelledby="addHolidayModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content glass-card border">
+      <div class="modal-header border-bottom">
+        <h5 class="modal-title fw-bold brand-font" id="addHolidayModalLabel">
+          <i class="bi bi-calendar-plus me-2 text-primary"></i>Add Institutional Holiday
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('attendance.add_holiday') }}">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body py-4">
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">HOLIDAY TITLE *</label>
+            <input type="text" name="title" class="form-control" placeholder="e.g. Founder's Day" required>
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">DATE *</label>
+            <input type="date" name="date" class="form-control" required value="{{ today.strftime('%Y-%m-%d') }}">
+          </div>
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">DESCRIPTION</label>
+            <textarea name="description" class="form-control" rows="2" placeholder="Holiday description..."></textarea>
+          </div>
+        </div>
+        <div class="modal-footer border-top">
+          <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-primary-glow px-4">Save Holiday</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+{% endif %}
+{% endblock %}

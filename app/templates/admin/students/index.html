@@ -1,0 +1,205 @@
+{% extends "base.html" %}
+
+{% block title %}Student Management — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <!-- Page Header -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Student Directory</h2>
+      <p class="text-muted mb-0">Manage student profiles, academic enrollments, and QR credentials.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin.student_create') }}" class="btn btn-primary-glow">
+        <i class="bi bi-person-plus-fill me-1"></i> Register Student
+      </a>
+      <a href="{{ url_for('admin.qr_generator') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-upc-scan me-1"></i> Bulk QR Hub
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <div class="glass-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('admin.students') }}" class="row g-2 align-items-center">
+      <div class="col-md-5">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0 text-muted">
+            <i class="bi bi-search"></i>
+          </span>
+          <input type="text" name="q" value="{{ search }}" class="form-control border-start-0 ps-0" placeholder="Search by name, student ID, roll number, or email...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select name="dept" class="form-select">
+          <option value="">All Departments</option>
+          {% for d in departments %}
+            <option value="{{ d.id }}" {% if selected_dept == d.id %}selected{% endif %}>{{ d.name }} ({{ d.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="sem" class="form-select">
+          <option value="">All Semesters</option>
+          {% for s in ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th'] %}
+            <option value="{{ s }}" {% if selected_sem == s %}selected{% endif %}>{{ s }} Semester</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+        {% if search or selected_dept or selected_sem %}
+          <a href="{{ url_for('admin.students') }}" class="btn btn-outline-secondary" title="Reset Filters"><i class="bi bi-arrow-counterclockwise"></i></a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Students Table -->
+  <div class="glass-card p-4">
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Student ID</th>
+            <th>Roll Number</th>
+            <th>Department</th>
+            <th>Course / Sem</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if students %}
+            {% for s in students %}
+              <tr>
+                <td>
+                  <div class="d-flex align-items-center gap-3">
+                    {% if s.photo %}
+                      <img src="{{ url_for('static', filename='uploads/' + s.photo) }}" alt="{{ s.full_name }}" class="rounded-circle object-fit-cover shadow-sm" style="width: 40px; height: 40px;">
+                    {% else %}
+                      <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 40px; height: 40px; font-size: 0.95rem;">
+                        {{ s.full_name[0] | upper }}
+                      </div>
+                    {% endif %}
+                    <div>
+                      <a href="{{ url_for('admin.student_detail', id=s.id) }}" class="fw-bold text-decoration-none text-body">
+                        {{ s.full_name }}
+                      </a>
+                      <div class="text-muted small">{{ s.email or 'No email' }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge bg-secondary font-monospace">{{ s.student_id }}</span></td>
+                <td class="fw-semibold text-muted">{{ s.roll_number }}</td>
+                <td>{{ s.department.name if s.department else '-' }}</td>
+                <td>{{ s.course }} <span class="badge badge-soft-info">{{ s.semester }}</span></td>
+                <td>
+                  {% if s.is_active %}
+                    <span class="badge badge-soft-success">Active</span>
+                  {% else %}
+                    <span class="badge badge-soft-danger">Inactive</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <div class="dropdown">
+                    <button class="btn btn-sm btn-outline-secondary border-0" type="button" data-bs-toggle="dropdown" aria-expanded="false">
+                      <i class="bi bi-three-dots-vertical"></i>
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end shadow-sm border-0">
+                      <li>
+                        <a class="dropdown-item" href="{{ url_for('admin.student_detail', id=s.id) }}">
+                          <i class="bi bi-person-badge text-primary me-2"></i> View Profile
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" href="{{ url_for('admin.student_qr_download', id=s.id) }}">
+                          <i class="bi bi-qr-code text-info me-2"></i> Download QR Code
+                        </a>
+                      </li>
+                      <li>
+                        <a class="dropdown-item" href="{{ url_for('admin.student_id_card_pdf', id=s.id) }}" target="_blank">
+                          <i class="bi bi-person-vcard text-success me-2"></i> Download ID Card (PDF)
+                        </a>
+                      </li>
+                      <li><hr class="dropdown-divider"></li>
+                      <li>
+                        <a class="dropdown-item" href="{{ url_for('admin.student_edit', id=s.id) }}">
+                          <i class="bi bi-pencil-square text-warning me-2"></i> Edit Student
+                        </a>
+                      </li>
+                      <li>
+                        <form method="POST" action="{{ url_for('admin.student_delete', id=s.id) }}" onsubmit="return confirm('Are you sure you want to delete student {{ s.full_name }}? All attendance history will be permanently deleted.');">
+                          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                          <button type="submit" class="dropdown-item text-danger">
+                            <i class="bi bi-trash3 text-danger me-2"></i> Delete Student
+                          </button>
+                        </form>
+                      </li>
+                    </ul>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-5">
+                <div class="text-muted mb-2">
+                  <i class="bi bi-people fs-1 d-block mb-2"></i>
+                  <h5>No students found</h5>
+                  <p class="small text-muted mb-3">Try adjusting your search filters or add a new student.</p>
+                  <a href="{{ url_for('admin.student_create') }}" class="btn btn-sm btn-primary-glow">
+                    <i class="bi bi-person-plus me-1"></i> Add Student
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Server-Side Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+      <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top" style="border-color: var(--border-glass) !important;">
+        <small class="text-muted">
+          Showing <strong>{{ (pagination.page - 1) * pagination.per_page + 1 }}</strong> to
+          <strong>{{ [pagination.page * pagination.per_page, pagination.total] | min }}</strong> of
+          <strong>{{ pagination.total }}</strong> students
+        </small>
+        <nav aria-label="Students pagination">
+          <ul class="pagination pagination-sm mb-0">
+            {% if pagination.has_prev %}
+              <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.students', page=pagination.prev_num, q=search, dept=selected_dept, sem=selected_sem) }}">Previous</a>
+              </li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">Previous</span></li>
+            {% endif %}
+
+            {% for p in pagination.iter_pages(left_edge=2, right_edge=2, left_current=2, right_current=2) %}
+              {% if p %}
+                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('admin.students', page=p, q=search, dept=selected_dept, sem=selected_sem) }}">{{ p }}</a>
+                </li>
+              {% else %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+              {% endif %}
+            {% endfor %}
+
+            {% if pagination.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="{{ url_for('admin.students', page=pagination.next_num, q=search, dept=selected_dept, sem=selected_sem) }}">Next</a>
+              </li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">Next</span></li>
+            {% endif %}
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

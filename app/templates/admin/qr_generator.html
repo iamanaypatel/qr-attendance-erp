@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+
+{% block title %}QR Generator Hub — {{ institution_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  @media print {
+    body {
+      background: #fff !important;
+      color: #000 !important;
+    }
+    .app-sidebar, .navbar, .no-print {
+      display: none !important;
+    }
+    .main-content {
+      margin-left: 0 !important;
+      padding: 0 !important;
+    }
+    .page-container {
+      padding: 0 !important;
+    }
+    .qr-badge-card {
+      break-inside: avoid;
+      page-break-inside: avoid;
+      box-shadow: none !important;
+      border: 1px dashed #999 !important;
+      background: #fff !important;
+      color: #000 !important;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3 no-print">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Central QR Generator Hub</h2>
+      <p class="text-muted mb-0">Generate, view, and print student attendance QR cards.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button onclick="window.print()" class="btn btn-outline-primary">
+        <i class="bi bi-printer me-1"></i> Print QR Sheet
+      </button>
+      <a href="{{ url_for('admin.students') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-people me-1"></i> Student Directory
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="glass-card p-3 mb-4 no-print">
+    <form method="GET" action="{{ url_for('admin.qr_generator') }}" class="row g-2 align-items-center">
+      <div class="col-md-7">
+        <input type="text" name="q" value="{{ search }}" class="form-control" placeholder="Search student name or ID...">
+      </div>
+      <div class="col-md-3">
+        <select name="dept" class="form-select">
+          <option value="">All Departments</option>
+          {% for d in departments %}
+            <option value="{{ d.id }}" {% if selected_dept == d.id %}selected{% endif %}>{{ d.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+        {% if search or selected_dept %}
+          <a href="{{ url_for('admin.qr_generator') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- QR Cards Grid -->
+  <div class="row g-3">
+    {% if student_qrs %}
+      {% for item in student_qrs %}
+        <div class="col-sm-6 col-md-4 col-lg-3">
+          <div class="glass-card p-3 text-center qr-badge-card h-100 d-flex flex-column justify-content-between">
+            <div>
+              <div class="fw-bold brand-font text-truncate" style="font-size: 0.95rem;">{{ item.student.full_name }}</div>
+              <div class="text-muted small font-monospace mb-2">{{ item.student.student_id }} &bull; {{ item.student.roll_number }}</div>
+
+              <div class="p-2 bg-white rounded-3 shadow-sm d-inline-block mb-2">
+                <img src="{{ item.qr_uri }}" alt="QR" style="width: 130px; height: 130px; display: block;">
+              </div>
+
+              <div class="badge badge-soft-info d-block text-truncate mb-2" style="font-size: 0.72rem;">
+                {{ item.student.department.code if item.student.department else 'GEN' }} &bull; Sem {{ item.student.semester }}
+              </div>
+            </div>
+
+            <div class="no-print pt-2 border-top">
+              <a href="{{ url_for('admin.student_qr_download', id=item.student.id) }}" class="btn btn-sm btn-outline-primary w-100" style="font-size: 0.75rem;">
+                <i class="bi bi-download me-1"></i> Save PNG
+              </a>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    {% else %}
+      <div class="col-12 text-center py-5 text-muted">
+        <i class="bi bi-qr-code fs-1 d-block mb-2"></i>
+        <h5>No active students found</h5>
+        <p class="small">Add students or adjust search filters to generate QR cards.</p>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

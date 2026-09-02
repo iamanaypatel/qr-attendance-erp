@@ -1,0 +1,32 @@
+services:
+  - type: web
+    name: qr-attendance-erp
+    runtime: python
+    region: oregon
+    plan: free
+    buildCommand: "pip install --upgrade pip && pip install -r requirements.txt && python run.py init-db && python run.py seed"
+    startCommand: "gunicorn run:app --workers 4 --bind 0.0.0.0:$PORT --access-logfile - --error-logfile -"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13.0
+      - key: FLASK_ENV
+        value: production
+      - key: SECRET_KEY
+        generateValue: true
+      - key: DATABASE_URL
+        fromDatabase:
+          name: qr-attendance-db
+          property: connectionString
+      - key: INSTITUTION_NAME
+        value: "Apex Institute of Technology & Management"
+      - key: INSTITUTION_EMAIL
+        value: "contact@apex-institute.edu"
+      - key: UPLOAD_FOLDER
+        value: "app/static/uploads"
+
+databases:
+  - name: qr-attendance-db
+    databaseName: qr_attendance_db
+    user: qr_user
+    plan: free
+    region: oregon

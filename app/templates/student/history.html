@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}My Attendance History — {{ student.full_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Attendance History</h2>
+      <p class="text-muted mb-0">Complete chronological record of all recorded class attendance sessions.</p>
+    </div>
+    <div>
+      <a href="{{ url_for('attendance.calendar') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-calendar3 me-1"></i> Monthly Calendar View
+      </a>
+    </div>
+  </div>
+
+  <!-- Summary Banner -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-4">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted small fw-semibold">ATTENDANCE RATE</div>
+        <div class="fs-3 fw-bold {% if stats.percentage >= 75 %}text-success{% else %}text-danger{% endif %}">{{ stats.percentage }}%</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted small fw-semibold">DAYS PRESENT</div>
+        <div class="fs-3 fw-bold text-success">{{ stats.present_count }}</div>
+      </div>
+    </div>
+    <div class="col-sm-4">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted small fw-semibold">DAYS ABSENT</div>
+        <div class="fs-3 fw-bold text-danger">{{ stats.absent_count }}</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter & History Table -->
+  <div class="glass-card p-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold brand-font mb-0">Logged Sessions</h5>
+      
+      <!-- Filter by status -->
+      <div class="btn-group btn-group-sm">
+        <a href="{{ url_for('student.history') }}" class="btn {% if not selected_status %}btn-primary{% else %}btn-outline-secondary{% endif %}">All</a>
+        <a href="{{ url_for('student.history', status='Present') }}" class="btn {% if selected_status == 'Present' %}btn-success{% else %}btn-outline-secondary{% endif %}">Present</a>
+        <a href="{{ url_for('student.history', status='Absent') }}" class="btn {% if selected_status == 'Absent' %}btn-danger{% else %}btn-outline-secondary{% endif %}">Absent</a>
+      </div>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Check In (Time In)</th>
+            <th>Check Out (Time Out)</th>
+            <th>Status</th>
+            <th>Verification Method</th>
+            <th>Remarks</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if records %}
+            {% for r in records %}
+              <tr>
+                <td class="fw-semibold">{{ r.date.strftime('%A, %d %B %Y') }}</td>
+                <td>{{ r.time_in.strftime('%I:%M %p') if r.time_in else '-' }}</td>
+                <td>{{ r.time_out.strftime('%I:%M %p') if r.time_out else '-' }}</td>
+                <td>
+                  {% if r.status == 'Present' %}
+                    <span class="badge badge-soft-success">Present</span>
+                  {% elif r.status == 'Absent' %}
+                    <span class="badge badge-soft-danger">Absent</span>
+                  {% else %}
+                    <span class="badge badge-soft-warning">{{ r.status }}</span>
+                  {% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ r.method }}</span></td>
+                <td class="small text-muted">{{ r.remarks or '-' }}</td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center py-5 text-muted">
+                <i class="bi bi-clock-history fs-2 d-block mb-2"></i>
+                No attendance records found matching this criteria.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+      <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top" style="border-color: var(--border-glass) !important;">
+        <small class="text-muted">Page {{ pagination.page }} of {{ pagination.pages }}</small>
+        <ul class="pagination pagination-sm mb-0">
+          {% if pagination.has_prev %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('student.history', page=pagination.prev_num, status=selected_status) }}">Previous</a></li>
+          {% endif %}
+          {% for p in pagination.iter_pages() %}
+            {% if p %}
+              <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('student.history', page=p, status=selected_status) }}">{{ p }}</a>
+              </li>
+            {% endif %}
+          {% endfor %}
+          {% if pagination.has_next %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('student.history', page=pagination.next_num, status=selected_status) }}">Next</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

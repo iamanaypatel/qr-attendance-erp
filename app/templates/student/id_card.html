@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Digital Student ID Card — {{ student.full_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .id-card-preview {
+    width: 380px;
+    height: 236px;
+    background: #ffffff;
+    border-radius: 12px;
+    overflow: hidden;
+    position: relative;
+    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    border: 1px solid #cbd5e1;
+    color: #0f172a;
+    display: inline-block;
+    text-align: left;
+  }
+  .id-card-header {
+    background: linear-gradient(135deg, #1e3a8a, #2563eb);
+    color: #fff;
+    padding: 8px 12px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .id-card-body {
+    padding: 10px 12px;
+    display: flex;
+    gap: 12px;
+  }
+  .id-card-photo {
+    width: 72px;
+    height: 90px;
+    border-radius: 6px;
+    object-fit: cover;
+    border: 1px solid #94a3b8;
+  }
+  .id-card-photo-placeholder {
+    width: 72px;
+    height: 90px;
+    border-radius: 6px;
+    background: #e2e8f0;
+    color: #475569;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: bold;
+    border: 1px solid #94a3b8;
+  }
+  .id-card-qr {
+    width: 66px;
+    height: 66px;
+    display: block;
+    margin: 0 auto;
+  }
+  .id-card-footer {
+    background: #1e3a8a;
+    color: #ffffff;
+    font-size: 0.65rem;
+    text-align: center;
+    padding: 4px 8px;
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+  }
+  @media print {
+    body { background: #fff !important; }
+    .no-print, .app-sidebar, .navbar, footer { display: none !important; }
+    .main-content { margin: 0 !important; }
+    .id-card-preview { box-shadow: none !important; border: 1px solid #000 !important; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container py-4 text-center">
+  <div class="mb-4 no-print">
+    <h2 class="fw-bold brand-font mb-1">Digital Student Identity Card</h2>
+    <p class="text-muted mb-0">Official institutional credential with embedded cryptographic QR token.</p>
+  </div>
+
+  <!-- ID Card Container -->
+  <div class="d-flex justify-content-center mb-4">
+    <div class="id-card-preview">
+      <!-- Card Header -->
+      <div class="id-card-header">
+        <div>
+          <div class="fw-bold" style="font-size: 0.78rem; letter-spacing: 0.02em;">{{ institution_name[:32] | upper }}</div>
+          <div style="font-size: 0.6rem; opacity: 0.85;">STUDENT IDENTITY CARD</div>
+        </div>
+        <i class="bi bi-mortarboard-fill fs-5"></i>
+      </div>
+
+      <!-- Card Body -->
+      <div class="id-card-body">
+        <!-- Photo -->
+        <div>
+          {% if student.photo %}
+            <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="{{ student.full_name }}" class="id-card-photo">
+          {% else %}
+            <div class="id-card-photo-placeholder">
+              {{ student.full_name[0] | upper }}
+            </div>
+          {% endif %}
+        </div>
+
+        <!-- Student Info -->
+        <div class="flex-grow-1 overflow-hidden" style="line-height: 1.25;">
+          <div class="fw-bold text-truncate" style="font-size: 0.88rem; color: #0f172a;">{{ student.full_name }}</div>
+          <div class="font-monospace text-primary fw-bold" style="font-size: 0.75rem;">ID: {{ student.student_id }}</div>
+          <div class="text-muted" style="font-size: 0.68rem;">Roll No: {{ student.roll_number }}</div>
+          <div class="text-muted text-truncate" style="font-size: 0.68rem;">Dept: {{ student.department.name if student.department else '-' }}</div>
+          <div class="text-muted" style="font-size: 0.68rem;">Course: {{ student.course }}</div>
+          <div class="text-muted" style="font-size: 0.68rem;">Sem: {{ student.semester }} (Sec {{ student.section or 'A' }})</div>
+        </div>
+
+        <!-- QR Code -->
+        <div class="text-center" style="width: 70px;">
+          <img src="{{ qr_uri }}" alt="QR" class="id-card-qr">
+          <div class="text-muted fw-bold" style="font-size: 0.55rem;">ATTENDANCE</div>
+        </div>
+      </div>
+
+      <!-- Card Footer -->
+      <div class="id-card-footer">
+        Official Property of {{ institution_name }}. Valid Academic Period.
+      </div>
+    </div>
+  </div>
+
+  <!-- Action Buttons -->
+  <div class="d-flex justify-content-center gap-3 no-print">
+    <a href="{{ url_for('student.id_card_download') }}" class="btn btn-primary-glow px-4">
+      <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF ID Card
+    </a>
+    <button onclick="window.print()" class="btn btn-outline-secondary px-4">
+      <i class="bi bi-printer me-1"></i> Print ID Card
+    </button>
+  </div>
+</div>
+{% endblock %}

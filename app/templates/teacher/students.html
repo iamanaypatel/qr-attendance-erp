@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Department Students — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Department Students</h2>
+      <p class="text-muted mb-0">Students currently enrolled in {{ department.name if department else 'all departments' }}.</p>
+    </div>
+    <div>
+      <a href="{{ url_for('attendance.scanner') }}" class="btn btn-primary-glow">
+        <i class="bi bi-qr-code-scan me-1"></i> Launch Scanner
+      </a>
+    </div>
+  </div>
+
+  <!-- Search -->
+  <div class="glass-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('teacher.students') }}" class="row g-2 align-items-center">
+      <div class="col-md-10">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0 text-muted">
+            <i class="bi bi-search"></i>
+          </span>
+          <input type="text" name="q" value="{{ search }}" class="form-control border-start-0 ps-0" placeholder="Search student by name, student ID, or roll number...">
+        </div>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">Search</button>
+        {% if search %}
+          <a href="{{ url_for('teacher.students') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Table -->
+  <div class="glass-card p-4">
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>ID</th>
+            <th>Roll Number</th>
+            <th>Program & Sem</th>
+            <th>Attendance %</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if students %}
+            {% for s in students %}
+              {% set stats = s.calculate_attendance_stats() %}
+              <tr>
+                <td>
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 38px; height: 38px;">
+                      {{ s.full_name[0] | upper }}
+                    </div>
+                    <div>
+                      <div class="fw-bold text-body">{{ s.full_name }}</div>
+                      <small class="text-muted">{{ s.email or 'No email' }}</small>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge bg-secondary font-monospace">{{ s.student_id }}</span></td>
+                <td class="fw-semibold">{{ s.roll_number }}</td>
+                <td>{{ s.course }} ({{ s.semester }})</td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="progress flex-grow-1" style="height: 6px; min-width: 60px;">
+                      <div class="progress-bar {% if stats.percentage >= 75 %}bg-success{% else %}bg-danger{% endif %}" style="width: {{ stats.percentage }}%;"></div>
+                    </div>
+                    <span class="small fw-bold {% if stats.percentage >= 75 %}text-success{% else %}text-danger{% endif %}">{{ stats.percentage }}%</span>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="5" class="text-center py-5 text-muted">
+                <i class="bi bi-people fs-2 d-block mb-2"></i>
+                No students found in this department.
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+      <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top" style="border-color: var(--border-glass) !important;">
+        <small class="text-muted">Page {{ pagination.page }} of {{ pagination.pages }}</small>
+        <ul class="pagination pagination-sm mb-0">
+          {% if pagination.has_prev %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('teacher.students', page=pagination.prev_num, q=search) }}">Previous</a></li>
+          {% endif %}
+          {% for p in pagination.iter_pages() %}
+            {% if p %}
+              <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('teacher.students', page=p, q=search) }}">{{ p }}</a>
+              </li>
+            {% endif %}
+          {% endfor %}
+          {% if pagination.has_next %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('teacher.students', page=pagination.next_num, q=search) }}">Next</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

@@ -1,0 +1,38 @@
+services:
+  web:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "5001:5000"
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=prod-secret-change-this-in-env-file-at-deployment-32-chars
+      - DATABASE_URL=postgresql://qr_user:qr_password@db:5432/qr_attendance_db
+      - INSTITUTION_NAME=Apex Institute of Technology & Management
+      - INSTITUTION_EMAIL=contact@apex-institute.edu
+      - INSTITUTION_PHONE=+1-555-0199
+      - INSTITUTION_ADDRESS=100 Academic Way, Tech Corridor, Metro City
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - uploads_data:/app/app/static/uploads
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: qr_user
+      POSTGRES_PASSWORD: qr_password
+      POSTGRES_DB: qr_attendance_db
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U qr_user -d qr_attendance_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:
+  uploads_data:

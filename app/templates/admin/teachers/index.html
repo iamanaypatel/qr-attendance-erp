@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}Faculty Management — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Faculty & Teachers</h2>
+      <p class="text-muted mb-0">Manage teaching faculty, departmental assignments, and portal access.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin.teacher_create') }}" class="btn btn-primary-glow">
+        <i class="bi bi-person-plus-fill me-1"></i> Add Faculty Member
+      </a>
+      <a href="{{ url_for('admin.departments') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-buildings me-1"></i> Departments
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <div class="glass-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('admin.teachers') }}" class="row g-2 align-items-center">
+      <div class="col-md-7">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0 text-muted">
+            <i class="bi bi-search"></i>
+          </span>
+          <input type="text" name="q" value="{{ search }}" class="form-control border-start-0 ps-0" placeholder="Search by name, employee ID, or email...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select name="dept" class="form-select">
+          <option value="">All Departments</option>
+          {% for d in departments %}
+            <option value="{{ d.id }}" {% if selected_dept == d.id %}selected{% endif %}>{{ d.name }} ({{ d.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+        {% if search or selected_dept %}
+          <a href="{{ url_for('admin.teachers') }}" class="btn btn-outline-secondary"><i class="bi bi-arrow-counterclockwise"></i></a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Teachers Table -->
+  <div class="glass-card p-4">
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Faculty Member</th>
+            <th>Employee ID</th>
+            <th>Department</th>
+            <th>Designation</th>
+            <th>Contact</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if teachers %}
+            {% for t in teachers %}
+              <tr>
+                <td>
+                  <div class="d-flex align-items-center gap-3">
+                    <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 40px; height: 40px; font-size: 0.95rem;">
+                      {{ t.full_name[0] | upper }}
+                    </div>
+                    <div>
+                      <div class="fw-bold text-body">{{ t.full_name }}</div>
+                      <div class="text-muted small">{{ t.email }}</div>
+                    </div>
+                  </div>
+                </td>
+                <td><span class="badge bg-secondary font-monospace">{{ t.employee_id }}</span></td>
+                <td>{{ t.department.name if t.department else '-' }}</td>
+                <td><span class="badge badge-soft-info">{{ t.designation }}</span></td>
+                <td>{{ t.phone or '-' }}</td>
+                <td>
+                  {% if t.is_active %}
+                    <span class="badge badge-soft-success">Active</span>
+                  {% else %}
+                    <span class="badge badge-soft-danger">Suspended</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <div class="d-flex justify-content-end gap-2">
+                    <a href="{{ url_for('admin.teacher_edit', id=t.id) }}" class="btn btn-sm btn-outline-secondary" title="Edit">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    <form method="POST" action="{{ url_for('admin.teacher_delete', id=t.id) }}" onsubmit="return confirm('Delete teacher {{ t.full_name }}?');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete">
+                        <i class="bi bi-trash3"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-5">
+                <i class="bi bi-mortarboard fs-1 d-block mb-2 text-muted"></i>
+                <h5>No faculty members found</h5>
+                <p class="small text-muted mb-3">Add teachers to assign them to classes and scanning permissions.</p>
+                <a href="{{ url_for('admin.teacher_create') }}" class="btn btn-sm btn-primary-glow">
+                  <i class="bi bi-person-plus me-1"></i> Add Faculty
+                </a>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+      <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top" style="border-color: var(--border-glass) !important;">
+        <small class="text-muted">Page {{ pagination.page }} of {{ pagination.pages }}</small>
+        <ul class="pagination pagination-sm mb-0">
+          {% if pagination.has_prev %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('admin.teachers', page=pagination.prev_num, q=search, dept=selected_dept) }}">Previous</a></li>
+          {% endif %}
+          {% for p in pagination.iter_pages() %}
+            {% if p %}
+              <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                <a class="page-link" href="{{ url_for('admin.teachers', page=p, q=search, dept=selected_dept) }}">{{ p }}</a>
+              </li>
+            {% endif %}
+          {% endfor %}
+          {% if pagination.has_next %}
+            <li class="page-item"><a class="page-link" href="{{ url_for('admin.teachers', page=pagination.next_num, q=search, dept=selected_dept) }}">Next</a></li>
+          {% endif %}
+        </ul>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

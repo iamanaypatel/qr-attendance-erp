@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+
+{% block title %}Manual Attendance — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Manual Attendance Override</h2>
+      <p class="text-muted mb-0">Record or modify student attendance sessions with full audit trail attribution.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('attendance.scanner') }}" class="btn btn-primary-glow">
+        <i class="bi bi-qr-code-scan me-1"></i> Launch QR Scanner
+      </a>
+      <a href="{{ url_for('reports.index') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-file-earmark-bar-graph me-1"></i> Attendance Reports
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Manual Entry Form -->
+    <div class="col-lg-5">
+      <div class="glass-card p-4 p-md-5">
+        <h5 class="fw-bold brand-font mb-3"><i class="bi bi-pencil-square text-primary me-2"></i>Log Attendance</h5>
+        
+        <form method="POST" action="{{ url_for('attendance.manual') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">SELECT STUDENT *</label>
+            <select name="student_id" class="form-select" required id="studentSelect">
+              <option value="">-- Choose Student --</option>
+              {% for s in students %}
+                <option value="{{ s.id }}">
+                  {{ s.full_name }} ({{ s.student_id }}) — {{ s.department.code if s.department else '' }}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">DATE *</label>
+              <input type="date" name="date" class="form-control" value="{{ today.strftime('%Y-%m-%d') }}" required>
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">STATUS *</label>
+              <select name="status" class="form-select" required>
+                <option value="Present" selected>Present</option>
+                <option value="Absent">Absent</option>
+                <option value="Late">Late</option>
+                <option value="Half Day">Half Day</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="row g-2 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">CHECK-IN (TIME IN)</label>
+              <input type="time" name="time_in" class="form-control" value="09:00">
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">CHECK-OUT (TIME OUT)</label>
+              <input type="time" name="time_out" class="form-control" value="17:00">
+            </div>
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label small fw-semibold text-muted">REASON / REMARKS</label>
+            <input type="text" name="remarks" class="form-control" placeholder="e.g. Official academic excuse, medical slip, system override">
+          </div>
+
+          <button type="submit" class="btn btn-primary-glow w-100 py-2.5">
+            <i class="bi bi-check2-circle me-1"></i> Save Attendance Record
+          </button>
+        </form>
+      </div>
+    </div>
+
+    <!-- Recent Manual Modifications Log -->
+    <div class="col-lg-7">
+      <div class="glass-card p-4 h-100">
+        <h5 class="fw-bold brand-font mb-3"><i class="bi bi-clock-history text-primary me-2"></i>Recent Manual Modifications</h5>
+        <div class="table-responsive">
+          <table class="table table-glass align-middle">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Date</th>
+                <th>Status</th>
+                <th>Timings</th>
+                <th>Marked By</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% if recent_manual %}
+                {% for r in recent_manual %}
+                  <tr>
+                    <td>
+                      <div class="fw-semibold">{{ r.student.full_name }}</div>
+                      <small class="text-muted font-monospace">{{ r.student.student_id }}</small>
+                    </td>
+                    <td>{{ r.date.strftime('%d %b %Y') }}</td>
+                    <td>
+                      <span class="badge {% if r.status == 'Present' %}badge-soft-success{% elif r.status == 'Absent' %}badge-soft-danger{% else %}badge-soft-warning{% endif %}">
+                        {{ r.status }}
+                      </span>
+                    </td>
+                    <td class="small">
+                      In: {{ r.time_in.strftime('%I:%M %p') if r.time_in else '-' }}<br>
+                      Out: {{ r.time_out.strftime('%I:%M %p') if r.time_out else '-' }}
+                    </td>
+                    <td>
+                      <div class="small fw-semibold">{{ r.marker.username if r.marker else 'System' }}</div>
+                      <span class="badge bg-secondary" style="font-size: 0.65rem;">{{ r.method }}</span>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr>
+                  <td colspan="5" class="text-center py-4 text-muted">
+                    No manual attendance overrides recorded yet.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

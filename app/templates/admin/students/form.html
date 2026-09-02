@@ -1,0 +1,139 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex align-items-center gap-2 mb-4">
+    <a href="{{ url_for('admin.students') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Back to Directory
+    </a>
+    <h2 class="fw-bold brand-font mb-0">{{ title }}</h2>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-10">
+      <div class="glass-card p-4 p-md-5">
+        <form method="POST" enctype="multipart/form-data" novalidate>
+          {{ form.hidden_tag() }}
+
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-person-badge me-2"></i>Primary Credentials</h5>
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">STUDENT ID *</label>
+              {{ form.student_id(class="form-control font-monospace", placeholder="e.g. STU2026042", required=True) }}
+              {% for err in form.student_id.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">ROLL NUMBER *</label>
+              {{ form.roll_number(class="form-control", placeholder="e.g. CS-24-001", required=True) }}
+              {% for err in form.roll_number.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">FULL NAME *</label>
+              {{ form.full_name(class="form-control", placeholder="First and Last Name", required=True) }}
+              {% for err in form.full_name.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-mortarboard me-2"></i>Academic Enrollment</h5>
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">DEPARTMENT *</label>
+              {{ form.department_id(class="form-select") }}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">COURSE / PROGRAM *</label>
+              {{ form.course(class="form-control", placeholder="e.g. B.Tech Computer Science") }}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold text-muted">SEMESTER *</label>
+              {{ form.semester(class="form-select") }}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold text-muted">SECTION</label>
+              {{ form.section(class="form-control", placeholder="A") }}
+            </div>
+          </div>
+
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-card-list me-2"></i>Personal & Contact Details</h5>
+          <div class="row g-3 mb-4">
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">EMAIL ADDRESS</label>
+              {{ form.email(class="form-control", placeholder="student@example.com") }}
+              {% for err in form.email.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-4">
+              <label class="form-label small fw-semibold text-muted">PHONE NUMBER</label>
+              {{ form.phone(class="form-control", placeholder="+1 555-0100") }}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold text-muted">GENDER</label>
+              {{ form.gender(class="form-select") }}
+            </div>
+            <div class="col-md-2">
+              <label class="form-label small fw-semibold text-muted">DATE OF BIRTH</label>
+              {{ form.date_of_birth(class="form-control", type="date") }}
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">FATHER'S NAME</label>
+              {{ form.father_name(class="form-control") }}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">MOTHER'S NAME</label>
+              {{ form.mother_name(class="form-control") }}
+            </div>
+
+            <div class="col-12">
+              <label class="form-label small fw-semibold text-muted">RESIDENTIAL ADDRESS</label>
+              {{ form.address(class="form-control", rows=2, placeholder="Street, City, Postal Code") }}
+            </div>
+          </div>
+
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-camera me-2"></i>Photo & Portal Credentials</h5>
+          <div class="row g-3 mb-4">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">STUDENT PHOTO (MAX 2MB: JPG, PNG, WEBP)</label>
+              {{ form.photo(class="form-control") }}
+              {% if student and student.photo %}
+                <div class="mt-2 d-flex align-items-center gap-2">
+                  <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="Preview" class="rounded border" style="width: 50px; height: 50px; object-fit: cover;">
+                  <small class="text-muted">Current photo attached</small>
+                </div>
+              {% endif %}
+            </div>
+
+            {% if not student %}
+              <div class="col-md-6 d-flex align-items-center">
+                <div class="form-check p-3 rounded bg-body-tertiary w-100 border">
+                  {{ form.create_user_account(class="form-check-input") }}
+                  <label class="form-check-label small fw-semibold" for="create_user_account">
+                    Create Student Portal Login Account
+                    <div class="text-muted fw-normal" style="font-size: 0.75rem;">Allows student to sign in using their Student ID and default password (Student@1234)</div>
+                  </label>
+                </div>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="d-flex justify-content-end gap-2 border-top pt-4" style="border-color: var(--border-glass) !important;">
+            <a href="{{ url_for('admin.students') }}" class="btn btn-outline-secondary px-4">Cancel</a>
+            <button type="submit" class="btn btn-primary-glow px-5">
+              <i class="bi bi-check-lg me-1"></i> {{ 'Save Changes' if student else 'Register Student' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

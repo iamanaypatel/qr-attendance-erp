@@ -1,0 +1,449 @@
+{% extends "base.html" %}
+
+{% block title %}QR Attendance Scanner — {{ institution_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  #reader {
+    width: 100%;
+    min-height: 280px;
+    border: none !important;
+    background: #000;
+    border-radius: var(--radius-md);
+    overflow: hidden;
+  }
+  #reader__scan_region {
+    background: #000;
+  }
+  #reader__dashboard {
+    padding: 0.5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">QR Attendance Scanner</h2>
+      <p class="text-muted mb-0">Scan student QR codes via webcam or mobile camera to automatically mark attendance.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-outline-primary" data-bs-toggle="modal" data-bs-target="#manualEntryModal">
+        <i class="bi bi-keyboard me-1"></i> Manual ID Entry
+      </button>
+      <a href="{{ url_for('attendance.manual') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-pencil-square me-1"></i> Manual Log
+      </a>
+    </div>
+  </div>
+
+  <div class="row g-4">
+    <!-- Camera Viewport Column -->
+    <div class="col-lg-6">
+      <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold brand-font mb-0">
+            <i class="bi bi-camera-video-fill text-primary me-2"></i>Live Scanner
+          </h5>
+          <span class="badge badge-soft-success" id="scannerStatusBadge">Ready</span>
+        </div>
+
+        <!-- Camera Viewport Box with Laser Line -->
+        <div class="scanner-viewport-box mb-3 position-relative">
+          <div class="scanner-laser" id="scannerLaser" style="display: none;"></div>
+          <div id="reader"></div>
+        </div>
+
+        <!-- Controls -->
+        <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
+          <div class="d-flex gap-2 flex-grow-1">
+            <button class="btn btn-primary-glow" id="startScanBtn">
+              <i class="bi bi-play-circle-fill me-1"></i> Start Camera
+            </button>
+            <button class="btn btn-outline-danger" id="stopScanBtn" disabled>
+              <i class="bi bi-stop-circle-fill me-1"></i> Stop Camera
+            </button>
+          </div>
+          <select id="cameraSelect" class="form-select w-auto" style="min-width: 140px;">
+            <option value="environment">Back Camera</option>
+            <option value="user">Front Camera</option>
+          </select>
+        </div>
+
+        <div class="small text-muted mt-3">
+          <i class="bi bi-info-circle me-1"></i> Center the student's QR code in the camera frame. An audible chime sounds upon successful verification.
+        </div>
+      </div>
+    </div>
+
+    <!-- Real-time Scan Result Panel Column -->
+    <div class="col-lg-6">
+      <!-- Last Scanned Student Card -->
+      <div class="glass-card p-4 mb-4" id="scanResultCard">
+        <h5 class="fw-bold brand-font mb-3">Latest Scan Feedback</h5>
+        
+        <div id="scanPlaceholder" class="text-center py-5 text-muted">
+          <i class="bi bi-qr-code-scan fs-1 d-block mb-2 text-primary opacity-50"></i>
+          <h6>Awaiting QR Scan...</h6>
+          <p class="small text-muted mb-0">Scanned student details and Time In / Time Out will appear here.</p>
+        </div>
+
+        <div id="scanActiveResult" style="display: none;">
+          <div class="d-flex align-items-center gap-3 p-3 rounded-3 bg-body-tertiary border mb-3">
+            <div id="studentPhotoContainer">
+              <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4" style="width: 58px; height: 58px;" id="studentAvatarText">
+                A
+              </div>
+            </div>
+            <div class="overflow-hidden flex-grow-1">
+              <h5 class="fw-bold mb-0 text-truncate" id="studentName">Student Name</h5>
+              <div class="text-muted small">
+                <span class="badge bg-secondary font-monospace" id="studentIdBadge">STU2026001</span>
+                <span id="studentRoll">Roll: CS01</span> &bull;
+                <span id="studentDept">CSE</span>
+              </div>
+            </div>
+            <div>
+              <span class="badge fs-6 px-3 py-2" id="attendanceActionBadge">TIME IN</span>
+            </div>
+          </div>
+
+          <div class="alert mb-0" id="scanMessageAlert" role="alert">
+            Message text
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Session Scans Table -->
+      <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="fw-bold brand-font mb-0">Today's Session Feed</h5>
+          <span class="badge badge-soft-info" id="sessionCountBadge">{{ recent_scans | length }} Scanned</span>
+        </div>
+
+        <div class="table-responsive" style="max-height: 320px; overflow-y: auto;">
+          <table class="table table-glass align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Time In</th>
+                <th>Time Out</th>
+                <th>Action</th>
+              </tr>
+            </thead>
+            <tbody id="sessionScansTableBody">
+              {% if recent_scans %}
+                {% for scan in recent_scans %}
+                  <tr>
+                    <td>
+                      <div class="fw-semibold">{{ scan.student.full_name }}</div>
+                      <small class="text-muted font-monospace">{{ scan.student.student_id }}</small>
+                    </td>
+                    <td>{{ scan.time_in.strftime('%I:%M %p') if scan.time_in else '-' }}</td>
+                    <td>{{ scan.time_out.strftime('%I:%M %p') if scan.time_out else '-' }}</td>
+                    <td>
+                      {% if scan.time_out %}
+                        <span class="badge badge-soft-info">Time Out</span>
+                      {% else %}
+                        <span class="badge badge-soft-success">Time In</span>
+                      {% endif %}
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}
+                <tr id="emptyFeedRow">
+                  <td colspan="4" class="text-center py-3 text-muted">
+                    No scans logged in this session yet.
+                  </td>
+                </tr>
+              {% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Manual Student ID Entry Modal -->
+<div class="modal fade" id="manualEntryModal" tabindex="-1" aria-labelledby="manualEntryModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content glass-card border">
+      <div class="modal-header border-bottom">
+        <h5 class="modal-title fw-bold brand-font" id="manualEntryModalLabel">
+          <i class="bi bi-keyboard me-2 text-primary"></i>Enter Student ID
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body py-4">
+        <p class="text-muted small mb-3">If camera scanning is unavailable, enter the student ID or roll number to mark attendance.</p>
+        <div class="mb-3">
+          <label class="form-label small fw-semibold text-muted">STUDENT ID OR ROLL NUMBER</label>
+          <input type="text" id="manualInputId" class="form-control font-monospace" placeholder="e.g. STU2026001 or CS-2024-042" autofocus>
+        </div>
+        <div id="manualModalFeedback" class="small mt-2"></div>
+      </div>
+      <div class="modal-footer border-top">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Cancel</button>
+        <button type="button" class="btn btn-primary-glow px-4" id="submitManualIdBtn">
+          <i class="bi bi-check-lg me-1"></i> Submit
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<!-- html5-qrcode library -->
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
+<script>
+  let html5QrCode = null;
+  let isScanning = false;
+  let lastScannedToken = null;
+  let lastScannedTime = 0;
+
+  const startBtn = document.getElementById('startScanBtn');
+  const stopBtn = document.getElementById('stopScanBtn');
+  const cameraSelect = document.getElementById('cameraSelect');
+  const laser = document.getElementById('scannerLaser');
+  const statusBadge = document.getElementById('scannerStatusBadge');
+
+  async function startScanner() {
+    if (isScanning) return;
+    try {
+      if (!html5QrCode) {
+        html5QrCode = new Html5Qrcode("reader");
+      }
+
+      const facing = cameraSelect.value;
+      const config = {
+        fps: 15,
+        qrbox: { width: 250, height: 250 },
+        aspectRatio: 1.0
+      };
+
+      await html5QrCode.start(
+        { facingMode: facing },
+        config,
+        onScanSuccess,
+        onScanFailure
+      );
+
+      isScanning = true;
+      startBtn.disabled = true;
+      stopBtn.disabled = false;
+      laser.style.display = 'block';
+      statusBadge.className = 'badge bg-success';
+      statusBadge.textContent = 'Active & Scanning';
+    } catch (err) {
+      console.error("Camera start error:", err);
+      showToast("Camera access failed or permission denied: " + err, "danger", "Camera Error");
+      statusBadge.className = 'badge bg-danger';
+      statusBadge.textContent = 'Camera Blocked';
+    }
+  }
+
+  async function stopScanner() {
+    if (!isScanning || !html5QrCode) return;
+    try {
+      await html5QrCode.stop();
+      isScanning = false;
+      startBtn.disabled = false;
+      stopBtn.disabled = true;
+      laser.style.display = 'none';
+      statusBadge.className = 'badge bg-secondary';
+      statusBadge.textContent = 'Stopped';
+    } catch (err) {
+      console.error("Stop scanner error:", err);
+    }
+  }
+
+  startBtn.addEventListener('click', startScanner);
+  stopBtn.addEventListener('click', stopScanner);
+
+  cameraSelect.addEventListener('change', async () => {
+    if (isScanning) {
+      await stopScanner();
+      await startScanner();
+    }
+  });
+
+  function onScanFailure(error) {
+    // Continuous frame scanning without QR detected — ignore
+  }
+
+  function onScanSuccess(decodedText, decodedResult) {
+    const now = Date.now();
+    // Debounce identical scans within 3 seconds
+    if (decodedText === lastScannedToken && (now - lastScannedTime) < 3000) {
+      return;
+    }
+    lastScannedToken = decodedText;
+    lastScannedTime = now;
+
+    processScanPayload(decodedText);
+  }
+
+  async function processScanPayload(token) {
+    try {
+      const response = await fetch('/api/attendance/scan', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ token: token })
+      });
+
+      const data = await response.json();
+      handleScanResponse(data);
+    } catch (e) {
+      console.error("Scan submission error:", e);
+      playWarningBeep();
+      showToast("Network error submitting scan: " + e.message, "danger", "Error");
+    }
+  }
+
+  function handleScanResponse(data) {
+    const placeholder = document.getElementById('scanPlaceholder');
+    const resultBox = document.getElementById('scanActiveResult');
+    const nameEl = document.getElementById('studentName');
+    const idBadge = document.getElementById('studentIdBadge');
+    const rollEl = document.getElementById('studentRoll');
+    const deptEl = document.getElementById('studentDept');
+    const actionBadge = document.getElementById('attendanceActionBadge');
+    const alertMsg = document.getElementById('scanMessageAlert');
+    const photoContainer = document.getElementById('studentPhotoContainer');
+
+    placeholder.style.display = 'none';
+    resultBox.style.display = 'block';
+
+    if (data.success) {
+      playSuccessChime();
+      const s = data.student;
+      nameEl.textContent = s.full_name;
+      idBadge.textContent = s.student_id;
+      rollEl.textContent = 'Roll: ' + s.roll_number;
+      deptEl.textContent = s.department_code || 'General';
+
+      if (data.action === 'TIME_IN') {
+        actionBadge.className = 'badge bg-success fs-6 px-3 py-2';
+        actionBadge.textContent = 'TIME IN';
+        alertMsg.className = 'alert alert-success mt-3 mb-0';
+      } else {
+        actionBadge.className = 'badge bg-info text-dark fs-6 px-3 py-2';
+        actionBadge.textContent = 'TIME OUT';
+        alertMsg.className = 'alert alert-info mt-3 mb-0';
+      }
+      alertMsg.textContent = data.message;
+
+      // Update photo or avatar
+      if (s.photo) {
+        photoContainer.innerHTML = `<img src="/static/uploads/${s.photo}" class="rounded-circle object-fit-cover shadow-sm" style="width: 58px; height: 58px;">`;
+      } else {
+        photoContainer.innerHTML = `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4" style="width: 58px; height: 58px;">${s.full_name[0].toUpperCase()}</div>`;
+      }
+
+      // Add to session feed
+      addSessionFeedRow(s, data.attendance);
+      showToast(data.message, "success", data.action === 'TIME_IN' ? 'Time In Recorded' : 'Time Out Recorded');
+    } else {
+      playWarningBeep();
+      if (data.student) {
+        const s = data.student;
+        nameEl.textContent = s.full_name;
+        idBadge.textContent = s.student_id;
+        rollEl.textContent = 'Roll: ' + s.roll_number;
+        deptEl.textContent = s.department_code || 'General';
+      }
+      actionBadge.className = 'badge bg-warning text-dark fs-6 px-3 py-2';
+      actionBadge.textContent = data.action || 'WARNING';
+      alertMsg.className = 'alert alert-warning mt-3 mb-0';
+      alertMsg.textContent = data.message;
+      showToast(data.message, "warning", "Scan Alert");
+    }
+  }
+
+  function addSessionFeedRow(student, att) {
+    const tbody = document.getElementById('sessionScansTableBody');
+    const emptyRow = document.getElementById('emptyFeedRow');
+    if (emptyRow) emptyRow.remove();
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>
+        <div class="fw-semibold">${student.full_name}</div>
+        <small class="text-muted font-monospace">${student.student_id}</small>
+      </td>
+      <td>${att.time_in || '-'}</td>
+      <td>${att.time_out || '-'}</td>
+      <td>
+        <span class="badge ${att.time_out ? 'badge-soft-info' : 'badge-soft-success'}">
+          ${att.time_out ? 'Time Out' : 'Time In'}
+        </span>
+      </td>
+    `;
+    tbody.prepend(row);
+
+    const countBadge = document.getElementById('sessionCountBadge');
+    if (countBadge) {
+      const current = parseInt(countBadge.textContent) || 0;
+      countBadge.textContent = (current + 1) + ' Scanned';
+    }
+  }
+
+  // Manual ID entry modal handling
+  const submitManualBtn = document.getElementById('submitManualIdBtn');
+  const manualInput = document.getElementById('manualInputId');
+  const feedback = document.getElementById('manualModalFeedback');
+
+  if (submitManualBtn && manualInput) {
+    submitManualBtn.addEventListener('click', async () => {
+      const query = manualInput.value.trim();
+      if (!query) return;
+
+      feedback.innerHTML = '<span class="text-muted">Looking up student...</span>';
+      try {
+        const resp = await fetch(`/api/students?q=${encodeURIComponent(query)}`);
+        const data = await resp.json();
+        if (data.students && data.students.length > 0) {
+          const student = data.students[0];
+          // Look up student details to get their token
+          const detailResp = await fetch(`/api/students/${student.id}`);
+          const detailData = await detailResp.json();
+          
+          feedback.innerHTML = '<span class="text-success">Found student! Marking attendance...</span>';
+          
+          // Submit scan using their token
+          // Since client does not see qr_token from public API, we can mark attendance directly via manual route or API
+          const form = new FormData();
+          form.append('student_id', student.student_id);
+          form.append('status', 'Present');
+          form.append('csrf_token', '{{ csrf_token() }}');
+          
+          const postResp = await fetch("{{ url_for('attendance.manual') }}", {
+            method: 'POST',
+            body: form
+          });
+          
+          feedback.innerHTML = `<span class="text-success">Attendance logged for ${student.full_name}!</span>`;
+          setTimeout(() => {
+            const modalEl = document.getElementById('manualEntryModal');
+            const modal = bootstrap.Modal.getInstance(modalEl);
+            if (modal) modal.hide();
+            manualInput.value = '';
+            feedback.innerHTML = '';
+            location.reload();
+          }, 1000);
+        } else {
+          feedback.innerHTML = '<span class="text-danger">No student found with that ID or Roll Number.</span>';
+        }
+      } catch (e) {
+        feedback.innerHTML = '<span class="text-danger">Error: ' + e.message + '</span>';
+      }
+    });
+  }
+</script>
+{% endblock %}

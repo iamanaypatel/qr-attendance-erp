@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block title %}{{ error_code }} — {{ title }}{% endblock %}
+
+{% block content %}
+<div class="container py-5 text-center">
+  <div class="row justify-content-center">
+    <div class="col-md-7 col-lg-5">
+      <div class="glass-card p-5">
+        <div class="display-1 fw-bold text-primary mb-2 brand-font">{{ error_code }}</div>
+        <h3 class="fw-bold mb-3">{{ title }}</h3>
+        <p class="text-muted mb-4">{{ message }}</p>
+        <div class="d-flex justify-content-center gap-3">
+          <a href="/" class="btn btn-primary-glow px-4 py-2">
+            <i class="bi bi-house-door-fill me-1"></i> Return Home
+          </a>
+          <button onclick="window.history.back()" class="btn btn-outline-secondary px-4 py-2">
+            <i class="bi bi-arrow-left me-1"></i> Go Back
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
