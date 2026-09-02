@@ -355,8 +355,28 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            const Icon(Icons.school_rounded, size: 22),
-            const SizedBox(width: 8),
+            Container(
+              width: 28,
+              height: 28,
+              margin: const EdgeInsets.only(right: 8),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(8),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withValues(alpha: 0.2),
+                    blurRadius: 4,
+                  ),
+                ],
+              ),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.asset(
+                  'assets/images/app_logo.png',
+                  fit: BoxFit.cover,
+                  errorBuilder: (c, e, s) => const Icon(Icons.school_rounded, size: 22),
+                ),
+              ),
+            ),
             Text(
               isStudent ? "Student Portal" : "Apex QR ERP",
               style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),

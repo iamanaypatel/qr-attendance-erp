@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}Dashboard{% endblock %} — {{ institution_name or 'QR Attendance ERP' }}</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
 
   <!-- Prevent FOUC: Apply user saved theme before render -->
   <script>
@@ -58,10 +59,8 @@
       <!-- App Sidebar -->
       <aside class="app-sidebar" id="appSidebar">
         <div class="sidebar-header">
-          <a href="/" class="sidebar-brand">
-            <div class="sidebar-brand-icon">
-              <i class="bi bi-qr-code-scan"></i>
-            </div>
+          <a href="/" class="sidebar-brand d-flex align-items-center gap-2">
+            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="rounded-3 shadow-sm" style="width: 38px; height: 38px; object-fit: cover; border: 1.5px solid var(--border-glass);">
             <div>
               <div class="fw-bold lh-1 brand-font" style="font-size: 1.05rem;">ATTENDANCE</div>
               <small class="text-primary fw-semibold" style="font-size: 0.72rem; letter-spacing: 0.1em;">ERP V2.0</small>
