@@ -17,6 +17,20 @@
         <form method="POST" novalidate>
           {{ form.hidden_tag() }}
 
+          {% if form.errors %}
+            <div class="alert alert-danger mb-4">
+              <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-2"></i>Please resolve the following fields:</div>
+              <ul class="mb-0 ps-3">
+                {% for field_name, err_list in form.errors.items() %}
+                  {% for err in err_list %}
+                    <li><strong>{{ form[field_name].label.text if field_name in form else field_name }}:</strong> {{ err }}</li>
+                  {% endfor %}
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-person-vcard me-2"></i>Teacher Profile Information</h5>
           <div class="row g-3 mb-3">
             <div class="col-md-6">
               <label class="form-label small fw-semibold text-muted">EMPLOYEE ID *</label>
@@ -48,7 +62,7 @@
             </div>
           </div>
 
-          <div class="row g-3 mb-3">
+          <div class="row g-3 mb-4">
             <div class="col-md-6">
               <label class="form-label small fw-semibold text-muted">ASSIGNED DEPARTMENT *</label>
               {{ form.department_id(class="form-select") }}
@@ -59,19 +73,32 @@
             </div>
           </div>
 
-          <div class="row g-3 mb-4">
-            <div class="col-md-6">
-              <label class="form-label small fw-semibold text-muted">PORTAL PASSWORD</label>
-              {{ form.password(class="form-control", placeholder="Leave blank for default: Teacher@1234") }}
-              <small class="text-muted">Allows teacher to log in to scan student QR codes.</small>
-            </div>
-            <div class="col-md-6 d-flex align-items-center">
-              <div class="form-check p-3 rounded bg-body-tertiary w-100 border mt-3">
-                {{ form.is_active(class="form-check-input") }}
-                <label class="form-check-label small fw-semibold" for="is_active">
-                  Account Active
-                  <div class="text-muted fw-normal" style="font-size: 0.75rem;">Enable or suspend portal access for this teacher</div>
-                </label>
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-shield-lock me-2"></i>Portal Login Credentials</h5>
+          <div class="p-3 rounded-3 bg-body-tertiary border mb-4">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold text-muted">PORTAL USERNAME</label>
+                {{ form.portal_username(class="form-control", placeholder="e.g. sharma_sir (Leave blank to use Employee ID)") }}
+                <div class="text-muted small mt-1" style="font-size: 0.78rem;">Each teacher can have their own custom unique username.</div>
+                {% for err in form.portal_username.errors %}
+                  <div class="text-danger small mt-1">{{ err }}</div>
+                {% endfor %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold text-muted">PORTAL PASSWORD</label>
+                {{ form.password(class="form-control", placeholder="Leave blank for default: Teacher@1234") }}
+                <div class="text-muted small mt-1" style="font-size: 0.78rem;">Set custom password or leave blank for default (Teacher@1234).</div>
+                {% for err in form.password.errors %}
+                  <div class="text-danger small mt-1">{{ err }}</div>
+                {% endfor %}
+              </div>
+              <div class="col-12">
+                <div class="form-check">
+                  {{ form.is_active(class="form-check-input") }}
+                  <label class="form-check-label small fw-semibold" for="is_active">
+                    Teacher Account Active (allows portal login & scanning)
+                  </label>
+                </div>
               </div>
             </div>
           </div>

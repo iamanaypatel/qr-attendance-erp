@@ -24,7 +24,9 @@ class StudentForm(FlaskForm):
     roll_number = StringField('Roll Number', validators=[DataRequired(), Length(max=50)])
     address = TextAreaField('Permanent Address', validators=[Optional()])
     photo = FileField('Student Photo', validators=[Optional(), FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Images only (.jpg, .png, .webp)')])
-    create_user_account = BooleanField('Create Portal Login for Student (Default Password: Student@1234)', default=True)
+    portal_username = StringField('Portal Username', validators=[Optional(), Length(min=3, max=64)])
+    portal_password = PasswordField('Portal Password (Leave empty for default: Student@1234)', validators=[Optional(), Length(min=6, max=128)])
+    create_user_account = BooleanField('Enable Student Portal Login Account', default=True)
     submit = SubmitField('Save Student')
 
 class TeacherForm(FlaskForm):
@@ -35,7 +37,8 @@ class TeacherForm(FlaskForm):
     department_id = SelectField('Department', coerce=int, validators=[DataRequired()])
     designation = StringField('Designation', validators=[DataRequired(), Length(max=100)], default='Assistant Professor')
     is_active = BooleanField('Account Active', default=True)
-    password = PasswordField('Login Password (Leave empty for default: Teacher@1234)', validators=[Optional(), Length(min=6)])
+    portal_username = StringField('Portal Username', validators=[Optional(), Length(min=3, max=64)])
+    password = PasswordField('Login Password (Leave empty for default: Teacher@1234)', validators=[Optional(), Length(min=6, max=128)])
     submit = SubmitField('Save Teacher')
 
 class DepartmentForm(FlaskForm):

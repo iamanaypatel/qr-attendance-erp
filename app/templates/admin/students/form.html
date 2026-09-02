@@ -129,18 +129,36 @@
                 </div>
               {% endif %}
             </div>
+          </div>
 
-            {% if not student %}
-              <div class="col-md-6 d-flex align-items-center">
-                <div class="form-check p-3 rounded bg-body-tertiary w-100 border">
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-shield-lock me-2"></i>Portal Login Credentials</h5>
+          <div class="p-3 rounded-3 bg-body-tertiary border mb-4">
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold text-muted">PORTAL USERNAME</label>
+                {{ form.portal_username(class="form-control", placeholder="e.g. rohit2026 (Leave blank to use Student ID)") }}
+                <div class="text-muted small mt-1" style="font-size: 0.78rem;">Each student can have their own custom unique username.</div>
+                {% for err in form.portal_username.errors %}
+                  <div class="text-danger small mt-1">{{ err }}</div>
+                {% endfor %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label small fw-semibold text-muted">PORTAL PASSWORD</label>
+                {{ form.portal_password(class="form-control", placeholder="Leave blank for default: Student@1234") }}
+                <div class="text-muted small mt-1" style="font-size: 0.78rem;">Set custom password or leave blank for default (Student@1234).</div>
+                {% for err in form.portal_password.errors %}
+                  <div class="text-danger small mt-1">{{ err }}</div>
+                {% endfor %}
+              </div>
+              <div class="col-12">
+                <div class="form-check">
                   {{ form.create_user_account(class="form-check-input") }}
                   <label class="form-check-label small fw-semibold" for="create_user_account">
-                    Create Student Portal Login Account
-                    <div class="text-muted fw-normal" style="font-size: 0.75rem;">Allows student to sign in using their Student ID and default password (Student@1234)</div>
+                    Enable Student Portal Login Account
                   </label>
                 </div>
               </div>
-            {% endif %}
+            </div>
           </div>
 
           <div class="d-flex justify-content-end gap-2 border-top pt-4" style="border-color: var(--border-glass) !important;">
