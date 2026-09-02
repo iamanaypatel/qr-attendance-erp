@@ -146,42 +146,48 @@ def student_create():
         return redirect(url_for('admin.departments'))
 
     if form.validate_on_submit():
+        raw_sid = form.student_id.data.strip() if form.student_id.data else ''
+        clean_email = form.email.data.strip() if form.email.data and form.email.data.strip() else None
+
         # Check unique student_id
-        if Student.query.filter_by(student_id=form.student_id.data.strip()).first():
-            flash(f"Student ID '{form.student_id.data}' is already registered.", 'danger')
+        if Student.query.filter_by(student_id=raw_sid).first():
+            flash(f"Student ID '{raw_sid}' is already registered. Please use a unique Student ID.", 'danger')
             return render_template('admin/students/form.html', form=form, title='Add New Student')
 
-        # Check unique email
-        if form.email.data and Student.query.filter_by(email=form.email.data.strip()).first():
-            flash(f"Email '{form.email.data}' is already in use by another student.", 'danger')
+        # Check unique email only if provided
+        if clean_email and Student.query.filter_by(email=clean_email).first():
+            flash(f"Email '{clean_email}' is already in use by another student.", 'danger')
             return render_template('admin/students/form.html', form=form, title='Add New Student')
 
         photo_filename = save_uploaded_photo(form.photo.data)
 
-        # Create user account if requested
+        # Create portal user account if requested
         user_account = None
-        if form.create_user_account.data and form.email.data:
+        if form.create_user_account.data:
+            account_email = clean_email or f"{raw_sid.lower()}@student.apex.edu"
             existing_user = User.query.filter(
-                (User.username == form.student_id.data.strip()) | (User.email == form.email.data.strip())
+                (User.username == raw_sid) | (User.email == account_email)
             ).first()
             if not existing_user:
                 user_account = User(
-                    username=form.student_id.data.strip(),
-                    email=form.email.data.strip(),
+                    username=raw_sid,
+                    email=account_email,
                     role='student',
                     is_active=True
                 )
                 user_account.set_password('Student@1234')
                 db.session.add(user_account)
                 db.session.flush()
+            else:
+                user_account = existing_user
 
         student = Student(
             user_id=user_account.id if user_account else None,
-            student_id=form.student_id.data.strip(),
+            student_id=raw_sid,
             full_name=form.full_name.data.strip(),
             father_name=form.father_name.data.strip() if form.father_name.data else None,
             mother_name=form.mother_name.data.strip() if form.mother_name.data else None,
-            email=form.email.data.strip() if form.email.data else None,
+            email=clean_email,
             phone=form.phone.data.strip() if form.phone.data else None,
             date_of_birth=form.date_of_birth.data,
             gender=form.gender.data,

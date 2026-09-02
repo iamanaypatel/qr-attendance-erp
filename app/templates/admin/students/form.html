@@ -17,11 +17,29 @@
         <form method="POST" enctype="multipart/form-data" novalidate>
           {{ form.hidden_tag() }}
 
+          {% if form.errors %}
+            <div class="alert alert-danger mb-4">
+              <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-2"></i>Please resolve the following fields:</div>
+              <ul class="mb-0 ps-3">
+                {% for field_name, err_list in form.errors.items() %}
+                  {% for err in err_list %}
+                    <li><strong>{{ form[field_name].label.text if field_name in form else field_name }}:</strong> {{ err }}</li>
+                  {% endfor %}
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+
           <h5 class="fw-bold text-primary mb-3"><i class="bi bi-person-badge me-2"></i>Primary Credentials</h5>
           <div class="row g-3 mb-4">
             <div class="col-md-4">
-              <label class="form-label small fw-semibold text-muted">STUDENT ID *</label>
-              {{ form.student_id(class="form-control font-monospace", placeholder="e.g. STU2026042", required=True) }}
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <label class="form-label small fw-semibold text-muted mb-0">STUDENT ID *</label>
+                <button type="button" class="btn btn-link p-0 text-primary small text-decoration-none" style="font-size: 0.75rem;" onclick="generateStudentId()">
+                  <i class="bi bi-magic me-1"></i>Auto-Gen
+                </button>
+              </div>
+              {{ form.student_id(class="form-control font-monospace", id="student_id_input", placeholder="e.g. STU2026042", required=True) }}
               {% for err in form.student_id.errors %}
                 <div class="text-danger small mt-1">{{ err }}</div>
               {% endfor %}
@@ -136,4 +154,17 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function generateStudentId() {
+    const year = new Date().getFullYear();
+    const rand = Math.floor(100 + Math.random() * 900);
+    const input = document.getElementById('student_id_input');
+    if (input) {
+      input.value = `STU${year}${rand}`;
+    }
+  }
+</script>
 {% endblock %}

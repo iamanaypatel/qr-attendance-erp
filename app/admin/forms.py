@@ -8,7 +8,7 @@ class StudentForm(FlaskForm):
     full_name = StringField('Full Name', validators=[DataRequired(), Length(max=120)])
     father_name = StringField("Father's Name", validators=[Optional(), Length(max=120)])
     mother_name = StringField("Mother's Name", validators=[Optional(), Length(max=120)])
-    email = StringField('Email Address', validators=[DataRequired(), Email(check_deliverability=False), Length(max=120)])
+    email = StringField('Email Address', validators=[Optional(), Email(check_deliverability=False), Length(max=120)])
     phone = StringField('Phone Number', validators=[Optional(), Length(max=20)])
     date_of_birth = DateField('Date of Birth', validators=[Optional()], format='%Y-%m-%d')
     gender = SelectField('Gender', choices=[('Male', 'Male'), ('Female', 'Female'), ('Other', 'Other')])
