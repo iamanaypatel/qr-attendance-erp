@@ -23,15 +23,25 @@ from app.utils.id_card import generate_student_id_card_pdf
 
 # Helper for secure image uploads
 def save_uploaded_photo(file_storage):
-    if not file_storage or not file_storage.filename:
+    if not file_storage or isinstance(file_storage, str):
+        return None
+    if not hasattr(file_storage, 'filename') or not file_storage.filename:
         return None
     ext = file_storage.filename.rsplit('.', 1)[-1].lower()
     if ext not in current_app.config['ALLOWED_EXTENSIONS']:
         return None
     unique_name = f"{uuid.uuid4().hex}_{secure_filename(file_storage.filename)}"
-    upload_folder = current_app.config['UPLOAD_FOLDER']
-    file_storage.save(upload_folder / unique_name)
-    return unique_name
+    try:
+        upload_folder = current_app.config['UPLOAD_FOLDER']
+        if isinstance(upload_folder, str):
+            from pathlib import Path
+            upload_folder = Path(upload_folder)
+        upload_folder.mkdir(parents=True, exist_ok=True)
+        file_storage.save(upload_folder / unique_name)
+        return unique_name
+    except Exception as e:
+        current_app.logger.error(f"Error saving uploaded photo: {e}", exc_info=True)
+        return None
 
 # ============================================================================
 # Dashboard Route
@@ -235,17 +245,31 @@ def student_create():
 @role_required('admin')
 def student_detail(id):
     student = Student.query.get_or_404(id)
-    stats = student.calculate_attendance_stats()
-    qr_data_uri = generate_qr_data_uri(student.qr_token, box_size=8)
-    recent_records = student.attendances.order_by(Attendance.date.desc()).limit(15).all()
+    try:
+        if not student.qr_token:
+            student.qr_token = Student.generate_qr_token()
+            db.session.commit()
+        stats = student.calculate_attendance_stats()
+        qr_data_uri = generate_qr_data_uri(student.qr_token, box_size=8)
+        recent_records = student.attendances.order_by(Attendance.date.desc()).limit(15).all()
 
-    return render_template(
-        'admin/students/detail.html',
-        student=student,
-        stats=stats,
-        qr_data_uri=qr_data_uri,
-        recent_records=recent_records
-    )
+        return render_template(
+            'admin/students/detail.html',
+            student=student,
+            stats=stats,
+            qr_data_uri=qr_data_uri,
+            recent_records=recent_records
+        )
+    except Exception as e:
+        current_app.logger.error(f"Error viewing student {id} details: {e}", exc_info=True)
+        flash(f"Notice: Could not load full statistics for student: {e}", 'warning')
+        return render_template(
+            'admin/students/detail.html',
+            student=student,
+            stats={'total_sessions': 0, 'present_count': 0, 'absent_count': 0, 'percentage': 0.0},
+            qr_data_uri=generate_qr_data_uri(student.qr_token or 'STUDENT', box_size=8),
+            recent_records=[]
+        )
 
 @admin_bp.route('/students/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
@@ -264,39 +288,41 @@ def student_edit(id):
             form.create_user_account.data = False
 
     if form.validate_on_submit():
-        # Check duplicate student_id if changed
-        if form.student_id.data.strip() != student.student_id:
-            if Student.query.filter_by(student_id=form.student_id.data.strip()).first():
-                flash(f"Student ID '{form.student_id.data}' is already registered.", 'danger')
-                return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
-
-        # Check duplicate email if changed
-        if form.email.data and form.email.data.strip() != student.email:
-            if Student.query.filter_by(email=form.email.data.strip()).first():
-                flash(f"Email '{form.email.data}' is already registered.", 'danger')
-                return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
-
-        if form.photo.data:
-            new_photo = save_uploaded_photo(form.photo.data)
-            if new_photo:
-                student.photo = new_photo
-
-        student.student_id = form.student_id.data.strip()
-        student.full_name = form.full_name.data.strip()
-        student.father_name = form.father_name.data.strip() if form.father_name.data else None
-        student.mother_name = form.mother_name.data.strip() if form.mother_name.data else None
-        student.email = form.email.data.strip() if form.email.data else None
-        student.phone = form.phone.data.strip() if form.phone.data else None
-        student.date_of_birth = form.date_of_birth.data
-        student.gender = form.gender.data
-        student.department_id = form.department_id.data
-        student.course = form.course.data.strip()
-        student.semester = form.semester.data
-        student.section = form.section.data.strip() if form.section.data else 'A'
-        student.roll_number = form.roll_number.data.strip()
-        student.address = form.address.data.strip() if form.address.data else None
-
         try:
+            # Check duplicate student_id if changed
+            if form.student_id.data.strip() != student.student_id:
+                if Student.query.filter_by(student_id=form.student_id.data.strip()).first():
+                    flash(f"Student ID '{form.student_id.data}' is already registered.", 'danger')
+                    return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
+
+            # Check duplicate email if changed
+            clean_email = form.email.data.strip() if form.email.data else None
+            if clean_email and clean_email != (student.email or ''):
+                if Student.query.filter_by(email=clean_email).first():
+                    flash(f"Email '{clean_email}' is already registered.", 'danger')
+                    return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
+
+            # Safe photo update: only upload if it is a real file storage object
+            if form.photo.data and not isinstance(form.photo.data, str) and hasattr(form.photo.data, 'filename') and form.photo.data.filename:
+                new_photo = save_uploaded_photo(form.photo.data)
+                if new_photo:
+                    student.photo = new_photo
+
+            student.student_id = form.student_id.data.strip()
+            student.full_name = form.full_name.data.strip()
+            student.father_name = form.father_name.data.strip() if form.father_name.data else None
+            student.mother_name = form.mother_name.data.strip() if form.mother_name.data else None
+            student.email = clean_email
+            student.phone = form.phone.data.strip() if form.phone.data else None
+            student.date_of_birth = form.date_of_birth.data
+            student.gender = form.gender.data
+            student.department_id = form.department_id.data
+            student.course = form.course.data.strip()
+            student.semester = form.semester.data
+            student.section = form.section.data.strip() if form.section.data else 'A'
+            student.roll_number = form.roll_number.data.strip()
+            student.address = form.address.data.strip() if form.address.data else None
+
             # Manage Portal Login Account & Password
             target_username = form.portal_username.data.strip() if form.portal_username.data and form.portal_username.data.strip() else student.student_id
             if student.user:
@@ -329,7 +355,7 @@ def student_edit(id):
                 new_pass = form.portal_password.data.strip() if form.portal_password.data and form.portal_password.data.strip() else 'Student@1234'
                 acc_email = student.email or f"{target_username.lower()}@student.apex.edu"
                 if User.query.filter(func.lower(User.email) == acc_email.lower()).first():
-                    acc_email = f"{target_username.lower()}.{student.id}@student.apex.edu"
+                    acc_email = f"{target_username.lower()}.{student.id}.{uuid.uuid4().hex[:4]}@student.apex.edu"
 
                 new_user = User(
                     username=target_username,
@@ -358,6 +384,7 @@ def student_edit(id):
             return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
 
     return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
+
 
 @admin_bp.route('/students/<int:id>/credentials', methods=['POST'])
 @login_required
@@ -395,7 +422,7 @@ def student_credentials_update(id):
             pwd = new_password if new_password else 'Student@1234'
             u_email = (student.email.strip() if student.email and student.email.strip() else f"{new_username.lower()}@student.apex.edu")
             if User.query.filter(func.lower(User.email) == u_email.lower()).first():
-                u_email = f"{new_username.lower()}.{student.id}@student.apex.edu"
+                u_email = f"{new_username.lower()}.{student.id}.{uuid.uuid4().hex[:4]}@student.apex.edu"
 
             user = User(
                 username=new_username,
