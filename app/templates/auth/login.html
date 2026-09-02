@@ -29,7 +29,7 @@
               <span class="input-group-text bg-transparent border-end-0 text-muted">
                 <i class="bi bi-person"></i>
               </span>
-              <input type="text" class="form-control border-start-0 ps-0" id="identity" name="identity" placeholder="e.g. admin or admin@erp.local" required autofocus>
+              <input type="text" class="form-control border-start-0 ps-0" id="identity" name="identity" placeholder="Enter username or email" required autofocus>
             </div>
           </div>
 
@@ -58,28 +58,10 @@
             <span class="small text-muted"><i class="bi bi-shield-check text-success"></i> 256-bit Encrypted</span>
           </div>
 
-          <button type="submit" class="btn btn-primary-glow w-100 py-2.5 fs-6 mb-4">
+          <button type="submit" class="btn btn-primary-glow w-100 py-2.5 fs-6 mb-2">
             <i class="bi bi-box-arrow-in-right me-1"></i> Sign In to Portal
           </button>
         </form>
-
-        <!-- Quick Demo Switcher for fast dev/eval testing -->
-        <div class="border-top pt-3 mt-2 text-center" style="border-color: var(--border-glass) !important;">
-          <small class="text-muted fw-semibold d-block mb-2 text-uppercase" style="font-size: 0.72rem; letter-spacing: 0.05em;">
-            Quick Fill Demo Accounts
-          </small>
-          <div class="d-flex justify-content-center gap-2 flex-wrap">
-            <button type="button" class="btn btn-sm btn-outline-primary" onclick="fillDemo('admin', 'Admin@1234')">
-              <i class="bi bi-person-gear"></i> Admin
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-success" onclick="fillDemo('teacher', 'Teacher@1234')">
-              <i class="bi bi-mortarboard"></i> Teacher
-            </button>
-            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="fillDemo('student', 'Student@1234')">
-              <i class="bi bi-backpack"></i> Student
-            </button>
-          </div>
-        </div>
 
       </div>
 
@@ -90,11 +72,6 @@
 
 {% block scripts %}
 <script>
-  function fillDemo(username, password) {
-    document.getElementById('identity').value = username;
-    document.getElementById('password').value = password;
-  }
-
   const toggleBtn = document.getElementById('togglePasswordBtn');
   const pwdInput = document.getElementById('password');
   const icon = document.getElementById('togglePasswordIcon');
