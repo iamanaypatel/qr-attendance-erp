@@ -29,11 +29,11 @@ class NumberedCanvas(canvas.Canvas):
         self.saveState()
         self.setFont("Helvetica", 8)
         self.setFillColor(HexColor("#64748b"))
-        footer_text = f"Page {self._pageNumber} of {page_count}  •  Apex Attendance ERP V2.0  •  Confidential Official Document"
+        footer_text = f"Page {self._pageNumber} of {page_count}  •  Dr. Virendra Swarup Memorial Trust Group of Institutions  •  Confidential Official Document"
         self.drawRightString(11 * inch - 0.5 * inch, 0.4 * inch, footer_text)
         self.restoreState()
 
-def generate_attendance_pdf(records, institution_name: str = "Apex Institute of Technology", filter_summary: str = "All Records") -> io.BytesIO:
+def generate_attendance_pdf(records, institution_name: str = "Dr. Virendra Swarup Memorial Trust Group of Institutions", filter_summary: str = "All Records") -> io.BytesIO:
     """
     Generates a publication-grade Landscape PDF attendance report with summary stats and table.
     """

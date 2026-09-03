@@ -100,17 +100,20 @@ def _auto_bootstrap_database(app):
 
             # 1. System Settings
             settings_data = [
-                ('institution_name', 'Apex Institute of Technology & Management', 'Full legal institution name'),
-                ('institution_email', 'contact@apex-institute.edu', 'Official administrative contact email'),
-                ('institution_phone', '+1-555-0199', 'Institution contact telephone'),
-                ('institution_address', '100 Academic Way, Tech Corridor, Metro City', 'Physical campus address'),
+                ('institution_name', 'Dr. Virendra Swarup Memorial Trust Group of Institutions', 'Full legal institution name'),
+                ('institution_email', 'contact@vsmt.edu.in', 'Official administrative contact email'),
+                ('institution_phone', '+91 512-2580000', 'Institution contact telephone'),
+                ('institution_address', 'Dr. Virendra Swarup Memorial Trust Group of Institutions, Kanpur-Lucknow National Highway, Unnao, UP', 'Physical campus address'),
                 ('attendance_start_time', '08:00', 'Earliest permitted check-in time'),
                 ('attendance_end_time', '18:00', 'Latest permitted check-out time'),
                 ('duplicate_scan_cooldown_seconds', '60', 'Minimum seconds before accepting another scan for the same student')
             ]
             for key, val, desc in settings_data:
-                if not SystemSetting.query.filter_by(key=key).first():
+                existing_setting = SystemSetting.query.filter_by(key=key).first()
+                if not existing_setting:
                     db.session.add(SystemSetting(key=key, value=val, description=desc))
+                elif key == 'institution_name' and ('Apex' in (existing_setting.value or '') or 'Technology' in (existing_setting.value or '')):
+                    existing_setting.value = val
 
             # 2. Academic Session
             if not AcademicSession.query.filter_by(name='2025-2026').first():

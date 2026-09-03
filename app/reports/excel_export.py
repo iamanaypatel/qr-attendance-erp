@@ -4,7 +4,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from openpyxl.utils import get_column_letter
 
-def generate_attendance_excel(records, institution_name: str = "Apex Institute of Technology") -> io.BytesIO:
+def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swarup Memorial Trust Group of Institutions") -> io.BytesIO:
     """
     Generates a beautifully styled Excel (.xlsx) attendance report workbook with summary block.
     """

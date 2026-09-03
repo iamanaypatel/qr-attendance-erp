@@ -378,8 +378,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Text(
-              isStudent ? "Student Portal" : "Apex QR ERP",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+              isStudent ? "Student Portal" : "VSMT Group of Institutions",
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
           ],
         ),

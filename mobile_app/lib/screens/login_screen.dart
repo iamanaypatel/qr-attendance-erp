@@ -337,19 +337,31 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        "Apex Attendance ERP",
+                        "Dr. Virendra Swarup",
+                        textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 22,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Colors.white,
                           letterSpacing: -0.5,
                         ),
                       ),
+                      const SizedBox(height: 2),
+                      const Text(
+                        "Memorial Trust Group of Institutions",
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
                       const SizedBox(height: 4),
                       Text(
-                        "Multi-User Academic Portal & Smart Scanner",
+                        "Smart Attendance ERP & Academic Portal",
                         style: TextStyle(
-                          fontSize: 12,
+                          fontSize: 11,
                           color: Colors.white.withValues(alpha: 0.85),
                         ),
                       ),

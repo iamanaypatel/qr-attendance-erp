@@ -8,10 +8,10 @@ services:
       - FLASK_ENV=production
       - SECRET_KEY=prod-secret-change-this-in-env-file-at-deployment-32-chars
       - DATABASE_URL=postgresql://qr_user:qr_password@db:5432/qr_attendance_db
-      - INSTITUTION_NAME=Apex Institute of Technology & Management
-      - INSTITUTION_EMAIL=contact@apex-institute.edu
-      - INSTITUTION_PHONE=+1-555-0199
-      - INSTITUTION_ADDRESS=100 Academic Way, Tech Corridor, Metro City
+      - INSTITUTION_NAME=Dr. Virendra Swarup Memorial Trust Group of Institutions
+      - INSTITUTION_EMAIL=contact@vsmt.edu.in
+      - INSTITUTION_PHONE=+91 512-2580000
+      - INSTITUTION_ADDRESS=Dr. Virendra Swarup Memorial Trust Group of Institutions, Kanpur-Lucknow National Highway, Unnao, UP
     depends_on:
       db:
         condition: service_healthy

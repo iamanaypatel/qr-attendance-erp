@@ -12,7 +12,7 @@ from app.utils.qr_generator import generate_qr_bytes
 CARD_WIDTH = 3.375 * inch
 CARD_HEIGHT = 2.125 * inch
 
-def generate_student_id_card_pdf(student, institution_name: str = "Apex Institute of Technology") -> io.BytesIO:
+def generate_student_id_card_pdf(student, institution_name: str = "Dr. Virendra Swarup Memorial Trust Group of Institutions") -> io.BytesIO:
     """
     Generates a high-resolution, vector-crisp PDF ID card formatted to standard CR80 physical card dimensions.
     """
@@ -36,9 +36,12 @@ def generate_student_id_card_pdf(student, institution_name: str = "Apex Institut
 
     # Institution Name in Header
     c.setFillColor(HexColor("#ffffff"))
-    c.setFont("Helvetica-Bold", 8.5)
-    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 16, institution_name[:40].upper())
-    c.setFont("Helvetica", 6.5)
+    if len(institution_name) > 35:
+        c.setFont("Helvetica-Bold", 6.8)
+    else:
+        c.setFont("Helvetica-Bold", 8.5)
+    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 16, institution_name.upper())
+    c.setFont("Helvetica", 6.0)
     c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 27, "OFFICIAL STUDENT IDENTITY CARD")
 
     # Accent divider stripe

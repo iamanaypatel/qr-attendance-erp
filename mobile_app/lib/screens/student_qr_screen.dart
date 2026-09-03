@@ -160,12 +160,12 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "APEX INSTITUTE OF TECHNOLOGY",
+                                    "DR. VIRENDRA SWARUP GROUP OF INSTITUTIONS",
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 13,
-                                      letterSpacing: 0.5,
+                                      fontSize: 11,
+                                      letterSpacing: 0.3,
                                     ),
                                   ),
                                   Text(

@@ -23,10 +23,10 @@ class Config:
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
     
     # Institution defaults
-    INSTITUTION_NAME = os.environ.get('INSTITUTION_NAME', 'Apex Institute of Technology & Management')
-    INSTITUTION_EMAIL = os.environ.get('INSTITUTION_EMAIL', 'contact@apex-institute.edu')
-    INSTITUTION_PHONE = os.environ.get('INSTITUTION_PHONE', '+1-555-0199')
-    INSTITUTION_ADDRESS = os.environ.get('INSTITUTION_ADDRESS', '100 Academic Way, Tech Corridor, Metro City')
+    INSTITUTION_NAME = os.environ.get('INSTITUTION_NAME', 'Dr. Virendra Swarup Memorial Trust Group of Institutions')
+    INSTITUTION_EMAIL = os.environ.get('INSTITUTION_EMAIL', 'contact@vsmt.edu.in')
+    INSTITUTION_PHONE = os.environ.get('INSTITUTION_PHONE', '+91 512-2580000')
+    INSTITUTION_ADDRESS = os.environ.get('INSTITUTION_ADDRESS', 'Dr. Virendra Swarup Memorial Trust Group of Institutions, Kanpur-Lucknow National Highway, Unnao, UP')
     
     # SMTP / Mail
     MAIL_SERVER = os.environ.get('MAIL_SERVER', 'smtp.gmail.com')
