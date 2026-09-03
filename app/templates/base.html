@@ -17,10 +17,10 @@
     })();
   </script>
 
-  <!-- Google Fonts: Inter & Outfit -->
+  <!-- Google Fonts: Inter, Plus Jakarta Sans & JetBrains Mono -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@500;600;700;800&display=swap" rel="stylesheet">
 
   <!-- Bootstrap 5.3 CSS & Icons -->
   <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -70,7 +70,7 @@
 
         <ul class="sidebar-nav">
           {% if current_user.is_admin %}
-            <li class="nav-section-title">ADMINISTRATION</li>
+            <li class="nav-section-title">Administration</li>
             <li>
               <a href="{{ url_for('admin.dashboard') }}" class="sidebar-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
                 <i class="bi bi-grid-1x2-fill"></i>
@@ -121,7 +121,7 @@
             </li>
 
           {% elif current_user.is_teacher %}
-            <li class="nav-section-title">TEACHER PORTAL</li>
+            <li class="nav-section-title">Academic Portal</li>
             <li>
               <a href="{{ url_for('teacher.dashboard') }}" class="sidebar-link {% if request.endpoint == 'teacher.dashboard' %}active{% endif %}">
                 <i class="bi bi-grid-1x2-fill"></i>
@@ -154,7 +154,7 @@
             </li>
 
           {% elif current_user.is_student %}
-            <li class="nav-section-title">STUDENT PORTAL</li>
+            <li class="nav-section-title">Student Portal</li>
             <li>
               <a href="{{ url_for('student.dashboard') }}" class="sidebar-link {% if request.endpoint == 'student.dashboard' %}active{% endif %}">
                 <i class="bi bi-grid-1x2-fill"></i>
@@ -224,14 +224,17 @@
               <button class="btn btn-sm btn-outline-secondary d-lg-none" type="button" id="sidebarToggleBtn" aria-label="Toggle navigation">
                 <i class="bi bi-list fs-5"></i>
               </button>
-              <span class="d-none d-md-inline fw-semibold text-muted" style="font-size: 0.9rem;">
-                <i class="bi bi-buildings me-1"></i> {{ institution_name }}
+              <span class="d-none d-md-inline fw-semibold text-muted text-truncate" style="font-size: 0.88rem; max-width: 320px;">
+                <i class="bi bi-buildings me-1 text-primary"></i> {{ institution_name }}
               </span>
               {% if active_session %}
-                <span class="badge badge-soft-info d-none d-sm-inline">
-                  <i class="bi bi-clock me-1"></i> Session: {{ active_session.name }}
+                <span class="badge badge-soft-info d-none d-sm-inline font-mono" style="font-size: 0.72rem;">
+                  <span class="pulse-pip pulse-pip-teal me-1"></span>{{ active_session.name }}
                 </span>
               {% endif %}
+              <span class="badge badge-soft-info d-none d-xl-inline-flex align-items-center gap-1 font-mono text-muted" style="font-size: 0.75rem;">
+                <i class="bi bi-clock-history text-primary"></i> <span id="headerLiveClock">--:--:--</span>
+              </span>
             </div>
 
             <div class="d-flex align-items-center gap-2">
@@ -241,8 +244,8 @@
               </button>
 
               <!-- Role Badge -->
-              <span class="badge {% if current_user.is_admin %}bg-primary{% elif current_user.is_teacher %}bg-success{% else %}bg-secondary{% endif %} px-2.5 py-1.5 text-uppercase" style="letter-spacing: 0.05em; font-size: 0.72rem;">
-                {{ current_user.role }}
+              <span class="badge {% if current_user.is_admin %}badge-soft-info{% elif current_user.is_teacher %}badge-soft-success{% else %}badge-soft-warning{% endif %} px-2.5 py-1.5 font-mono text-capitalize" style="font-size: 0.75rem;">
+                <span class="pulse-pip {% if current_user.is_admin %}pulse-pip-teal{% elif current_user.is_teacher %}pulse-pip-teal{% else %}pulse-pip-amber{% endif %} me-1"></span>{{ current_user.role }}
               </span>
 
               <!-- Quick Log Out Button -->
@@ -280,13 +283,24 @@
   <!-- Application JS -->
   <script src="{{ url_for('static', filename='js/app.js') }}"></script>
 
-  <!-- Auto-show flash toasts -->
+  <!-- Auto-show flash toasts and live header punch clock -->
   <script>
     document.addEventListener('DOMContentLoaded', () => {
       const flashToasts = document.querySelectorAll('#toastContainer .toast');
       flashToasts.forEach(el => {
         new bootstrap.Toast(el).show();
       });
+
+      // Live Telemetry Clock
+      function updateLiveClock() {
+        const clockEl = document.getElementById('headerLiveClock');
+        if (clockEl) {
+          const now = new Date();
+          clockEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+        }
+      }
+      setInterval(updateLiveClock, 1000);
+      updateLiveClock();
     });
   </script>
 

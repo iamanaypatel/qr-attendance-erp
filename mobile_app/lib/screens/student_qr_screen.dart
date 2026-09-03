@@ -177,12 +177,19 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                                       letterSpacing: 0.2,
                                     ),
                                   ),
+                                  Text(
+                                    "Charlestown Institutional Area, Unnao, UP",
+                                    style: TextStyle(
+                                      color: Colors.white70,
+                                      fontSize: 8.5,
+                                    ),
+                                  ),
                                   SizedBox(height: 2),
                                   Text(
                                     "OFFICIAL STUDENT IDENTITY PASS",
                                     style: TextStyle(
-                                      color: Colors.white70,
-                                      fontSize: 9,
+                                      color: Colors.white60,
+                                      fontSize: 8.5,
                                       letterSpacing: 0.8,
                                     ),
                                   ),

@@ -22,13 +22,13 @@
   <!-- KPI Metrics Grid -->
   <div class="row g-3 mb-4">
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: #3b82f6;">
+      <div class="glass-card kpi-card" style="--card-accent: var(--laser-cyan);">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <div class="text-muted small fw-semibold text-uppercase">Total Students</div>
-            <div class="kpi-value text-primary mt-1" id="kpi-total-students">{{ total_students|default(0) }}</div>
+            <div class="text-muted small fw-medium">Enrolled Students</div>
+            <div class="kpi-value text-primary mt-1 font-mono" id="kpi-total-students">{{ total_students|default(0) }}</div>
           </div>
-          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(59, 130, 246, 0.12); --bubble-color: #3b82f6;">
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--laser-cyan-soft); --bubble-color: var(--laser-cyan);">
             <i class="bi bi-people-fill"></i>
           </div>
         </div>
@@ -36,13 +36,15 @@
     </div>
 
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: #10b981;">
+      <div class="glass-card kpi-card" style="--card-accent: var(--teal-present);">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <div class="text-muted small fw-semibold text-uppercase">Present Today</div>
-            <div class="kpi-value text-success mt-1" id="kpi-present-today">{{ present_today|default(0) }}</div>
+            <div class="text-muted small fw-medium">
+              <span class="pulse-pip pulse-pip-teal me-1"></span>Present Today
+            </div>
+            <div class="kpi-value text-success mt-1 font-mono" id="kpi-present-today">{{ present_today|default(0) }}</div>
           </div>
-          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(16, 185, 129, 0.12); --bubble-color: #10b981;">
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--teal-present-soft); --bubble-color: var(--teal-present);">
             <i class="bi bi-check2-circle"></i>
           </div>
         </div>
@@ -50,13 +52,15 @@
     </div>
 
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: #ef4444;">
+      <div class="glass-card kpi-card" style="--card-accent: var(--crimson-signal);">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <div class="text-muted small fw-semibold text-uppercase">Absent Today</div>
-            <div class="kpi-value text-danger mt-1" id="kpi-absent-today">{{ absent_today|default(0) }}</div>
+            <div class="text-muted small fw-medium">
+              <span class="pulse-pip pulse-pip-crimson me-1"></span>Absent Today
+            </div>
+            <div class="kpi-value text-danger mt-1 font-mono" id="kpi-absent-today">{{ absent_today|default(0) }}</div>
           </div>
-          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(239, 68, 68, 0.12); --bubble-color: #ef4444;">
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--crimson-signal-soft); --bubble-color: var(--crimson-signal);">
             <i class="bi bi-x-circle"></i>
           </div>
         </div>
@@ -64,13 +68,13 @@
     </div>
 
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: #f59e0b;">
+      <div class="glass-card kpi-card" style="--card-accent: var(--amber-chrono);">
         <div class="d-flex justify-content-between align-items-center">
           <div>
-            <div class="text-muted small fw-semibold text-uppercase">Attendance Rate</div>
-            <div class="kpi-value text-warning mt-1" id="kpi-rate">{{ attendance_rate|default(0.0) }}%</div>
+            <div class="text-muted small fw-medium">Attendance Rate</div>
+            <div class="kpi-value text-warning mt-1 font-mono" id="kpi-rate">{{ attendance_rate|default(0.0) }}%</div>
           </div>
-          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(245, 158, 11, 0.12); --bubble-color: #f59e0b;">
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--amber-chrono-soft); --bubble-color: var(--amber-chrono);">
             <i class="bi bi-pie-chart-fill"></i>
           </div>
         </div>
@@ -121,12 +125,16 @@
         <div class="list-group list-group-flush" id="recentScansList">
           {% if recent_scans %}
             {% for scan in recent_scans %}
-              <div class="list-group-item bg-transparent px-0 py-2 border-bottom border-light-subtle d-flex justify-content-between align-items-center">
+              <div class="list-group-item bg-transparent px-0 py-2.5 border-bottom border-light-subtle d-flex justify-content-between align-items-center">
                 <div>
-                  <div class="fw-semibold">{{ scan.student.full_name }}</div>
-                  <small class="text-muted">{{ scan.student.student_id }} &bull; {{ scan.time_in.strftime('%I:%M %p') if scan.time_in else '' }}</small>
+                  <div class="fw-semibold text-truncate" style="max-width: 170px;">{{ scan.student.full_name }}</div>
+                  <small class="text-muted font-mono" style="font-size: 0.75rem;">
+                    {{ scan.student.student_id }} &bull; {{ scan.time_in.strftime('%I:%M:%S %p') if scan.time_in else '' }}
+                  </small>
                 </div>
-                <span class="badge badge-soft-success">{{ scan.status }}</span>
+                <span class="badge badge-soft-success font-mono" style="font-size: 0.72rem;">
+                  <span class="pulse-pip pulse-pip-teal me-1"></span>{{ scan.status }}
+                </span>
               </div>
             {% endfor %}
           {% else %}
