@@ -64,7 +64,11 @@ def create_app(config_name=None):
         from app.models.session import AcademicSession
         
         inst_name = SystemSetting.get_setting('institution_name', app.config.get('INSTITUTION_NAME'))
+        if not inst_name or 'Apex' in inst_name or 'Technology' in inst_name:
+            inst_name = "Dr. Virendra Swarup Memorial Trust Group of Institutions"
         inst_email = SystemSetting.get_setting('institution_email', app.config.get('INSTITUTION_EMAIL'))
+        if not inst_email or 'apex' in inst_email:
+            inst_email = "contact@vsmt.edu.in"
         active_session = AcademicSession.query.filter_by(is_active=True).first()
 
         return {

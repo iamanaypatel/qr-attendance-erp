@@ -32,21 +32,22 @@ def generate_student_id_card_pdf(student, institution_name: str = "Dr. Virendra 
 
     # Top Header Banner
     c.setFillColor(primary_color)
-    c.rect(0, CARD_HEIGHT - 36, CARD_WIDTH, 36, fill=True, stroke=False)
+    c.rect(0, CARD_HEIGHT - 38, CARD_WIDTH, 38, fill=True, stroke=False)
 
     # Institution Name in Header
     c.setFillColor(HexColor("#ffffff"))
-    if len(institution_name) > 35:
-        c.setFont("Helvetica-Bold", 6.8)
-    else:
-        c.setFont("Helvetica-Bold", 8.5)
-    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 16, institution_name.upper())
-    c.setFont("Helvetica", 6.0)
-    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 27, "OFFICIAL STUDENT IDENTITY CARD")
+    c.setFont("Helvetica-Bold", 7.8)
+    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 13, "DR. VIRENDRA SWARUP MEMORIAL TRUST")
+    c.setFillColor(HexColor("#fde047"))
+    c.setFont("Helvetica-Bold", 7.2)
+    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 22, "GROUP OF INSTITUTIONS (VSGOI)")
+    c.setFillColor(HexColor("#ffffff"))
+    c.setFont("Helvetica", 5.5)
+    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 31, "OFFICIAL STUDENT IDENTITY CARD")
 
     # Accent divider stripe
     c.setFillColor(accent_color)
-    c.rect(0, CARD_HEIGHT - 38, CARD_WIDTH, 2, fill=True, stroke=False)
+    c.rect(0, CARD_HEIGHT - 40, CARD_WIDTH, 2, fill=True, stroke=False)
 
     # Photo Box on Left
     photo_x = 12
@@ -124,7 +125,7 @@ def generate_student_id_card_pdf(student, institution_name: str = "Dr. Virendra 
     c.rect(0, 0, CARD_WIDTH, 12, fill=True, stroke=False)
     c.setFillColor(HexColor("#ffffff"))
     c.setFont("Helvetica", 5.5)
-    c.drawCentredString(CARD_WIDTH / 2.0, 4, "Property of Institution. If found, please return to Admin Office.")
+    c.drawCentredString(CARD_WIDTH / 2.0, 4, "Property of Dr. Virendra Swarup Memorial Trust GOI (VSGOI). Return to Admin Office.")
 
     c.showPage()
     c.save()

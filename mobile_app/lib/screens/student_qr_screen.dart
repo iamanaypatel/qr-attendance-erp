@@ -160,19 +160,29 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    "DR. VIRENDRA SWARUP GROUP OF INSTITUTIONS",
+                                    "DR. VIRENDRA SWARUP MEMORIAL TRUST",
                                     style: TextStyle(
                                       color: Colors.white,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 11,
-                                      letterSpacing: 0.3,
+                                      fontSize: 10.5,
+                                      letterSpacing: 0.2,
                                     ),
                                   ),
+                                  Text(
+                                    "GROUP OF INSTITUTIONS (VSGOI)",
+                                    style: TextStyle(
+                                      color: Color(0xFFFDE047),
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 10,
+                                      letterSpacing: 0.2,
+                                    ),
+                                  ),
+                                  SizedBox(height: 2),
                                   Text(
                                     "OFFICIAL STUDENT IDENTITY PASS",
                                     style: TextStyle(
                                       color: Colors.white70,
-                                      fontSize: 10,
+                                      fontSize: 9,
                                       letterSpacing: 0.8,
                                     ),
                                   ),

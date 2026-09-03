@@ -14,7 +14,33 @@ class SystemSetting(db.Model):
     @classmethod
     def get_setting(cls, key: str, default: str = None) -> str:
         record = cls.query.filter_by(key=key).first()
-        return record.value if record and record.value is not None else default
+        val = record.value if record and record.value is not None else default
+
+        # Auto-heal legacy database settings to Dr. Virendra Swarup Memorial Trust Group of Institutions
+        if key == 'institution_name':
+            if not val or 'Apex' in val or 'Technology' in val:
+                val = "Dr. Virendra Swarup Memorial Trust Group of Institutions"
+                try:
+                    if record:
+                        record.value = val
+                    else:
+                        db.session.add(cls(key=key, value=val, description="Full legal institution name"))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+        elif key == 'institution_email':
+            if not val or 'apex' in val:
+                val = "contact@vsmt.edu.in"
+                try:
+                    if record:
+                        record.value = val
+                    else:
+                        db.session.add(cls(key=key, value=val, description="Official administrative contact email"))
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+
+        return val
 
     @classmethod
     def set_setting(cls, key: str, value: str, description: str = None):
