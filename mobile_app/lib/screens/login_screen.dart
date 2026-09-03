@@ -337,21 +337,21 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                       const SizedBox(height: 12),
                       const Text(
-                        "Dr. Virendra Swarup",
+                        "VSGOI",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.bold,
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
                           color: Colors.white,
-                          letterSpacing: -0.5,
+                          letterSpacing: 1.5,
                         ),
                       ),
                       const SizedBox(height: 2),
                       const Text(
-                        "Memorial Trust Group of Institutions",
+                        "Dr. Virendra Swarup Memorial Trust GOI",
                         textAlign: TextAlign.center,
                         style: TextStyle(
-                          fontSize: 13,
+                          fontSize: 12.5,
                           fontWeight: FontWeight.w600,
                           color: Colors.white,
                           letterSpacing: 0.2,

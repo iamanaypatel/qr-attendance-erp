@@ -40,7 +40,7 @@ class _QRAttendanceAppState extends State<QRAttendanceApp> {
     const surfaceDark = Color(0xFF0B1120);
 
     return MaterialApp(
-      title: 'Dr. Virendra Swarup Memorial Trust GOI - Attendance ERP',
+      title: 'VSGOI Attendance ERP',
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
       theme: ThemeData(

@@ -378,8 +378,8 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             Text(
-              isStudent ? "Student Portal" : "VSMT Group of Institutions",
-              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+              isStudent ? "Student Portal" : "VSGOI",
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, letterSpacing: 0.5),
             ),
           ],
         ),
