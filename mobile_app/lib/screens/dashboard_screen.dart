@@ -36,36 +36,172 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  Widget _buildKpiCard({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    required String metaLabel,
+    required String metaBadge,
+    bool hasPulsePip = false,
+    double? progressPercent,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    return Container(
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(
+          color: isDark
+              ? Colors.white.withValues(alpha: 0.08)
+              : const Color(0xFFE2E8F0),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: isDark ? 0.3 : 0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(18),
+        child: Stack(
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  title.toUpperCase(),
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                    color: Colors.grey,
-                  ),
-                ),
-                Icon(icon, color: color, size: 20),
-              ],
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+            // Top Accent Color Stripe
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                height: 4,
                 color: color,
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(14, 16, 14, 12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Label + Icon Bubble Row
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                        child: Row(
+                          children: [
+                            if (hasPulsePip) ...[
+                              Container(
+                                width: 8,
+                                height: 8,
+                                decoration: BoxDecoration(
+                                  color: color,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: color.withValues(alpha: 0.6),
+                                      blurRadius: 6,
+                                      spreadRadius: 1,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 5),
+                            ],
+                            Flexible(
+                              child: Text(
+                                title.toUpperCase(),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 0.4,
+                                  color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(icon, color: color, size: 18),
+                      ),
+                    ],
+                  ),
+
+                  // Large Prominent Number Value
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 26,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: -0.5,
+                        fontFamily: 'monospace',
+                        color: isDark ? Colors.white : const Color(0xFF0F172A),
+                      ),
+                    ),
+                  ),
+
+                  // Optional Progress Bar
+                  if (progressPercent != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(4),
+                      child: LinearProgressIndicator(
+                        value: (progressPercent / 100.0).clamp(0.0, 1.0),
+                        backgroundColor: isDark
+                            ? Colors.white.withValues(alpha: 0.1)
+                            : const Color(0xFFE2E8F0),
+                        valueColor: AlwaysStoppedAnimation<Color>(color),
+                        minHeight: 4,
+                      ),
+                    ),
+
+                  // Telemetry Footer
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Flexible(
+                        child: Text(
+                          metaLabel,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600,
+                            color: isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: color.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Text(
+                          metaBadge,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ],
@@ -101,23 +237,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // KPI Grid
+                    // KPI Grid (Enlarged Prominent Cards with Telemetry)
                     GridView.count(
                       crossAxisCount: 2,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       crossAxisSpacing: 12,
                       mainAxisSpacing: 12,
-                      childAspectRatio: 1.4,
+                      childAspectRatio: 1.12,
                       children: [
-                        _buildKpiCard("Total Students", totalStudents,
-                            Icons.people_alt, const Color(0xFF3B82F6)),
-                        _buildKpiCard("Present Today", presentToday,
-                            Icons.how_to_reg, const Color(0xFF10B981)),
-                        _buildKpiCard("Absent Today", absentToday,
-                            Icons.person_off, const Color(0xFFEF4444)),
-                        _buildKpiCard("Attendance Rate", "$rate%",
-                            Icons.pie_chart, const Color(0xFFF59E0B)),
+                        _buildKpiCard(
+                          title: "Enrolled",
+                          value: totalStudents,
+                          icon: Icons.people_alt_rounded,
+                          color: const Color(0xFF0284C7),
+                          metaLabel: "Active Roster",
+                          metaBadge: "100% Synced",
+                        ),
+                        _buildKpiCard(
+                          title: "Present",
+                          value: presentToday,
+                          icon: Icons.check_circle_rounded,
+                          color: const Color(0xFF0D9488),
+                          metaLabel: "On Campus",
+                          metaBadge: "$presentToday Verified",
+                          hasPulsePip: true,
+                        ),
+                        _buildKpiCard(
+                          title: "Absent",
+                          value: absentToday,
+                          icon: Icons.cancel_rounded,
+                          color: const Color(0xFFDC2626),
+                          metaLabel: "Off Campus",
+                          metaBadge: "$absentToday Pending",
+                          hasPulsePip: true,
+                        ),
+                        _buildKpiCard(
+                          title: "Att. Rate",
+                          value: "$rate%",
+                          icon: Icons.pie_chart_rounded,
+                          color: const Color(0xFFD97706),
+                          metaLabel: "Goal: 75%",
+                          metaBadge: "Quorum",
+                          progressPercent: double.tryParse(rate) ?? 0.0,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 24),
