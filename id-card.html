@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Identity Card — DR. VIRENDRA SWARUP MEMORIAL TRUST</title>
+  
+  <!-- Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&family=Plus+Jakarta+Sans:wght@700;800&display=swap" rel="stylesheet">
+  
+  <!-- Standalone CR80 ID Card Stylesheet -->
+  <link rel="stylesheet" href="id-card.css">
+  
+  <style>
+    .controls-panel {
+      margin-top: 15px;
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+    }
+    .btn-print {
+      background: #1e3a8a;
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      padding: 10px 24px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      box-shadow: 0 4px 12px rgba(30, 58, 138, 0.25);
+      transition: background 0.2s ease, transform 0.1s ease;
+    }
+    .btn-print:hover {
+      background: #1e40af;
+      transform: translateY(-1px);
+    }
+    .btn-print:active {
+      transform: scale(0.98);
+    }
+  </style>
+</head>
+<body class="id-card-demo-page">
+
+  <!-- ==========================================================================
+       CR80 STANDARD STUDENT IDENTITY CARD TEMPLATE (85.6mm x 54mm)
+       ========================================================================== -->
+  <div class="id-card-wrap">
+    <div class="id-card" id="studentIdCard">
+      
+      <!-- 1. Top Header Band -->
+      <header class="id-card-header">
+        <div class="id-card-inst-name">
+          DR. VIRENDRA SWARUP MEMORIAL TRUST<br>
+          GROUP OF INSTITUTIONS
+        </div>
+        <div class="id-card-inst-address">
+          Banthar, Charlestown Institutional Area, Kanpur-Lucknow National Highway, Unnao, UP – 209801
+        </div>
+        <div class="id-card-title-subtitle">
+          OFFICIAL STUDENT IDENTITY CARD
+        </div>
+      </header>
+
+      <!-- Thin Accent Line -->
+      <div class="id-card-accent-strip"></div>
+
+      <!-- 2. Middle Body: Photo, Details, QR -->
+      <main class="id-card-body">
+        
+        <!-- Left: Student Photo with Initial Fallback -->
+        <div class="id-card-photo-box">
+          <!-- 
+            Dynamic Logic:
+            Agar photo_url present hai to <img> show hoga, 
+            warna fallback initial letter div render hoga.
+          -->
+          <div class="id-card-photo-fallback" id="cardPhotoFallback">
+            Y
+          </div>
+          <!-- 
+            Uncomment when binding real image URL:
+            <img src="{{photo_url}}" alt="{{student_name}}" class="id-card-photo-img" id="cardPhotoImg" style="display: none;" onerror="this.style.display='none'; document.getElementById('cardPhotoFallback').style.display='flex';">
+          -->
+        </div>
+
+        <!-- Middle: Student Details (Label-Value Pairs) -->
+        <div class="id-card-details">
+          <div class="id-card-name" id="cardStudentName">
+            Yogendra Kumar
+          </div>
+
+          <div class="id-detail-row">
+            <span class="id-detail-label">ID:</span>
+            <span class="id-detail-value font-mono" id="cardStudentId" style="color: #1e3a8a;">
+              STU202601
+            </span>
+          </div>
+
+          <div class="id-detail-row">
+            <span class="id-detail-label">Roll No:</span>
+            <span class="id-detail-value font-mono" id="cardRollNo">
+              CS-01
+            </span>
+          </div>
+
+          <div class="id-detail-row">
+            <span class="id-detail-label">Dept:</span>
+            <span class="id-detail-value" id="cardDept">
+              Computer Science &amp; Engg.
+            </span>
+          </div>
+
+          <div class="id-detail-row">
+            <span class="id-detail-label">Sem:</span>
+            <span class="id-detail-value" id="cardSem">
+              4th Semester (Sec A)
+            </span>
+          </div>
+
+          <div class="id-detail-row">
+            <span class="id-detail-label">Valid:</span>
+            <span class="id-detail-value font-mono" id="cardValidYears">
+              2024–2028
+            </span>
+          </div>
+        </div>
+
+        <!-- Right: QR Code for Attendance -->
+        <div class="id-card-qr-box">
+          <div class="id-card-qr-frame">
+            <!-- 
+              QR Code Image:
+              Yahan dynamically backend ka generated QR data URI ya image path aayega.
+            -->
+            <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=VSMT-ATTENDANCE-STU202601" 
+                 alt="Attendance QR Code" 
+                 class="id-card-qr-img" 
+                 id="cardQrImg">
+          </div>
+          <div class="id-card-qr-caption">SCAN FOR ATTENDANCE</div>
+        </div>
+
+      </main>
+
+      <!-- 3. Bottom Footer Band: Official Disclaimer -->
+      <footer class="id-card-footer">
+        Property of Institution. If found, please return to Admin Office.
+      </footer>
+
+    </div>
+  </div>
+
+  <!-- Print & Export Controls (Hidden during physical printing) -->
+  <div class="controls-panel no-print">
+    <button type="button" class="btn-print" onclick="window.print()">
+      🖨️ Print ID Card (CR80)
+    </button>
+  </div>
+
+</body>
+</html>

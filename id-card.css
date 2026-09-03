@@ -1,0 +1,263 @@
+/* ==========================================================================
+   STANDARD CR80 STUDENT IDENTITY CARD STYLESHEET
+   Dimensions: 85.6mm x 54mm (Proportion: ~1.585)
+   Biometric QR Attendance Integration
+   ========================================================================== */
+
+:root {
+  --card-width: 420px;
+  --card-height: 265px;
+  --id-navy: #1e3a8a;
+  --id-navy-dark: #0f172a;
+  --id-cyan: #38bdf8;
+  --id-gold: #fde047;
+  --id-bg: #ffffff;
+  --id-surface: #f8fafc;
+  --id-border: #cbd5e1;
+  --id-text-main: #0f172a;
+  --id-text-muted: #64748b;
+  --font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  --font-mono: 'JetBrains Mono', 'SF Mono', Consolas, monospace;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+body.id-card-demo-page {
+  margin: 0;
+  padding: 40px 20px;
+  background-color: #f1f5f9;
+  font-family: var(--font-family);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+
+/* Card Container */
+.id-card-wrap {
+  display: inline-block;
+  perspective: 1000px;
+  margin-bottom: 24px;
+}
+
+.id-card {
+  width: var(--card-width);
+  height: var(--card-height);
+  background: var(--id-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  position: relative;
+  box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22);
+  border: 1px solid var(--id-border);
+  color: var(--id-text-main);
+  display: flex;
+  flex-direction: column;
+  text-align: left;
+  user-select: none;
+}
+
+/* 1. Top Header Band */
+.id-card-header {
+  background: var(--id-navy);
+  color: #ffffff;
+  padding: 8px 14px 6px;
+  text-align: center;
+  position: relative;
+}
+
+.id-card-inst-name {
+  font-weight: 800;
+  font-size: 0.74rem;
+  line-height: 1.22;
+  letter-spacing: 0.02em;
+  color: #ffffff;
+  text-transform: uppercase;
+}
+
+.id-card-inst-address {
+  font-size: 0.48rem;
+  color: #e2e8f0;
+  line-height: 1.15;
+  margin-top: 2px;
+  letter-spacing: 0.01em;
+}
+
+.id-card-title-subtitle {
+  font-size: 0.56rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  color: var(--id-gold);
+  margin-top: 3px;
+  text-transform: uppercase;
+}
+
+/* Accent Strip */
+.id-card-accent-strip {
+  height: 2px;
+  background: var(--id-cyan);
+  width: 100%;
+}
+
+/* 2. Middle Body */
+.id-card-body {
+  padding: 10px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-grow: 1;
+  background: var(--id-bg);
+}
+
+/* Left: Photo */
+.id-card-photo-box {
+  width: 82px;
+  height: 104px;
+  flex-shrink: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1.5px solid var(--id-border);
+  background: var(--id-surface);
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+}
+
+.id-card-photo-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.id-card-photo-fallback {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 2.4rem;
+  font-weight: 800;
+  color: var(--id-navy);
+  background: #e2e8f0;
+}
+
+/* Middle: Details */
+.id-card-details {
+  flex-grow: 1;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.id-card-name {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: var(--id-navy-dark);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-bottom: 4px;
+}
+
+.id-detail-row {
+  display: flex;
+  align-items: baseline;
+  font-size: 0.68rem;
+  margin-bottom: 2px;
+}
+
+.id-detail-label {
+  width: 50px;
+  flex-shrink: 0;
+  font-weight: 600;
+  color: var(--id-text-muted);
+}
+
+.id-detail-value {
+  font-weight: 700;
+  color: var(--id-text-main);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.font-mono {
+  font-family: var(--font-mono) !important;
+}
+
+/* Right: QR Code */
+.id-card-qr-box {
+  width: 78px;
+  flex-shrink: 0;
+  text-align: center;
+}
+
+.id-card-qr-frame {
+  width: 74px;
+  height: 74px;
+  background: #ffffff;
+  border: 1px solid var(--id-border);
+  border-radius: 6px;
+  padding: 3px;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 3px;
+}
+
+.id-card-qr-img {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.id-card-qr-caption {
+  font-size: 0.50rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  color: var(--id-text-muted);
+  text-transform: uppercase;
+}
+
+/* 3. Bottom Footer Band */
+.id-card-footer {
+  background: var(--id-navy);
+  color: #ffffff;
+  font-size: 0.54rem;
+  font-weight: 500;
+  text-align: center;
+  padding: 5px 8px;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+/* Print Rules for Standard CR80 Card Printers or Paper */
+@media print {
+  @page {
+    size: 85.6mm 54mm;
+    margin: 0;
+  }
+  body, body.id-card-demo-page {
+    background: #ffffff !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .id-card-wrap {
+    margin: 0 !important;
+  }
+  .id-card {
+    width: 85.6mm !important;
+    height: 54mm !important;
+    border-radius: 3mm !important;
+    box-shadow: none !important;
+    border: 1px solid #cbd5e1 !important;
+    page-break-inside: avoid;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+}

@@ -1,77 +1,234 @@
 {% extends "base.html" %}
 
-{% block title %}Digital Student ID Card — {{ student.full_name }}{% endblock %}
+{% block title %}Student Identity Card — {{ student.full_name }}{% endblock %}
 
 {% block extra_css %}
 <style>
+  /* Standard CR80 Card Dimensions: 85.6mm x 54mm (Proportion ~ 1.585) */
+  .id-card-container {
+    perspective: 1000px;
+    display: inline-block;
+  }
+
   .id-card-preview {
-    width: 380px;
-    height: 236px;
+    width: 420px;
+    height: 265px;
     background: #ffffff;
     border-radius: 12px;
     overflow: hidden;
     position: relative;
-    box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+    box-shadow: 0 16px 36px rgba(15, 23, 42, 0.22);
     border: 1px solid #cbd5e1;
     color: #0f172a;
-    display: inline-block;
+    display: flex;
+    flex-direction: column;
     text-align: left;
+    user-select: none;
   }
+
+  /* Top Header Band: Solid Dark Navy + Accent Strip */
   .id-card-header {
-    background: linear-gradient(135deg, #1e3a8a, #2563eb);
-    color: #fff;
-    padding: 8px 12px;
+    background: #1e3a8a;
+    color: #ffffff;
+    padding: 8px 14px 6px;
+    text-align: center;
+    position: relative;
+  }
+
+  .id-card-inst-name {
+    font-family: var(--font-display);
+    font-weight: 800;
+    font-size: 0.74rem;
+    line-height: 1.22;
+    letter-spacing: 0.02em;
+    color: #ffffff;
+    text-transform: uppercase;
+  }
+
+  .id-card-inst-address {
+    font-size: 0.48rem;
+    color: #e2e8f0;
+    line-height: 1.15;
+    margin-top: 2px;
+    letter-spacing: 0.01em;
+  }
+
+  .id-card-title-subtitle {
+    font-size: 0.56rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    color: #fde047;
+    margin-top: 3px;
+    text-transform: uppercase;
+  }
+
+  .id-card-accent-strip {
+    height: 2px;
+    background: #38bdf8;
+    width: 100%;
+  }
+
+  /* Main Card Body (Left: Photo, Middle: Details, Right: QR) */
+  .id-card-body {
+    padding: 10px 14px;
     display: flex;
     align-items: center;
-    justify-content: space-between;
-  }
-  .id-card-body {
-    padding: 10px 12px;
-    display: flex;
     gap: 12px;
+    flex-grow: 1;
+    background: #ffffff;
   }
-  .id-card-photo {
-    width: 72px;
-    height: 90px;
-    border-radius: 6px;
+
+  /* Left: Photo with initial fallback */
+  .id-card-photo-box {
+    width: 82px;
+    height: 104px;
+    flex-shrink: 0;
+    border-radius: 8px;
+    overflow: hidden;
+    border: 1.5px solid #cbd5e1;
+    background: #f1f5f9;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+  }
+
+  .id-card-photo-img {
+    width: 100%;
+    height: 100%;
     object-fit: cover;
-    border: 1px solid #94a3b8;
+    display: block;
   }
-  .id-card-photo-placeholder {
-    width: 72px;
-    height: 90px;
-    border-radius: 6px;
-    background: #e2e8f0;
-    color: #475569;
+
+  .id-card-photo-fallback {
+    width: 100%;
+    height: 100%;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
-    font-weight: bold;
-    border: 1px solid #94a3b8;
+    font-size: 2.5rem;
+    font-weight: 800;
+    font-family: var(--font-display);
+    color: #1e3a8a;
+    background: #e2e8f0;
   }
-  .id-card-qr {
-    width: 66px;
-    height: 66px;
+
+  /* Middle: Student Details (Label-Value Pairs) */
+  .id-card-details {
+    flex-grow: 1;
+    min-width: 0;
+    line-height: 1.25;
+  }
+
+  .id-card-name {
+    font-family: var(--font-display);
+    font-size: 0.98rem;
+    font-weight: 800;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+    white-space: nowrap;
+    overflow: hidden;
+    text-truncate: ellipsis;
+    margin-bottom: 4px;
+  }
+
+  .id-detail-row {
+    display: flex;
+    align-items: baseline;
+    font-size: 0.68rem;
+    margin-bottom: 2px;
+  }
+
+  .id-detail-label {
+    width: 50px;
+    flex-shrink: 0;
+    font-weight: 600;
+    color: #64748b;
+  }
+
+  .id-detail-value {
+    font-weight: 700;
+    color: #0f172a;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  /* Right: QR Code + Attendance Caption */
+  .id-card-qr-box {
+    width: 78px;
+    flex-shrink: 0;
+    text-align: center;
+  }
+
+  .id-card-qr-frame {
+    width: 74px;
+    height: 74px;
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    padding: 3px;
+    box-shadow: 0 2px 6px rgba(15, 23, 42, 0.08);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 auto 3px;
+  }
+
+  .id-card-qr-img {
+    width: 100%;
+    height: 100%;
     display: block;
-    margin: 0 auto;
   }
+
+  .id-card-qr-caption {
+    font-size: 0.50rem;
+    font-weight: 800;
+    letter-spacing: 0.06em;
+    color: #475569;
+    text-transform: uppercase;
+  }
+
+  /* Bottom Footer Band: Solid Dark Navy Disclaimer */
   .id-card-footer {
     background: #1e3a8a;
     color: #ffffff;
-    font-size: 0.65rem;
+    font-size: 0.54rem;
+    font-weight: 500;
     text-align: center;
-    padding: 4px 8px;
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    right: 0;
+    padding: 5px 8px;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
   }
+
+  /* Exact CR80 Print Stylesheet */
   @media print {
-    body { background: #fff !important; }
-    .no-print, .app-sidebar, .navbar, footer { display: none !important; }
-    .main-content { margin: 0 !important; }
-    .id-card-preview { box-shadow: none !important; border: 1px solid #000 !important; }
+    @page {
+      size: 85.6mm 54mm;
+      margin: 0;
+    }
+    body {
+      background: #ffffff !important;
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .no-print, .app-sidebar, .glass-nav, footer, .sidebar-backdrop {
+      display: none !important;
+    }
+    .main-content {
+      margin: 0 !important;
+      padding: 0 !important;
+    }
+    .page-container {
+      padding: 0 !important;
+    }
+    .id-card-preview {
+      width: 85.6mm !important;
+      height: 54mm !important;
+      border-radius: 3mm !important;
+      box-shadow: none !important;
+      border: 1px solid #cbd5e1 !important;
+      page-break-inside: avoid;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
   }
 </style>
 {% endblock %}
@@ -80,56 +237,86 @@
 <div class="container py-4 text-center">
   <div class="mb-4 no-print">
     <h2 class="fw-bold brand-font mb-1">Digital Student Identity Card</h2>
-    <p class="text-muted mb-0">Official institutional credential with embedded cryptographic QR token.</p>
+    <p class="text-muted mb-0">CR80 Physical Card Specification &bull; Embedded Attendance QR Token</p>
   </div>
 
-  <!-- ID Card Container -->
+  <!-- Standard CR80 Card Preview Container -->
   <div class="d-flex justify-content-center mb-4">
-    <div class="id-card-preview">
-      <!-- Card Header -->
-      <div class="id-card-header py-2 px-3">
-        <div class="text-start">
-          <div class="fw-bold" style="font-size: 0.74rem; letter-spacing: 0.02em; line-height: 1.2;">DR. VIRENDRA SWARUP MEMORIAL TRUST</div>
-          <div class="fw-bold" style="font-size: 0.70rem; letter-spacing: 0.02em; color: #fde047; line-height: 1.2;">GROUP OF INSTITUTIONS (VSGOI)</div>
-          <div style="font-size: 0.52rem; opacity: 0.92; color: #e2e8f0; line-height: 1.1; margin-top: 1px;">Charlestown Institutional Area, Kanpur-Lucknow Highway, Unnao, UP 209801</div>
-          <div style="font-size: 0.54rem; opacity: 0.85; margin-top: 2px;">OFFICIAL STUDENT IDENTITY CARD</div>
+    <div class="id-card-container">
+      <div class="id-card-preview">
+        <!-- 1. Top Header Band -->
+        <div class="id-card-header">
+          <div class="id-card-inst-name">
+            DR. VIRENDRA SWARUP MEMORIAL TRUST<br>
+            GROUP OF INSTITUTIONS
+          </div>
+          <div class="id-card-inst-address">
+            Banthar, Charlestown Institutional Area, Kanpur-Lucknow National Highway, Unnao, UP – 209801
+          </div>
+          <div class="id-card-title-subtitle">
+            OFFICIAL STUDENT IDENTITY CARD
+          </div>
         </div>
-        <i class="bi bi-mortarboard-fill fs-4 ms-2"></i>
-      </div>
 
-      <!-- Card Body -->
-      <div class="id-card-body">
-        <!-- Photo -->
-        <div>
-          {% if student.photo %}
-            <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="{{ student.full_name }}" class="id-card-photo">
-          {% else %}
-            <div class="id-card-photo-placeholder">
-              {{ student.full_name[0] | upper }}
+        <!-- Thin Accent Divider Strip -->
+        <div class="id-card-accent-strip"></div>
+
+        <!-- 2. Main Card Body -->
+        <div class="id-card-body">
+          <!-- Left: Photo with Initial Fallback -->
+          <div class="id-card-photo-box">
+            {% if student.photo %}
+              <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="{{ student.full_name }}" class="id-card-photo-img">
+            {% else %}
+              <div class="id-card-photo-fallback">
+                {{ student.full_name[0] | upper }}
+              </div>
+            {% endif %}
+          </div>
+
+          <!-- Middle: Student Details (Label-Value Pairs) -->
+          <div class="id-card-details">
+            <div class="id-card-name">{{ student.full_name }}</div>
+
+            <div class="id-detail-row">
+              <span class="id-detail-label">ID:</span>
+              <span class="id-detail-value font-mono text-primary">{{ student.student_id }}</span>
             </div>
-          {% endif %}
+
+            <div class="id-detail-row">
+              <span class="id-detail-label">Roll No:</span>
+              <span class="id-detail-value font-mono">{{ student.roll_number }}</span>
+            </div>
+
+            <div class="id-detail-row">
+              <span class="id-detail-label">Dept:</span>
+              <span class="id-detail-value">{{ student.department.name if student.department else (student.course or 'General') }}</span>
+            </div>
+
+            <div class="id-detail-row">
+              <span class="id-detail-label">Sem:</span>
+              <span class="id-detail-value">{{ student.semester }} (Sec {{ student.section or 'A' }})</span>
+            </div>
+
+            <div class="id-detail-row">
+              <span class="id-detail-label">Valid:</span>
+              <span class="id-detail-value font-mono">2024–2028</span>
+            </div>
+          </div>
+
+          <!-- Right: QR Code for Attendance -->
+          <div class="id-card-qr-box">
+            <div class="id-card-qr-frame">
+              <img src="{{ qr_uri }}" alt="Attendance QR Code" class="id-card-qr-img">
+            </div>
+            <div class="id-card-qr-caption">SCAN FOR ATTENDANCE</div>
+          </div>
         </div>
 
-        <!-- Student Info -->
-        <div class="flex-grow-1 overflow-hidden" style="line-height: 1.25;">
-          <div class="fw-bold text-truncate" style="font-size: 0.88rem; color: #0f172a;">{{ student.full_name }}</div>
-          <div class="font-monospace text-primary fw-bold" style="font-size: 0.75rem;">ID: {{ student.student_id }}</div>
-          <div class="text-muted" style="font-size: 0.68rem;">Roll No: {{ student.roll_number }}</div>
-          <div class="text-muted text-truncate" style="font-size: 0.68rem;">Dept: {{ student.department.name if student.department else '-' }}</div>
-          <div class="text-muted" style="font-size: 0.68rem;">Course: {{ student.course }}</div>
-          <div class="text-muted" style="font-size: 0.68rem;">Sem: {{ student.semester }} (Sec {{ student.section or 'A' }})</div>
+        <!-- 3. Bottom Footer Band: Official Disclaimer -->
+        <div class="id-card-footer">
+          Property of Institution. If found, please return to Admin Office.
         </div>
-
-        <!-- QR Code -->
-        <div class="text-center" style="width: 70px;">
-          <img src="{{ qr_uri }}" alt="QR" class="id-card-qr">
-          <div class="text-muted fw-bold" style="font-size: 0.55rem;">ATTENDANCE</div>
-        </div>
-      </div>
-
-      <!-- Card Footer -->
-      <div class="id-card-footer">
-        Official Property of Dr. Virendra Swarup Memorial Trust Group of Institutions (VSGOI). Valid Academic Period.
       </div>
     </div>
   </div>
@@ -139,7 +326,7 @@
     <a href="{{ url_for('student.id_card_download') }}" class="btn btn-primary-glow px-4">
       <i class="bi bi-file-earmark-pdf me-1"></i> Download PDF ID Card
     </a>
-    <button onclick="window.print()" class="btn btn-outline-secondary px-4">
+    <button onclick="window.print()" class="btn btn-outline-glow px-4">
       <i class="bi bi-printer me-1"></i> Print ID Card
     </button>
   </div>

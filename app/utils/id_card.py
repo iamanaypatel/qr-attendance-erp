@@ -40,12 +40,12 @@ def generate_student_id_card_pdf(student, institution_name: str = "Dr. Virendra 
     c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 11, "DR. VIRENDRA SWARUP MEMORIAL TRUST")
     c.setFillColor(HexColor("#fde047"))
     c.setFont("Helvetica-Bold", 7.0)
-    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 19, "GROUP OF INSTITUTIONS (VSGOI)")
+    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 19, "GROUP OF INSTITUTIONS")
     c.setFillColor(HexColor("#e2e8f0"))
-    c.setFont("Helvetica", 4.5)
-    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 27, "Charlestown Institutional Area, Kanpur-Lucknow Highway, Unnao, UP 209801")
+    c.setFont("Helvetica", 4.2)
+    c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 27, "Banthar, Charlestown Institutional Area, Kanpur-Lucknow National Highway, Unnao, UP – 209801")
     c.setFillColor(HexColor("#ffffff"))
-    c.setFont("Helvetica", 5.2)
+    c.setFont("Helvetica-Bold", 5.2)
     c.drawCentredString(CARD_WIDTH / 2.0, CARD_HEIGHT - 35, "OFFICIAL STUDENT IDENTITY CARD")
 
     # Accent divider stripe
@@ -128,7 +128,7 @@ def generate_student_id_card_pdf(student, institution_name: str = "Dr. Virendra 
     c.rect(0, 0, CARD_WIDTH, 12, fill=True, stroke=False)
     c.setFillColor(HexColor("#ffffff"))
     c.setFont("Helvetica", 5.5)
-    c.drawCentredString(CARD_WIDTH / 2.0, 4, "Property of Dr. Virendra Swarup Memorial Trust GOI (VSGOI). Return to Admin Office.")
+    c.drawCentredString(CARD_WIDTH / 2.0, 4, "Property of Institution. If found, please return to Admin Office.")
 
     c.showPage()
     c.save()
