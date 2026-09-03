@@ -92,7 +92,7 @@ def _auto_bootstrap_database(app):
     with app.app_context():
         try:
             from app.models.audit import AuditLog
-            from app.models.attendance import AttendanceRecord
+            from app.models.attendance import Attendance
             from app.models.user import User
             from app.models.department import Department
             from app.models.student import Student

@@ -20,62 +20,88 @@
   </div>
 
   <!-- KPI Metrics Grid -->
-  <div class="row g-3 mb-4">
+  <!-- KPI Metrics Grid (Enlarged High-Impact Cards) -->
+  <div class="row g-3 g-lg-4 mb-4">
+    <!-- Card 1: Enrolled Students -->
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: var(--laser-cyan);">
-        <div class="d-flex justify-content-between align-items-center">
+      <div class="kpi-card" style="--card-accent: var(--laser-cyan);">
+        <div class="kpi-card-header">
           <div>
-            <div class="text-muted small fw-medium">Enrolled Students</div>
-            <div class="kpi-value text-primary mt-1 font-mono" id="kpi-total-students">{{ total_students|default(0) }}</div>
+            <div class="kpi-label">Enrolled Students</div>
+            <div class="kpi-value text-primary" id="kpi-total-students">{{ total_students|default(0) }}</div>
           </div>
           <div class="kpi-icon-bubble" style="--bubble-bg: var(--laser-cyan-soft); --bubble-color: var(--laser-cyan);">
             <i class="bi bi-people-fill"></i>
           </div>
         </div>
+        <div class="kpi-meta-footer">
+          <span class="kpi-meta-text font-mono"><i class="bi bi-shield-check text-primary me-1"></i>Active Registry</span>
+          <span class="badge badge-soft-info font-mono">100% Synced</span>
+        </div>
       </div>
     </div>
 
+    <!-- Card 2: Present Today -->
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: var(--teal-present);">
-        <div class="d-flex justify-content-between align-items-center">
+      <div class="kpi-card" style="--card-accent: var(--teal-present);">
+        <div class="kpi-card-header">
           <div>
-            <div class="text-muted small fw-medium">
-              <span class="pulse-pip pulse-pip-teal me-1"></span>Present Today
+            <div class="kpi-label">
+              <span class="pulse-pip pulse-pip-teal me-1.5"></span>Present Today
             </div>
-            <div class="kpi-value text-success mt-1 font-mono" id="kpi-present-today">{{ present_today|default(0) }}</div>
+            <div class="kpi-value text-success" id="kpi-present-today">{{ present_today|default(0) }}</div>
           </div>
           <div class="kpi-icon-bubble" style="--bubble-bg: var(--teal-present-soft); --bubble-color: var(--teal-present);">
             <i class="bi bi-check2-circle"></i>
           </div>
         </div>
+        <div class="kpi-meta-footer">
+          <span class="kpi-meta-text font-mono"><i class="bi bi-geo-alt-fill text-success me-1"></i>On Campus</span>
+          <span class="badge badge-soft-success font-mono">{{ present_today|default(0) }} Verified</span>
+        </div>
       </div>
     </div>
 
+    <!-- Card 3: Absent Today -->
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: var(--crimson-signal);">
-        <div class="d-flex justify-content-between align-items-center">
+      <div class="kpi-card" style="--card-accent: var(--crimson-signal);">
+        <div class="kpi-card-header">
           <div>
-            <div class="text-muted small fw-medium">
-              <span class="pulse-pip pulse-pip-crimson me-1"></span>Absent Today
+            <div class="kpi-label">
+              <span class="pulse-pip pulse-pip-crimson me-1.5"></span>Absent Today
             </div>
-            <div class="kpi-value text-danger mt-1 font-mono" id="kpi-absent-today">{{ absent_today|default(0) }}</div>
+            <div class="kpi-value text-danger" id="kpi-absent-today">{{ absent_today|default(0) }}</div>
           </div>
           <div class="kpi-icon-bubble" style="--bubble-bg: var(--crimson-signal-soft); --bubble-color: var(--crimson-signal);">
             <i class="bi bi-x-circle"></i>
           </div>
         </div>
+        <div class="kpi-meta-footer">
+          <span class="kpi-meta-text font-mono"><i class="bi bi-exclamation-circle text-danger me-1"></i>Off Campus</span>
+          <span class="badge badge-soft-danger font-mono">{{ absent_today|default(0) }} Pending</span>
+        </div>
       </div>
     </div>
 
+    <!-- Card 4: Attendance Rate -->
     <div class="col-sm-6 col-xl-3">
-      <div class="glass-card kpi-card" style="--card-accent: var(--amber-chrono);">
-        <div class="d-flex justify-content-between align-items-center">
+      <div class="kpi-card" style="--card-accent: var(--amber-chrono);">
+        <div class="kpi-card-header">
           <div>
-            <div class="text-muted small fw-medium">Attendance Rate</div>
-            <div class="kpi-value text-warning mt-1 font-mono" id="kpi-rate">{{ attendance_rate|default(0.0) }}%</div>
+            <div class="kpi-label">Attendance Rate</div>
+            <div class="kpi-value text-warning" id="kpi-rate">{{ attendance_rate|default(0.0) }}%</div>
           </div>
           <div class="kpi-icon-bubble" style="--bubble-bg: var(--amber-chrono-soft); --bubble-color: var(--amber-chrono);">
             <i class="bi bi-pie-chart-fill"></i>
+          </div>
+        </div>
+        <div>
+          <div class="kpi-progress-track">
+            <div class="kpi-progress-fill" style="width: {{ attendance_rate|default(0.0) }}%; background: var(--amber-chrono);"></div>
+          </div>
+          <div class="kpi-meta-footer border-top-0 pt-1 mt-1">
+            <span class="kpi-meta-text font-mono"><i class="bi bi-activity text-warning me-1"></i>Campus Quorum</span>
+            <span class="badge badge-soft-warning font-mono">Live Goal: 75%</span>
           </div>
         </div>
       </div>

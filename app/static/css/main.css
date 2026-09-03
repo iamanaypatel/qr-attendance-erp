@@ -13,9 +13,19 @@
   --ink-border: #cbd5e1;                /* Crisp divider */
   --ink-border-subtle: #e2e8f0;
   
-  --bg-sidebar: #0a0f1d;                 /* Midnight Slate */
-  --bg-sidebar-active: #151f38;
-  --sidebar-border: rgba(255, 255, 255, 0.08);
+  --bg-sidebar: #ffffff;                 /* Clean Light Canvas Sidebar */
+  --bg-sidebar-active: #e0f2fe;          /* Soft Cyan Active State */
+  --sidebar-border: #e2e8f0;             /* Subtle Light Border */
+  --sidebar-brand: #0f172a;              /* Deep Slate Brand Text */
+  --sidebar-title: #64748b;              /* Clean Slate Section Header */
+  --sidebar-link: #475569;               /* Slate Navigation Link */
+  --sidebar-link-hover: #0f172a;         /* High Contrast Link Hover */
+  --sidebar-link-hover-bg: #f1f5f9;      /* Light Grey Hover */
+  --sidebar-active-text: #0284c7;        /* Laser Cyan Active Text */
+  --sidebar-active-icon: #0284c7;        /* Laser Cyan Active Icon */
+  --sidebar-active-border: #0284c7;      /* Laser Cyan Left Indicator */
+  --sidebar-footer-bg: #f8fafc;          /* Tinted Footer */
+  --sidebar-footer-border: #e2e8f0;
 
   --text-main: #0f172a;                  /* High contrast slate */
   --text-muted: #475569;
@@ -79,9 +89,19 @@
   --ink-border: rgba(255, 255, 255, 0.10);
   --ink-border-subtle: rgba(255, 255, 255, 0.06);
 
-  --bg-sidebar: #060911;
-  --bg-sidebar-active: #131c31;
+  --bg-sidebar: #0a0f1d;                 /* Midnight Slate */
+  --bg-sidebar-active: #131c31;          /* Dark Active Pill */
   --sidebar-border: rgba(255, 255, 255, 0.08);
+  --sidebar-brand: #ffffff;
+  --sidebar-title: #64748b;
+  --sidebar-link: #94a3b8;
+  --sidebar-link-hover: #ffffff;
+  --sidebar-link-hover-bg: rgba(255, 255, 255, 0.05);
+  --sidebar-active-text: #38bdf8;
+  --sidebar-active-icon: #38bdf8;
+  --sidebar-active-border: #38bdf8;
+  --sidebar-footer-bg: rgba(0, 0, 0, 0.25);
+  --sidebar-footer-border: rgba(255, 255, 255, 0.08);
 
   --text-main: #f8fafc;
   --text-muted: #94a3b8;
@@ -154,7 +174,7 @@ h1, h2, h3, h4, h5, h6, .brand-font {
 .app-sidebar {
   width: var(--sidebar-width);
   background: var(--bg-sidebar);
-  color: #f8fafc;
+  color: var(--sidebar-link);
   display: flex;
   flex-direction: column;
   position: fixed;
@@ -163,7 +183,7 @@ h1, h2, h3, h4, h5, h6, .brand-font {
   left: 0;
   z-index: 1030;
   border-right: 1px solid var(--sidebar-border);
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), background-color 0.2s ease, border-color 0.2s ease;
 }
 
 .sidebar-header {
@@ -178,7 +198,7 @@ h1, h2, h3, h4, h5, h6, .brand-font {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  color: #ffffff;
+  color: var(--sidebar-brand);
   text-decoration: none;
   font-weight: 700;
   font-size: 1.05rem;
@@ -186,7 +206,7 @@ h1, h2, h3, h4, h5, h6, .brand-font {
 }
 
 .sidebar-brand:hover {
-  color: #ffffff;
+  color: var(--sidebar-brand);
 }
 
 .sidebar-nav {
@@ -206,7 +226,7 @@ h1, h2, h3, h4, h5, h6, .brand-font {
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: #64748b;
+  color: var(--sidebar-title);
   padding: 0.75rem 0.75rem 0.25rem;
 }
 
@@ -214,9 +234,9 @@ h1, h2, h3, h4, h5, h6, .brand-font {
   display: flex;
   align-items: center;
   gap: 0.75rem;
-  padding: 0.625rem 0.875rem;
+  padding: 0.65rem 0.875rem;
   border-radius: var(--radius-sm);
-  color: #94a3b8;
+  color: var(--sidebar-link);
   text-decoration: none;
   font-size: 0.88rem;
   font-weight: 500;
@@ -227,13 +247,13 @@ h1, h2, h3, h4, h5, h6, .brand-font {
   font-size: 1.15rem;
   width: 22px;
   text-align: center;
-  color: #64748b;
+  color: var(--sidebar-link);
   transition: color 0.18s ease;
 }
 
 .sidebar-link:hover {
-  background: rgba(255, 255, 255, 0.05);
-  color: #ffffff;
+  background: var(--sidebar-link-hover-bg);
+  color: var(--sidebar-link-hover);
 }
 
 .sidebar-link:hover i {
@@ -242,19 +262,19 @@ h1, h2, h3, h4, h5, h6, .brand-font {
 
 .sidebar-link.active {
   background: var(--bg-sidebar-active);
-  color: #ffffff;
+  color: var(--sidebar-active-text);
   font-weight: 600;
-  border-left: 3px solid var(--laser-cyan);
+  border-left: 3px solid var(--sidebar-active-border);
 }
 
 .sidebar-link.active i {
-  color: var(--laser-cyan);
+  color: var(--sidebar-active-icon);
 }
 
 .sidebar-footer {
   padding: 0.875rem 1rem;
-  border-top: 1px solid var(--sidebar-border);
-  background: rgba(0, 0, 0, 0.18);
+  border-top: 1px solid var(--sidebar-footer-border);
+  background: var(--sidebar-footer-bg);
 }
 
 .main-content {
@@ -357,32 +377,107 @@ h1, h2, h3, h4, h5, h6, .brand-font {
   border-color: var(--ink-border);
 }
 
-/* Presence KPI Metric Cards */
-.presence-kpi-card {
-  padding: 1.25rem 1.5rem;
-  border-radius: var(--radius-md);
+/* ==========================================================================
+   Big Prominent KPI Stat Cards (Attendance Ledger Metric Cards)
+   ========================================================================== */
+.kpi-card {
+  position: relative;
+  overflow: hidden;
+  padding: 1.65rem 1.75rem;
+  min-height: 154px;
+  border-radius: 16px;
   background: var(--ink-card);
   border: 1px solid var(--ink-border);
+  box-shadow: var(--shadow-sm);
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease, border-color 0.2s ease;
   display: flex;
-  align-items: center;
+  flex-direction: column;
   justify-content: space-between;
 }
 
-.presence-kpi-value {
-  font-family: var(--font-mono);
-  font-size: 1.85rem;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.03em;
+.kpi-card:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-md);
+  border-color: var(--card-accent, var(--laser-cyan));
 }
 
-.presence-kpi-label {
-  font-size: 0.78rem;
-  color: var(--text-muted);
+/* Accent Top Stripe on Card */
+.kpi-card::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3.5px;
+  background: var(--card-accent, var(--laser-cyan));
+  border-radius: 16px 16px 0 0;
+}
+
+.kpi-label {
+  font-size: 0.82rem;
   font-weight: 600;
+  color: var(--text-muted);
   text-transform: uppercase;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.25rem;
+  display: flex;
+  align-items: center;
+}
+
+.kpi-value {
+  font-family: var(--font-mono);
+  font-size: 2.75rem;
+  font-weight: 800;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  color: var(--text-main);
   margin-top: 0.25rem;
+}
+
+/* Large Icon Bubble */
+.kpi-icon-bubble {
+  width: 54px;
+  height: 54px;
+  border-radius: 14px;
+  background: var(--bubble-bg, rgba(2, 132, 199, 0.12));
+  color: var(--bubble-color, var(--laser-cyan));
+  font-size: 1.65rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.04);
+}
+
+/* Bonus: Micro Telemetry Footer on Card */
+.kpi-meta-footer {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--ink-border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+}
+
+.kpi-meta-text {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.kpi-progress-track {
+  width: 100%;
+  height: 4px;
+  background: var(--ink-border-subtle);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-top: 0.65rem;
+}
+
+.kpi-progress-fill {
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.6s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 /* Buttons */

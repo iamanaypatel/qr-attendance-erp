@@ -20,33 +20,88 @@
   </div>
 
   <!-- Stats Grid -->
-  <div class="row g-3 mb-4">
+  <!-- Stats Grid -->
+  <div class="row g-3 g-lg-4 mb-4">
     <div class="col-sm-6 col-lg-3">
-      <div class="glass-card kpi-card" style="--card-accent: #3b82f6;">
-        <div class="text-muted small fw-semibold text-uppercase">Attendance Percentage</div>
-        <div class="kpi-value text-primary mt-1">{{ stats.percentage|default(0.0) }}%</div>
-        <small class="text-muted">Target minimum: 75%</small>
+      <div class="kpi-card" style="--card-accent: var(--laser-cyan);">
+        <div class="kpi-card-header">
+          <div>
+            <div class="kpi-label">Attendance Rate</div>
+            <div class="kpi-value text-primary">{{ stats.percentage|default(0.0) }}%</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--laser-cyan-soft); --bubble-color: var(--laser-cyan);">
+            <i class="bi bi-pie-chart-fill"></i>
+          </div>
+        </div>
+        <div>
+          <div class="kpi-progress-track">
+            <div class="kpi-progress-fill" style="width: {{ stats.percentage|default(0.0) }}%; background: var(--laser-cyan);"></div>
+          </div>
+          <div class="kpi-meta-footer border-top-0 pt-1 mt-1">
+            <span class="kpi-meta-text font-mono">Target: 75.0%</span>
+            <span class="badge {% if stats.percentage|default(0.0) >= 75.0 %}badge-soft-success{% else %}badge-soft-danger{% endif %} font-mono">
+              {% if stats.percentage|default(0.0) >= 75.0 %}Compliant{% else %}Low Attendance{% endif %}
+            </span>
+          </div>
+        </div>
       </div>
     </div>
+
     <div class="col-sm-6 col-lg-3">
-      <div class="glass-card kpi-card" style="--card-accent: #10b981;">
-        <div class="text-muted small fw-semibold text-uppercase">Total Present</div>
-        <div class="kpi-value text-success mt-1">{{ stats.present_count|default(0) }}</div>
-        <small class="text-muted">Days attended</small>
+      <div class="kpi-card" style="--card-accent: var(--teal-present);">
+        <div class="kpi-card-header">
+          <div>
+            <div class="kpi-label">
+              <span class="pulse-pip pulse-pip-teal me-1.5"></span>Total Present
+            </div>
+            <div class="kpi-value text-success">{{ stats.present_count|default(0) }}</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--teal-present-soft); --bubble-color: var(--teal-present);">
+            <i class="bi bi-calendar-check-fill"></i>
+          </div>
+        </div>
+        <div class="kpi-meta-footer">
+          <span class="kpi-meta-text font-mono"><i class="bi bi-check-circle text-success me-1"></i>Attended</span>
+          <span class="badge badge-soft-success font-mono">Days Verified</span>
+        </div>
       </div>
     </div>
+
     <div class="col-sm-6 col-lg-3">
-      <div class="glass-card kpi-card" style="--card-accent: #ef4444;">
-        <div class="text-muted small fw-semibold text-uppercase">Total Absent</div>
-        <div class="kpi-value text-danger mt-1">{{ stats.absent_count|default(0) }}</div>
-        <small class="text-muted">Days missed</small>
+      <div class="kpi-card" style="--card-accent: var(--crimson-signal);">
+        <div class="kpi-card-header">
+          <div>
+            <div class="kpi-label">
+              <span class="pulse-pip pulse-pip-crimson me-1.5"></span>Total Absent
+            </div>
+            <div class="kpi-value text-danger">{{ stats.absent_count|default(0) }}</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--crimson-signal-soft); --bubble-color: var(--crimson-signal);">
+            <i class="bi bi-calendar-x-fill"></i>
+          </div>
+        </div>
+        <div class="kpi-meta-footer">
+          <span class="kpi-meta-text font-mono"><i class="bi bi-x-circle text-danger me-1"></i>Missed</span>
+          <span class="badge badge-soft-danger font-mono">Days Absent</span>
+        </div>
       </div>
     </div>
+
     <div class="col-sm-6 col-lg-3">
-      <div class="glass-card kpi-card" style="--card-accent: #6366f1;">
-        <div class="text-muted small fw-semibold text-uppercase">Total Sessions</div>
-        <div class="kpi-value text-info mt-1">{{ stats.total_sessions|default(0) }}</div>
-        <small class="text-muted">Class days recorded</small>
+      <div class="kpi-card" style="--card-accent: var(--amber-chrono);">
+        <div class="kpi-card-header">
+          <div>
+            <div class="kpi-label">Total Sessions</div>
+            <div class="kpi-value text-warning">{{ stats.total_sessions|default(0) }}</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: var(--amber-chrono-soft); --bubble-color: var(--amber-chrono);">
+            <i class="bi bi-journal-bookmark-fill"></i>
+          </div>
+        </div>
+        <div class="kpi-meta-footer">
+          <span class="kpi-meta-text font-mono"><i class="bi bi-clock text-warning me-1"></i>Curriculum</span>
+          <span class="badge badge-soft-warning font-mono">Classes Recorded</span>
+        </div>
       </div>
     </div>
   </div>
