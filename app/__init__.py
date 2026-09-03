@@ -143,7 +143,7 @@ def _auto_bootstrap_database(app):
             # 4. Admin User
             admin = User.query.filter_by(username='admin').first()
             if not admin:
-                admin = User(username='admin', email='admin@apex-institute.edu', role='admin', is_active=True)
+                admin = User(username='admin', email='admin@vsmt.edu.in', role='admin', is_active=True)
                 admin.set_password('Admin@1234')
                 db.session.add(admin)
                 app.logger.info("Auto-bootstrap: Created admin user.")
@@ -151,7 +151,7 @@ def _auto_bootstrap_database(app):
             # 5. Teacher User
             teacher_user = User.query.filter_by(username='teacher').first()
             if not teacher_user:
-                teacher_user = User(username='teacher', email='teacher@apex-institute.edu', role='teacher', is_active=True)
+                teacher_user = User(username='teacher', email='teacher@vsmt.edu.in', role='teacher', is_active=True)
                 teacher_user.set_password('Teacher@1234')
                 db.session.add(teacher_user)
                 db.session.flush()
@@ -162,7 +162,7 @@ def _auto_bootstrap_database(app):
                         user_id=teacher_user.id,
                         employee_id='TCH101',
                         full_name='Dr. Alan Turing',
-                        email='teacher@apex-institute.edu',
+                        email='teacher@vsmt.edu.in',
                         phone='+1-555-0101',
                         department_id=cse.id,
                         designation='Associate Professor'
@@ -173,7 +173,7 @@ def _auto_bootstrap_database(app):
             # 6. Student User
             student_user = User.query.filter_by(username='student').first()
             if not student_user:
-                student_user = User(username='student', email='student@apex-institute.edu', role='student', is_active=True)
+                student_user = User(username='student', email='student@vsmt.edu.in', role='student', is_active=True)
                 student_user.set_password('Student@1234')
                 db.session.add(student_user)
                 db.session.flush()
@@ -186,7 +186,7 @@ def _auto_bootstrap_database(app):
                         full_name='Alex Johnson',
                         father_name='Robert Johnson',
                         mother_name='Mary Johnson',
-                        email='student@apex-institute.edu',
+                        email='student@vsmt.edu.in',
                         phone='+1-555-0202',
                         date_of_birth=date(2004, 5, 14),
                         gender='Male',

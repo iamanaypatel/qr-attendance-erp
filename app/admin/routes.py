@@ -187,9 +187,9 @@ def student_create():
             # Create portal user account if requested
             user_account = None
             if form.create_user_account.data:
-                account_email = clean_email or f"{custom_username.lower()}@student.apex.edu"
+                account_email = clean_email or f"{custom_username.lower()}@student.vsmt.edu.in"
                 if User.query.filter(func.lower(User.email) == account_email.lower()).first():
-                    account_email = f"{custom_username.lower()}.{int(datetime.utcnow().timestamp())}@student.apex.edu"
+                    account_email = f"{custom_username.lower()}.{int(datetime.utcnow().timestamp())}@student.vsmt.edu.in"
 
                 user_account = User(
                     username=custom_username,
@@ -353,9 +353,9 @@ def student_edit(id):
                     return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
 
                 new_pass = form.portal_password.data.strip() if form.portal_password.data and form.portal_password.data.strip() else 'Student@1234'
-                acc_email = student.email or f"{target_username.lower()}@student.apex.edu"
+                acc_email = student.email or f"{target_username.lower()}@student.vsmt.edu.in"
                 if User.query.filter(func.lower(User.email) == acc_email.lower()).first():
-                    acc_email = f"{target_username.lower()}.{student.id}.{uuid.uuid4().hex[:4]}@student.apex.edu"
+                    acc_email = f"{target_username.lower()}.{student.id}.{uuid.uuid4().hex[:4]}@student.vsmt.edu.in"
 
                 new_user = User(
                     username=target_username,
@@ -420,9 +420,9 @@ def student_credentials_update(id):
             flash(f"Login credentials for {student.full_name} updated successfully! (Username: {new_username})", 'success')
         else:
             pwd = new_password if new_password else 'Student@1234'
-            u_email = (student.email.strip() if student.email and student.email.strip() else f"{new_username.lower()}@student.apex.edu")
+            u_email = (student.email.strip() if student.email and student.email.strip() else f"{new_username.lower()}@student.vsmt.edu.in")
             if User.query.filter(func.lower(User.email) == u_email.lower()).first():
-                u_email = f"{new_username.lower()}.{student.id}.{uuid.uuid4().hex[:4]}@student.apex.edu"
+                u_email = f"{new_username.lower()}.{student.id}.{uuid.uuid4().hex[:4]}@student.vsmt.edu.in"
 
             user = User(
                 username=new_username,
@@ -667,7 +667,7 @@ def teacher_edit(id):
                 
                 acc_email = teacher.email
                 if User.query.filter(func.lower(User.email) == acc_email.lower()).first():
-                    acc_email = f"{target_username.lower()}.{teacher.id}@faculty.apex.edu"
+                    acc_email = f"{target_username.lower()}.{teacher.id}@faculty.vsmt.edu.in"
 
                 new_u = User(
                     username=target_username,
@@ -732,9 +732,9 @@ def teacher_credentials_update(id):
             flash(f"Login credentials for teacher {teacher.full_name} updated successfully! (Username: {new_username})", 'success')
         else:
             pwd = new_password if new_password else 'Teacher@1234'
-            acc_email = teacher.email if teacher.email else f"{new_username.lower()}@faculty.apex.edu"
+            acc_email = teacher.email if teacher.email else f"{new_username.lower()}@faculty.vsmt.edu.in"
             if User.query.filter(func.lower(User.email) == acc_email.lower()).first():
-                acc_email = f"{new_username.lower()}.{teacher.id}@faculty.apex.edu"
+                acc_email = f"{new_username.lower()}.{teacher.id}@faculty.vsmt.edu.in"
 
             user = User(
                 username=new_username,

@@ -18,9 +18,9 @@ services:
           name: qr-attendance-db
           property: connectionString
       - key: INSTITUTION_NAME
-        value: "Apex Institute of Technology & Management"
+        value: "Dr. Virendra Swarup Memorial Trust Group of Institutions"
       - key: INSTITUTION_EMAIL
-        value: "contact@apex-institute.edu"
+        value: "contact@vsmt.edu.in"
       - key: UPLOAD_FOLDER
         value: "app/static/uploads"
 

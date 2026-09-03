@@ -14,7 +14,7 @@ def send_email(subject: str, recipients: list[str], html_body: str, text_body: s
     use_tls = current_app.config.get('MAIL_USE_TLS', True)
     username = current_app.config.get('MAIL_USERNAME')
     password = current_app.config.get('MAIL_PASSWORD')
-    sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@apex-institute.edu')
+    sender = current_app.config.get('MAIL_DEFAULT_SENDER', 'noreply@vsmt.edu.in')
 
     if not server or not recipients:
         current_app.logger.warning("Email not sent: MAIL_SERVER or recipients not specified.")

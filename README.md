@@ -1,6 +1,6 @@
-# 🚀 Apex QR Attendance ERP System — Version 2.0
+# 🚀 Dr. Virendra Swarup Memorial Trust Group of Institutions — QR Attendance ERP System
 
-An enterprise-grade, full-stack **QR Attendance ERP System** built with **Python Flask**, **SQLAlchemy**, **ReportLab**, **openpyxl**, **Chart.js**, and modern **Glassmorphism Dark/Light UI**.
+An enterprise-grade, full-stack **QR Attendance ERP System** built for **Dr. Virendra Swarup Memorial Trust Group of Institutions** with **Python Flask**, **SQLAlchemy**, **ReportLab**, **openpyxl**, **Chart.js**, and modern **Glassmorphism Dark/Light UI**.
 
 ---
 
@@ -270,9 +270,9 @@ Under the **Environment Variables** section in Render, add the following key-val
 | `FLASK_ENV` | `production` |
 | `SECRET_KEY` | Click **Generate** on Render or paste a 32+ character random string |
 | `DATABASE_URL` | Paste your PostgreSQL connection URL from Step 3 (or link directly via Render Blueprint) |
-| `INSTITUTION_NAME` | `Apex Institute of Technology & Management` |
-| `INSTITUTION_EMAIL` | `contact@apex-institute.edu` |
-| `INSTITUTION_PHONE` | `+1-555-0199` |
+| `INSTITUTION_NAME` | `Dr. Virendra Swarup Memorial Trust Group of Institutions` |
+| `INSTITUTION_EMAIL` | `contact@vsmt.edu.in` |
+| `INSTITUTION_PHONE` | `+91 512-2580000` |
 | `UPLOAD_FOLDER` | `app/static/uploads` |
 
 *(Optional SMTP variables: `MAIL_SERVER`, `MAIL_PORT`, `MAIL_USERNAME`, `MAIL_PASSWORD` can be added if automated email report dispatch is desired).*

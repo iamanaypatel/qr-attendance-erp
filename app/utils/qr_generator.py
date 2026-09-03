@@ -9,7 +9,7 @@ def generate_qr_data_uri(data: str, box_size: int = 10, border: int = 2) -> str:
     safe for embedding directly into HTML <img src="data:image/png;base64,...">.
     """
     if not data:
-        data = "APEX-DEFAULT-QR"
+        data = "VSMT-DEFAULT-QR"
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,
@@ -30,7 +30,7 @@ def generate_qr_bytes(data: str, box_size: int = 10, border: int = 2) -> io.Byte
     Returns BytesIO object containing PNG bytes for file downloads or ReportLab embedding.
     """
     if not data:
-        data = "APEX-DEFAULT-QR"
+        data = "VSMT-DEFAULT-QR"
     qr = qrcode.QRCode(
         version=1,
         error_correction=qrcode.constants.ERROR_CORRECT_H,

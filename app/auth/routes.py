@@ -37,8 +37,11 @@ def init_system():
             depts[code] = d
 
         # Settings
-        if not SystemSetting.query.filter_by(key='institution_name').first():
-            db.session.add(SystemSetting(key='institution_name', value='Apex Institute of Technology & Management', description='Full legal institution name'))
+        inst_setting = SystemSetting.query.filter_by(key='institution_name').first()
+        if not inst_setting:
+            db.session.add(SystemSetting(key='institution_name', value='Dr. Virendra Swarup Memorial Trust Group of Institutions', description='Full legal institution name'))
+        else:
+            inst_setting.value = 'Dr. Virendra Swarup Memorial Trust Group of Institutions'
 
         # Session
         if not AcademicSession.query.filter_by(name='2025-2026').first():
@@ -47,7 +50,7 @@ def init_system():
         # Admin
         admin = User.query.filter_by(username='admin').first()
         if not admin:
-            admin = User(username='admin', email='admin@apex-institute.edu', role='admin', is_active=True)
+            admin = User(username='admin', email='admin@vsmt.edu.in', role='admin', is_active=True)
             db.session.add(admin)
         admin.set_password('Admin@1234')
         admin.is_active = True
@@ -55,14 +58,14 @@ def init_system():
         # Teacher
         teacher = User.query.filter_by(username='teacher').first()
         if not teacher:
-            teacher = User(username='teacher', email='teacher@apex-institute.edu', role='teacher', is_active=True)
+            teacher = User(username='teacher', email='teacher@vsmt.edu.in', role='teacher', is_active=True)
             db.session.add(teacher)
             db.session.flush()
             cse = depts.get('CSE') or Department.query.filter_by(code='CSE').first()
             if cse and not Teacher.query.filter_by(user_id=teacher.id).first():
                 db.session.add(Teacher(
                     user_id=teacher.id, employee_id='TCH101', full_name='Dr. Alan Turing',
-                    email='teacher@apex-institute.edu', phone='+1-555-0101', department_id=cse.id, designation='Associate Professor'
+                    email='teacher@vsmt.edu.in', phone='+1-555-0101', department_id=cse.id, designation='Associate Professor'
                 ))
         teacher.set_password('Teacher@1234')
         teacher.is_active = True
@@ -70,14 +73,14 @@ def init_system():
         # Student
         student = User.query.filter_by(username='student').first()
         if not student:
-            student = User(username='student', email='student@apex-institute.edu', role='student', is_active=True)
+            student = User(username='student', email='student@vsmt.edu.in', role='student', is_active=True)
             db.session.add(student)
             db.session.flush()
             cse = depts.get('CSE') or Department.query.filter_by(code='CSE').first()
             if cse and not Student.query.filter_by(user_id=student.id).first():
                 db.session.add(Student(
                     user_id=student.id, student_id='STU2026001', full_name='Alex Johnson',
-                    father_name='Robert Johnson', mother_name='Mary Johnson', email='student@apex-institute.edu',
+                    father_name='Robert Johnson', mother_name='Mary Johnson', email='student@vsmt.edu.in',
                     phone='+1-555-0202', date_of_birth=date(2004, 5, 14), gender='Male', department_id=cse.id,
                     course='B.Tech Computer Science', semester='4th', section='A', roll_number='CS-2024-042',
                     address='42 Innovation Drive, Tech City', qr_token=Student.generate_qr_token(),
