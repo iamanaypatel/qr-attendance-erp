@@ -7,15 +7,16 @@ from app.models.subject import Subject
 from app.models.attendance import Attendance
 from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
+from app.utils.timezone import get_current_ist_date, get_current_ist_time
 
 def process_qr_attendance(token: str, marker_user, subject_id: int = None, semester: str = None) -> dict:
     """
     Core business logic for QR code attendance verification and state machine:
     1. Validate token -> Student
     2. Validate subject and verify teacher assignment authorization for subject + semester
-    3. Check today's attendance record for this specific student + subject + semester
-    4. First scan -> Record Time In (linked with subject_id, teacher_id, and semester)
-    5. Second scan -> Record Time Out
+    3. Check today's attendance record for this specific student + subject + semester (IST timezone)
+    4. First scan -> Record Time In (authoritative IST time, linked with subject_id, teacher_id, and semester)
+    5. Second scan -> Record Time Out (authoritative IST time, calculated duration)
     6. Subsequent scan -> Informative duplicate warning with timestamps
     """
     if not token or not token.strip():
@@ -97,8 +98,9 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
 
     teacher_id = teacher_obj.id if teacher_obj else None
 
-    today = date.today()
-    now_time = datetime.now().time()
+    # Authoritative current date and time in Asia/Kolkata (IST = UTC+05:30)
+    today = get_current_ist_date()
+    now_time = get_current_ist_time()
 
     # Look up existing record for today scoped to (student_id, date, subject_id, semester)
     query = Attendance.query.filter(Attendance.student_id == student.id, Attendance.date == today)
@@ -151,15 +153,7 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
                 'id': teacher_obj.id,
                 'name': teacher_obj.full_name
             } if teacher_obj else None,
-            'attendance': {
-                'date': today.strftime('%Y-%m-%d'),
-                'time_in': now_time.strftime('%I:%M %p'),
-                'time_out': None,
-                'status': 'Present',
-                'method': 'QR',
-                'subject_name': subject.subject_name if subject else None,
-                'semester': semester
-            }
+            'attendance': record.to_dict()
         }
 
     # Case 2: Record exists, but Time Out has not been marked yet
@@ -209,22 +203,16 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
                 'id': teacher_obj.id,
                 'name': teacher_obj.full_name
             } if teacher_obj else None,
-            'attendance': {
-                'date': today.strftime('%Y-%m-%d'),
-                'time_in': record.time_in.strftime('%I:%M %p') if record.time_in else '-',
-                'time_out': now_time.strftime('%I:%M %p'),
-                'status': record.status,
-                'method': record.method,
-                'subject_name': subject.subject_name if subject else None,
-                'semester': record.semester
-            }
+            'attendance': record.to_dict()
         }
 
     # Case 3: Both Time In and Time Out already completed for today in this subject session
+    in_time_fmt = record.time_in.strftime('%I:%M %p') if record.time_in else '-'
+    out_time_fmt = record.time_out.strftime('%I:%M %p') if record.time_out else '-'
     return {
         'success': False,
         'action': 'ALREADY_COMPLETED',
-        'message': f"Attendance already completed for {student.full_name}{subject_label} today (In: {record.time_in.strftime('%I:%M %p')}, Out: {record.time_out.strftime('%I:%M %p')}).",
+        'message': f"Attendance already completed today for {student.full_name}{subject_label} (In: {in_time_fmt}, Out: {out_time_fmt}).",
         'student': student.to_dict(),
         'subject': {
             'id': subject.id,
@@ -232,12 +220,5 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
             'name': subject.subject_name,
             'semester': record.semester or (subject.semester if subject else None)
         } if subject else None,
-        'attendance': {
-            'date': today.strftime('%Y-%m-%d'),
-            'time_in': record.time_in.strftime('%I:%M %p') if record.time_in else '-',
-            'time_out': record.time_out.strftime('%I:%M %p') if record.time_out else '-',
-            'status': record.status,
-            'subject_name': subject.subject_name if subject else None,
-            'semester': record.semester
-        }
+        'attendance': record.to_dict()
     }

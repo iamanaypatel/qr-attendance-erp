@@ -1,212 +1,446 @@
 {% extends "base.html" %}
 
-{% block title %}{{ student.full_name }} — Student Profile{% endblock %}
+{% block title %}{{ student.full_name }} — Student Profile — {{ institution_name }}{% endblock %}
 
 {% block content %}
 <div class="container-fluid p-0">
+  <!-- Top Breadcrumb & Action Bar -->
   <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
     <div class="d-flex align-items-center gap-3">
-      <a href="{{ url_for('admin.students') }}" class="btn btn-sm btn-outline-secondary">
-        <i class="bi bi-arrow-left"></i>
+      <a href="{{ url_for('admin.students') }}" class="btn btn-sm btn-outline-secondary" title="Back to Students">
+        <i class="bi bi-arrow-left me-1"></i> Students
       </a>
       <div>
-        <h2 class="fw-bold brand-font mb-0">{{ student.full_name }}</h2>
-        <div class="text-muted small">
-          <span class="badge bg-secondary me-1">{{ student.student_id }}</span>
-          <span>Roll: {{ student.roll_number }}</span> &bull;
-          <span>{{ student.department.name if student.department else '' }}</span>
-        </div>
+        <nav aria-label="breadcrumb">
+          <ol class="breadcrumb mb-0 small">
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.dashboard') }}">Dashboard</a></li>
+            <li class="breadcrumb-item"><a href="{{ url_for('admin.students') }}">Students</a></li>
+            <li class="breadcrumb-item active" aria-current="page">{{ student.full_name }}</li>
+          </ol>
+        </nav>
       </div>
     </div>
 
+    <!-- Quick Action Buttons -->
     <div class="d-flex gap-2 flex-wrap">
+      <a href="{{ url_for('admin.student_edit', id=student.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-pencil me-1"></i> Edit Profile
+      </a>
       <a href="{{ url_for('admin.student_qr_download', id=student.id) }}" class="btn btn-outline-primary">
         <i class="bi bi-qr-code me-1"></i> Download QR
       </a>
       <a href="{{ url_for('admin.student_id_card_pdf', id=student.id) }}" target="_blank" class="btn btn-primary-glow">
         <i class="bi bi-person-vcard me-1"></i> Generate ID Card (PDF)
       </a>
-      <a href="{{ url_for('admin.student_edit', id=student.id) }}" class="btn btn-outline-secondary">
-        <i class="bi bi-pencil me-1"></i> Edit
+      <a href="{{ url_for('reports.index', student_id=student.id) }}" class="btn btn-outline-info">
+        <i class="bi bi-calendar-check me-1"></i> Attendance Log
       </a>
     </div>
   </div>
 
-  <div class="row g-4">
-    <!-- Left Column: Profile Card & QR Code -->
-    <div class="col-lg-4">
-        <div class="position-relative d-inline-block mb-3">
+  <!-- Hero Identity Header Card -->
+  <div class="glass-card p-4 mb-4">
+    <div class="row align-items-center g-4">
+      <!-- Profile Photo & Identity -->
+      <div class="col-auto">
+        <div class="position-relative d-inline-block">
           {% if student.photo %}
-            <img src="{{ student.photo_url }}" alt="{{ student.full_name }}" class="rounded-4 object-fit-cover shadow-sm" style="width: 140px; height: 140px; border: 3px solid var(--border-glass);" onerror="this.style.display='none'; document.getElementById('adminStudentDetailAvatarFallback').style.display='inline-flex';">
-            <div id="adminStudentDetailAvatarFallback" class="rounded-4 bg-primary text-white align-items-center justify-content-center fw-bold shadow-sm" style="display: none; width: 140px; height: 140px; font-size: 3.5rem; border: 3px solid var(--border-glass);">
+            <img src="{{ student.photo_url }}" alt="{{ student.full_name }}" class="rounded-4 object-fit-cover shadow" style="width: 130px; height: 130px; border: 3px solid var(--border-glass);" onerror="this.style.display='none'; document.getElementById('adminStudentDetailAvatarFallback').style.display='inline-flex';">
+            <div id="adminStudentDetailAvatarFallback" class="rounded-4 bg-primary text-white align-items-center justify-content-center fw-bold shadow" style="display: none; width: 130px; height: 130px; font-size: 3.5rem; border: 3px solid var(--border-glass);">
               {{ student.full_name[0] | upper }}
             </div>
           {% else %}
-            <div class="rounded-4 bg-primary text-white d-inline-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 140px; height: 140px; font-size: 3.5rem; border: 3px solid var(--border-glass);">
+            <div class="rounded-4 bg-primary text-white d-inline-flex align-items-center justify-content-center fw-bold shadow" style="width: 130px; height: 130px; font-size: 3.5rem; border: 3px solid var(--border-glass);">
               {{ student.full_name[0] | upper }}
             </div>
           {% endif %}
-          <button type="button" class="btn btn-sm btn-primary position-absolute bottom-0 end-0 rounded-circle shadow" style="width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center;" data-bs-toggle="modal" data-bs-target="#adminUploadPhotoModal" title="Update Student Photo">
-            <i class="bi bi-camera-fill" style="font-size: 0.85rem;"></i>
+          <button type="button" class="btn btn-sm btn-primary position-absolute bottom-0 end-0 rounded-circle shadow" style="width: 34px; height: 34px; padding: 0; display: flex; align-items: center; justify-content: center;" data-bs-toggle="modal" data-bs-target="#adminUploadPhotoModal" title="Update Student Photo">
+            <i class="bi bi-camera-fill" style="font-size: 0.9rem;"></i>
           </button>
-        </div>
-
-
-        <h4 class="fw-bold mb-1">{{ student.full_name }}</h4>
-        <div class="badge badge-soft-info mb-3">{{ student.course }} ({{ student.semester }})</div>
-
-        <!-- Student Secure Attendance QR Code -->
-        <div class="p-3 rounded-3 bg-white d-inline-block shadow-sm mb-2">
-          <img src="{{ qr_data_uri }}" alt="Student QR Code" style="width: 160px; height: 160px; display: block;">
-        </div>
-        <div class="text-muted small">
-          <i class="bi bi-shield-check text-success me-1"></i> Encrypted Attendance Token
         </div>
       </div>
 
-      <!-- Quick Metrics -->
-      <div class="glass-card p-4">
-        <h6 class="fw-bold text-uppercase text-muted small mb-3">Attendance Summary</h6>
-        <div class="d-flex justify-content-between align-items-center mb-2">
-          <span class="text-muted">Attendance Rate</span>
-          <span class="fw-bold fs-5 {% if stats.percentage >= 75 %}text-success{% else %}text-danger{% endif %}">
+      <!-- Student Key Demographics -->
+      <div class="col">
+        <div class="d-flex flex-wrap align-items-center gap-2 mb-2">
+          <h2 class="fw-bold brand-font mb-0 text-dark">{{ student.full_name }}</h2>
+          {% if student.is_active %}
+            <span class="badge badge-soft-success font-mono"><span class="pulse-pip pulse-pip-teal me-1"></span>Active</span>
+          {% else %}
+            <span class="badge badge-soft-danger font-mono">Inactive</span>
+          {% endif %}
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+          <span class="badge bg-light text-dark font-mono border px-2 py-1 fs-7 fw-semibold">
+            <i class="bi bi-person-badge me-1"></i>{{ student.student_id }}
+          </span>
+          <span class="badge badge-soft-secondary font-mono px-2 py-1 fs-7">
+            <i class="bi bi-hash me-1"></i>Roll: {{ student.roll_number }}
+          </span>
+          {% if student.department %}
+            <span class="badge badge-soft-info px-2 py-1 fs-7">
+              <i class="bi bi-building me-1"></i>{{ student.department.name }} ({{ student.department.code }})
+            </span>
+          {% endif %}
+          {% if student.semester %}
+            <span class="badge badge-soft-primary px-2 py-1 fs-7">
+              <i class="bi bi-mortarboard me-1"></i>{{ student.semester }} Semester
+            </span>
+          {% endif %}
+          {% if student.section %}
+            <span class="badge badge-soft-secondary px-2 py-1 fs-7">
+              Section {{ student.section }}
+            </span>
+          {% endif %}
+        </div>
+
+        <div class="text-muted small">
+          <i class="bi bi-book me-1"></i><strong>Course:</strong> {{ student.course or 'Not specified' }} &bull;
+          <i class="bi bi-calendar3 me-1"></i><strong>Admission:</strong> {{ student.admission_date.strftime('%d %b %Y') if student.admission_date else 'N/A' }} &bull;
+          <i class="bi bi-envelope me-1"></i>{{ student.email or 'No email' }} &bull;
+          <i class="bi bi-telephone me-1"></i>{{ student.phone or 'No phone' }}
+        </div>
+      </div>
+
+      <!-- Attendance Rate Card Widget -->
+      <div class="col-12 col-md-auto text-md-end border-start-md ps-md-4">
+        <div class="text-muted small fw-semibold text-uppercase mb-1">Overall Attendance</div>
+        <div class="d-flex align-items-baseline justify-content-md-end gap-1 mb-1">
+          <span class="fs-1 fw-bold {% if stats.percentage >= 75 %}text-success{% elif stats.percentage >= 60 %}text-warning{% else %}text-danger{% endif %} font-mono">
             {{ stats.percentage }}%
           </span>
         </div>
-        <div class="progress mb-3" style="height: 8px;">
-          <div class="progress-bar {% if stats.percentage >= 75 %}bg-success{% else %}bg-danger{% endif %}" role="progressbar" style="width: {{ stats.percentage }}%;" aria-valuenow="{{ stats.percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
+        <div class="progress" style="width: 180px; height: 8px;">
+          <div class="progress-bar {% if stats.percentage >= 75 %}bg-success{% elif stats.percentage >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+               role="progressbar" style="width: {{ stats.percentage }}%;" aria-valuenow="{{ stats.percentage }}" aria-valuemin="0" aria-valuemax="100"></div>
         </div>
-
-        <div class="row text-center g-2 pt-2 border-top">
-          <div class="col-4">
-            <div class="fw-bold fs-5 text-success">{{ stats.present_count }}</div>
-            <small class="text-muted" style="font-size: 0.72rem;">PRESENT</small>
-          </div>
-          <div class="col-4">
-            <div class="fw-bold fs-5 text-danger">{{ stats.absent_count }}</div>
-            <small class="text-muted" style="font-size: 0.72rem;">ABSENT</small>
-          </div>
-          <div class="col-4">
-            <div class="fw-bold fs-5 text-primary">{{ stats.total_sessions }}</div>
-            <small class="text-muted" style="font-size: 0.72rem;">SESSIONS</small>
-          </div>
+        <div class="text-muted small mt-1" style="font-size: 0.75rem;">
+          {{ stats.present_count }} Present / {{ stats.total_sessions }} Total Sessions
         </div>
       </div>
+    </div>
+  </div>
 
-      <!-- Portal Login Credentials Card -->
-      <div class="glass-card p-4 mt-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h6 class="fw-bold text-uppercase text-muted small mb-0"><i class="bi bi-shield-lock me-1"></i>Portal Login Account</h6>
-          <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editCredentialsModal">
-            <i class="bi bi-key me-1"></i>Edit Login
-          </button>
+  <!-- Quick KPI Metrics Ribbon -->
+  <div class="row g-3 mb-4">
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card p-3 d-flex align-items-center gap-3">
+        <div class="rounded-3 bg-success-subtle text-success p-3 fs-4">
+          <i class="bi bi-check2-circle"></i>
         </div>
-        <div class="mb-2">
-          <span class="text-muted small">Username:</span>
-          <div class="fw-bold font-monospace text-primary">{{ student.user.username if student.user else 'No Account' }}</div>
-        </div>
-        <div class="mb-2">
-          <span class="text-muted small">Status:</span>
-          <div>
-            {% if student.user and student.user.is_active %}
-              <span class="badge badge-soft-success"><i class="bi bi-check-circle me-1"></i>Active</span>
-            {% elif student.user %}
-              <span class="badge badge-soft-danger"><i class="bi bi-dash-circle me-1"></i>Suspended</span>
-            {% else %}
-              <span class="badge badge-soft-secondary">No Account</span>
-            {% endif %}
-          </div>
-        </div>
-        <div class="text-muted small" style="font-size: 0.75rem;">
-          Student can use this username & password to log in on mobile app and web portal.
+        <div>
+          <div class="fs-4 fw-bold font-mono text-success">{{ stats.present_count }}</div>
+          <div class="text-muted small fw-semibold text-uppercase">Present Days</div>
         </div>
       </div>
     </div>
 
-    <!-- Right Column: Demographic & Academic Details + Recent Attendance History -->
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card p-3 d-flex align-items-center gap-3">
+        <div class="rounded-3 bg-danger-subtle text-danger p-3 fs-4">
+          <i class="bi bi-x-circle"></i>
+        </div>
+        <div>
+          <div class="fs-4 fw-bold font-mono text-danger">{{ stats.absent_count }}</div>
+          <div class="text-muted small fw-semibold text-uppercase">Absent Days</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card p-3 d-flex align-items-center gap-3">
+        <div class="rounded-3 bg-primary-subtle text-primary p-3 fs-4">
+          <i class="bi bi-calendar-event"></i>
+        </div>
+        <div>
+          <div class="fs-4 fw-bold font-mono text-primary">{{ stats.total_sessions }}</div>
+          <div class="text-muted small fw-semibold text-uppercase">Total Sessions</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-sm-6 col-lg-3">
+      <div class="glass-card p-3 d-flex align-items-center gap-3">
+        <div class="rounded-3 {% if stats.percentage >= 75 %}bg-success-subtle text-success{% else %}bg-warning-subtle text-warning{% endif %} p-3 fs-4">
+          <i class="bi bi-pie-chart-fill"></i>
+        </div>
+        <div>
+          <div class="fs-4 fw-bold font-mono {% if stats.percentage >= 75 %}text-success{% else %}text-warning{% endif %}">{{ stats.percentage }}%</div>
+          <div class="text-muted small fw-semibold text-uppercase">Attendance Rate</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main Body Grid: 2 Columns -->
+  <div class="row g-4 mb-4">
+    <!-- Left Column: Academic & Personal Details -->
     <div class="col-lg-8">
+      <!-- Academic Information Card -->
       <div class="glass-card p-4 mb-4">
-        <h5 class="fw-bold brand-font mb-3">Academic & Personal Profile</h5>
+        <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+          <h5 class="fw-bold brand-font mb-0 text-primary">
+            <i class="bi bi-mortarboard-fill me-2"></i>Academic Information
+          </h5>
+          <a href="{{ url_for('admin.student_edit', id=student.id) }}" class="btn btn-sm btn-outline-secondary">
+            <i class="bi bi-pencil me-1"></i> Edit
+          </a>
+        </div>
+
         <div class="row g-3">
-          <div class="col-sm-6">
+          <div class="col-md-6">
             <div class="text-muted small">Department</div>
-            <div class="fw-semibold">{{ student.department.name if student.department else '-' }} ({{ student.department.code if student.department else '' }})</div>
+            <div class="fw-semibold fs-6">
+              {{ student.department.name if student.department else 'General Department' }}
+              {% if student.department %}<span class="badge badge-soft-info ms-1">{{ student.department.code }}</span>{% endif %}
+            </div>
           </div>
-          <div class="col-sm-6">
-            <div class="text-muted small">Section & Roll Number</div>
-            <div class="fw-semibold">Section {{ student.section or 'A' }} &bull; Roll: {{ student.roll_number }}</div>
+
+          <div class="col-md-6">
+            <div class="text-muted small">Course / Degree</div>
+            <div class="fw-semibold fs-6">{{ student.course or 'Not specified' }}</div>
           </div>
-          <div class="col-sm-6">
+
+          <div class="col-md-4">
+            <div class="text-muted small">Current Semester</div>
+            <div class="fw-semibold fs-6">
+              <span class="badge badge-soft-primary">{{ student.semester or '1st' }} Semester</span>
+            </div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="text-muted small">Section</div>
+            <div class="fw-semibold fs-6">Section {{ student.section or 'A' }}</div>
+          </div>
+
+          <div class="col-md-4">
+            <div class="text-muted small">Roll Number</div>
+            <div class="fw-semibold fs-6 font-mono text-primary">{{ student.roll_number }}</div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="text-muted small">Admission Date</div>
+            <div class="fw-semibold fs-6">{{ student.admission_date.strftime('%d %B %Y') if student.admission_date else 'Not recorded' }}</div>
+          </div>
+
+          <div class="col-md-6">
+            <div class="text-muted small">Academic Status</div>
+            <div>
+              {% if student.is_active %}
+                <span class="badge badge-soft-success"><i class="bi bi-check-circle me-1"></i>Enrolled & Active</span>
+              {% else %}
+                <span class="badge badge-soft-danger"><i class="bi bi-dash-circle me-1"></i>Inactive / Suspended</span>
+              {% endif %}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Personal & Contact Information Card -->
+      <div class="glass-card p-4">
+        <div class="d-flex align-items-center justify-content-between mb-3 border-bottom pb-2">
+          <h5 class="fw-bold brand-font mb-0 text-primary">
+            <i class="bi bi-person-lines-fill me-2"></i>Personal & Contact Details
+          </h5>
+        </div>
+
+        <div class="row g-3">
+          <div class="col-md-6">
             <div class="text-muted small">Email Address</div>
-            <div class="fw-semibold">{{ student.email or 'N/A' }}</div>
+            <div class="fw-semibold fs-6">
+              {% if student.email %}
+                <a href="mailto:{{ student.email }}" class="text-decoration-none">{{ student.email }}</a>
+              {% else %}
+                <span class="text-muted">Not provided</span>
+              {% endif %}
+            </div>
           </div>
-          <div class="col-sm-6">
+
+          <div class="col-md-6">
             <div class="text-muted small">Phone Number</div>
-            <div class="fw-semibold">{{ student.phone or 'N/A' }}</div>
+            <div class="fw-semibold fs-6">
+              {% if student.phone %}
+                <a href="tel:{{ student.phone }}" class="text-decoration-none">{{ student.phone }}</a>
+              {% else %}
+                <span class="text-muted">Not provided</span>
+              {% endif %}
+            </div>
           </div>
-          <div class="col-sm-6">
-            <div class="text-muted small">Date of Birth / Gender</div>
-            <div class="fw-semibold">{{ student.date_of_birth.strftime('%d %B %Y') if student.date_of_birth else 'N/A' }} ({{ student.gender or 'N/A' }})</div>
+
+          <div class="col-md-6">
+            <div class="text-muted small">Date of Birth & Gender</div>
+            <div class="fw-semibold fs-6">
+              {{ student.date_of_birth.strftime('%d %B %Y') if student.date_of_birth else 'N/A' }}
+              {% if student.gender %}<span class="badge badge-soft-secondary ms-1">{{ student.gender }}</span>{% endif %}
+            </div>
           </div>
-          <div class="col-sm-6">
+
+          <div class="col-md-6">
             <div class="text-muted small">Parents' Names</div>
-            <div class="fw-semibold">{{ student.father_name or 'Father: -' }} / {{ student.mother_name or 'Mother: -' }}</div>
+            <div class="fw-semibold fs-6">
+              <span class="text-muted">F:</span> {{ student.father_name or '-' }} &bull;
+              <span class="text-muted">M:</span> {{ student.mother_name or '-' }}
+            </div>
           </div>
+
           <div class="col-12">
             <div class="text-muted small">Permanent Address</div>
-            <div class="fw-semibold">{{ student.address or 'No address on file.' }}</div>
+            <div class="fw-semibold fs-6 text-secondary">{{ student.address or 'No address on file.' }}</div>
           </div>
         </div>
       </div>
+    </div>
 
-      <!-- Recent Attendance Records -->
-      <div class="glass-card p-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-          <h5 class="fw-bold brand-font mb-0">Recent Attendance History</h5>
-          <a href="{{ url_for('reports.index', student_id=student.id) }}" class="btn btn-sm btn-outline-secondary">Full Log</a>
+    <!-- Right Column: Digital QR Pass & Login Credentials -->
+    <div class="col-lg-4">
+      <!-- Digital QR Attendance Token Card -->
+      <div class="glass-card p-4 text-center mb-4">
+        <h6 class="fw-bold text-uppercase text-muted small mb-3">
+          <i class="bi bi-qr-code me-1 text-primary"></i>Digital Attendance QR Pass
+        </h6>
+
+        <div class="p-3 rounded-4 bg-white d-inline-block shadow-sm mb-3 border">
+          <img src="{{ qr_data_uri }}" alt="Student QR Code" style="width: 170px; height: 170px; display: block;" class="img-fluid">
         </div>
 
-        <div class="table-responsive">
-          <table class="table table-glass align-middle">
-            <thead>
-              <tr>
-                <th>Date</th>
-                <th>Check In (Time In)</th>
-                <th>Check Out (Time Out)</th>
-                <th>Status</th>
-                <th>Method</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% if recent_records %}
-                {% for r in recent_records %}
-                  <tr>
-                    <td class="fw-semibold">{{ r.date.strftime('%a, %d %b %Y') }}</td>
-                    <td>{{ r.time_in.strftime('%I:%M %p') if r.time_in else '-' }}</td>
-                    <td>{{ r.time_out.strftime('%I:%M %p') if r.time_out else '-' }}</td>
-                    <td>
-                      {% if r.status == 'Present' %}
-                        <span class="badge badge-soft-success">Present</span>
-                      {% elif r.status == 'Absent' %}
-                        <span class="badge badge-soft-danger">Absent</span>
-                      {% else %}
-                        <span class="badge badge-soft-warning">{{ r.status }}</span>
-                      {% endif %}
-                    </td>
-                    <td><span class="badge bg-secondary">{{ r.method }}</span></td>
-                  </tr>
-                {% endfor %}
-              {% else %}
-                <tr>
-                  <td colspan="5" class="text-center py-4 text-muted">
-                    No attendance records logged for this student yet.
-                  </td>
-                </tr>
-              {% endif %}
-            </tbody>
-          </table>
+        <div class="small fw-semibold text-dark mb-1">
+          <i class="bi bi-shield-check text-success me-1"></i>Encrypted Attendance Token
+        </div>
+        <div class="text-muted small mb-3" style="font-size: 0.75rem;">
+          Students scan this QR at campus gates and classroom terminals to log attendance.
+        </div>
+
+        <div class="d-grid gap-2">
+          <a href="{{ url_for('admin.student_qr_download', id=student.id) }}" class="btn btn-sm btn-outline-primary">
+            <i class="bi bi-download me-1"></i> Download QR Image
+          </a>
+          <a href="{{ url_for('admin.student_id_card_pdf', id=student.id) }}" target="_blank" class="btn btn-sm btn-primary-glow">
+            <i class="bi bi-person-vcard me-1"></i> Open CR80 Student ID Card
+          </a>
         </div>
       </div>
+
+      <!-- Portal Login Account Card -->
+      <div class="glass-card p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+          <h6 class="fw-bold text-uppercase text-muted small mb-0">
+            <i class="bi bi-shield-lock me-1 text-primary"></i>Portal Account
+          </h6>
+          <button class="btn btn-sm btn-outline-primary" data-bs-toggle="modal" data-bs-target="#editCredentialsModal">
+            <i class="bi bi-key me-1"></i>Edit
+          </button>
+        </div>
+
+        <div class="mb-3">
+          <span class="text-muted small">Login Username:</span>
+          <div class="fw-bold font-mono fs-6 text-primary">{{ student.user.username if student.user else student.student_id }}</div>
+        </div>
+
+        <div class="mb-3">
+          <span class="text-muted small">Account Status:</span>
+          <div>
+            {% if student.user and student.user.is_active %}
+              <span class="badge badge-soft-success"><i class="bi bi-check-circle me-1"></i>Active & Verified</span>
+            {% elif student.user %}
+              <span class="badge badge-soft-danger"><i class="bi bi-dash-circle me-1"></i>Suspended</span>
+            {% else %}
+              <span class="badge badge-soft-warning"><i class="bi bi-exclamation-circle me-1"></i>No Portal Account</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <div class="text-muted small bg-body-tertiary p-2 rounded-3 border" style="font-size: 0.75rem;">
+          <i class="bi bi-info-circle text-primary me-1"></i>
+          This account allows the student to log in on the Android APK (VSGOI app) and Web Portal to view digital attendance, My Pass, and transcripts.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Full-Width Recent Attendance History Table -->
+  <div class="glass-card p-4 mb-4">
+    <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-3 gap-2">
+      <div>
+        <h5 class="fw-bold brand-font mb-0 text-primary">
+          <i class="bi bi-clock-history me-2"></i>Recent Attendance Records
+        </h5>
+        <p class="text-muted small mb-0">Showing latest sessions logged for {{ student.full_name }} across all subjects and campus check-ins.</p>
+      </div>
+      <a href="{{ url_for('reports.index', student_id=student.id) }}" class="btn btn-sm btn-outline-primary">
+        <i class="bi bi-box-arrow-up-right me-1"></i> View Complete Report Log
+      </a>
+    </div>
+
+    <div class="table-responsive">
+      <table class="table table-glass align-middle mb-0">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Subject / Context</th>
+            <th>Check In (Time In)</th>
+            <th>Check Out (Time Out)</th>
+            <th>Duration</th>
+            <th>Status</th>
+            <th>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if recent_records %}
+            {% for r in recent_records %}
+              <tr>
+                <td class="fw-semibold">
+                  <i class="bi bi-calendar-check text-muted me-1"></i>{{ r.date.strftime('%a, %d %b %Y') }}
+                </td>
+                <td>
+                  {% if r.subject %}
+                    <span class="fw-semibold text-dark">{{ r.subject.subject_name }}</span>
+                    <span class="badge badge-soft-secondary font-mono ms-1">{{ r.subject.subject_code }}</span>
+                    {% if r.semester %}<small class="text-muted d-block">{{ r.semester }}</small>{% endif %}
+                  {% else %}
+                    <span class="text-muted small">Campus Gate Check-in</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="font-mono">{{ r.time_in.strftime('%I:%M %p') if r.time_in else '-' }}</span>
+                </td>
+                <td>
+                  <span class="font-mono">{{ r.time_out.strftime('%I:%M %p') if r.time_out else '-' }}</span>
+                </td>
+                <td>
+                  {% if r.time_in and r.time_out %}
+                    <span class="badge badge-soft-info font-mono">{{ r.to_dict().duration or '-' }}</span>
+                  {% else %}
+                    <span class="text-muted small">—</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if r.status == 'Present' %}
+                    <span class="badge badge-soft-success font-mono">Present</span>
+                  {% elif r.status == 'Absent' %}
+                    <span class="badge badge-soft-danger font-mono">Absent</span>
+                  {% elif r.status == 'Late' %}
+                    <span class="badge badge-soft-warning font-mono">Late</span>
+                  {% else %}
+                    <span class="badge badge-soft-secondary font-mono">{{ r.status }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge bg-secondary font-mono">{{ r.method }}</span>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-5 text-muted">
+                <i class="bi bi-calendar-x fs-1 d-block mb-2 text-primary opacity-50"></i>
+                <h6>No attendance records logged yet</h6>
+                <p class="small text-muted mb-0">Attendance events will appear here in real-time as the student scans their QR pass.</p>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
     </div>
   </div>
 </div>
@@ -242,6 +476,7 @@
     </div>
   </div>
 </div>
+
 <!-- Edit Photo Modal -->
 <div class="modal fade" id="adminUploadPhotoModal" tabindex="-1" aria-hidden="true">
   <div class="modal-dialog modal-dialog-centered modal-sm">
@@ -286,5 +521,3 @@ function previewAdminStudentPhoto(input) {
 }
 </script>
 {% endblock %}
-
-

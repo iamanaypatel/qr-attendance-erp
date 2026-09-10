@@ -1,6 +1,6 @@
 import calendar
 from datetime import datetime, date, time
-from flask import render_template, redirect, url_for, flash, request, jsonify
+from flask import render_template, request, jsonify, redirect, url_for, flash, current_app
 from flask_login import login_required, current_user
 from app.attendance import attendance_bp
 from app.extensions import db
@@ -10,13 +10,14 @@ from app.models.holiday import Holiday
 from app.models.department import Department
 from app.models.audit import AuditLog
 from app.utils.decorators import role_required
+from app.utils.timezone import get_current_ist_date, get_current_ist_time
 from app.attendance.services import process_qr_attendance
 
 @attendance_bp.route('/scanner')
 @login_required
 @role_required('admin', 'teacher')
 def scanner():
-    today = date.today()
+    today = get_current_ist_date()
     selected_subject_id = request.args.get('subject_id', type=int)
     selected_semester = request.args.get('semester', '').strip()
     selected_assignment_id = request.args.get('assignment_id', type=int)
@@ -179,16 +180,16 @@ def manual():
             return redirect(url_for('attendance.manual'))
 
         try:
-            att_date = datetime.strptime(att_date_str, '%Y-%m-%d').date() if att_date_str else date.today()
+            att_date = datetime.strptime(att_date_str, '%Y-%m-%d').date() if att_date_str else get_current_ist_date()
         except ValueError:
-            att_date = date.today()
+            att_date = get_current_ist_date()
 
         time_in = None
         if time_in_str:
             try:
                 time_in = datetime.strptime(time_in_str, '%H:%M').time()
             except ValueError:
-                time_in = datetime.now().time()
+                time_in = get_current_ist_time()
 
         time_out = None
         if time_out_str:

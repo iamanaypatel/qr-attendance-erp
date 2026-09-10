@@ -28,22 +28,106 @@ class Subject(db.Model):
     academic_session = db.relationship('AcademicSession', backref=db.backref('subjects', lazy='dynamic'))
     teachers = db.relationship('Teacher', secondary=teacher_subjects, backref=db.backref('assigned_subjects', lazy='dynamic'))
 
+    @property
+    def active_teacher_assignments(self):
+        """Returns all active TeacherSubjectAssignment records for this subject."""
+        from app.models.subject_assignment import TeacherSubjectAssignment
+        return TeacherSubjectAssignment.query.filter_by(subject_id=self.id, is_active=True).all()
+
+    @property
+    def assigned_faculty_list(self):
+        """
+        Returns list of assigned faculty items with teacher details, full name, and semester:
+        [{'teacher_id': t_id, 'name': full_name, 'email': email, 'semester': sem, 'assignment_id': id}]
+        """
+        items = []
+        seen = set()
+
+        # 1. Primary: From formal TeacherSubjectAssignment records
+        for asgn in self.active_teacher_assignments:
+            if asgn.teacher:
+                sem = asgn.semester or self.semester or 'Not Set'
+                key = (asgn.teacher_id, sem)
+                if key not in seen:
+                    seen.add(key)
+                    items.append({
+                        'teacher_id': asgn.teacher_id,
+                        'name': asgn.teacher.full_name,
+                        'email': asgn.teacher.email,
+                        'semester': sem,
+                        'section': asgn.section,
+                        'assignment_id': asgn.id,
+                        'teacher': asgn.teacher
+                    })
+
+        # 2. Secondary fallback: from legacy/many-to-many relationship if not already added
+        for t in self.teachers:
+            sem = self.semester or 'Not Set'
+            key = (t.id, sem)
+            if key not in seen:
+                seen.add(key)
+                items.append({
+                    'teacher_id': t.id,
+                    'name': t.full_name,
+                    'email': t.email,
+                    'semester': sem,
+                    'section': None,
+                    'assignment_id': None,
+                    'teacher': t
+                })
+
+        return items
+
+    @property
+    def display_semesters(self):
+        """
+        Returns a deduplicated list of active semester strings for this subject.
+        """
+        sems = []
+        for f in self.assigned_faculty_list:
+            if f['semester'] and f['semester'] != 'Not Set' and f['semester'] not in sems:
+                sems.append(f['semester'])
+        if not sems and self.semester:
+            sems.append(self.semester)
+        return sems
+
+    @property
+    def primary_semester(self):
+        """
+        Returns the primary or first semester string, or 'Not Set'.
+        """
+        sems = self.display_semesters
+        return sems[0] if sems else (self.semester or 'Not Set')
+
     def to_dict(self):
+        faculty = self.assigned_faculty_list
+        primary_sem = self.primary_semester
         return {
             'id': self.id,
             'subject_code': self.subject_code,
             'subject_name': self.subject_name,
+            'code': self.subject_code,
+            'name': self.subject_name,
             'description': self.description,
             'department_id': self.department_id,
             'department_name': self.department.name if self.department else None,
             'department_code': self.department.code if self.department else None,
             'course': self.course,
-            'semester': self.semester,
+            'semester': primary_sem if primary_sem != 'Not Set' else (self.semester or None),
+            'semesters': self.display_semesters,
             'session_id': self.session_id,
             'session_name': self.academic_session.name if self.academic_session else None,
             'is_active': self.is_active,
+            'assigned_faculty': [
+                {
+                    'id': f['teacher_id'],
+                    'name': f['name'],
+                    'semester': f['semester']
+                }
+                for f in faculty
+            ],
             'teachers': [{'id': t.id, 'name': t.full_name, 'employee_id': t.employee_id} for t in self.teachers],
-            'teacher_names': [t.full_name for t in self.teachers],
+            'teacher_names': [f['name'] for f in faculty] if faculty else [t.full_name for t in self.teachers],
             'attendance_count': self.attendances.count() if hasattr(self, 'attendances') else 0,
             'created_at': self.created_at.strftime('%Y-%m-%d') if self.created_at else None
         }

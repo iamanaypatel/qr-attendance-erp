@@ -320,7 +320,7 @@
         const clockEl = document.getElementById('headerLiveClock');
         if (clockEl) {
           const now = new Date();
-          clockEl.textContent = now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
+          clockEl.textContent = now.toLocaleTimeString('en-IN', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true });
         }
       }
       setInterval(updateLiveClock, 1000);

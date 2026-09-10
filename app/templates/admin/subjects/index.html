@@ -70,9 +70,9 @@
           <tr>
             <th>Subject</th>
             <th>Code</th>
-            <th>Department</th>
-            <th>Semester</th>
             <th>Assigned Faculty</th>
+            <th>Semester</th>
+            <th>Department</th>
             <th class="text-center">Total Sessions</th>
             <th>Status</th>
             <th class="text-end">Actions</th>
@@ -92,29 +92,44 @@
                   <span class="badge bg-light text-dark font-mono border px-2 py-1 fs-7 fw-semibold">{{ s.subject_code }}</span>
                 </td>
                 <td>
+                  {% set faculty_list = s.assigned_faculty_list %}
+                  {% if faculty_list %}
+                    <div class="d-flex flex-column gap-1">
+                      {% for f in faculty_list %}
+                        <div class="d-inline-flex align-items-center">
+                          <span class="badge badge-soft-primary px-2 py-1 fs-7 fw-semibold" title="{{ f.email or '' }}">
+                            <i class="bi bi-person-fill me-1"></i>{{ f.name }}
+                          </span>
+                          {% if faculty_list|length > 1 and f.semester and f.semester != 'Not Set' %}
+                            <span class="badge badge-soft-secondary ms-1 fs-8" style="font-size: 0.7rem;">{{ f.semester }}</span>
+                          {% endif %}
+                        </div>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span class="badge badge-soft-warning"><i class="bi bi-exclamation-circle me-1"></i>Not Assigned</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% set sems = s.display_semesters %}
+                  {% if sems %}
+                    <div class="d-flex flex-wrap gap-1">
+                      {% for sem in sems %}
+                        <span class="badge badge-soft-info px-2 py-1 fs-7 fw-semibold">
+                          <i class="bi bi-mortarboard-fill me-1"></i>{{ sem }}
+                        </span>
+                      {% endfor %}
+                    </div>
+                  {% else %}
+                    <span class="badge badge-soft-warning">Not Set</span>
+                  {% endif %}
+                </td>
+                <td>
                   {% if s.department %}
                     <span class="badge badge-soft-info">{{ s.department.code }}</span>
                     <small class="text-muted d-block">{{ s.department.name }}</small>
                   {% else %}
                     <span class="text-muted small">General</span>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if s.semester %}
-                    <span class="badge badge-soft-secondary">{{ s.semester }}</span>
-                  {% else %}
-                    <span class="text-muted small">—</span>
-                  {% endif %}
-                </td>
-                <td>
-                  {% if s.teachers %}
-                    <div class="d-flex flex-wrap gap-1">
-                      {% for t in s.teachers %}
-                        <span class="badge badge-soft-primary" title="{{ t.email }}"><i class="bi bi-person me-1"></i>{{ t.full_name }}</span>
-                      {% endfor %}
-                    </div>
-                  {% else %}
-                    <span class="badge badge-soft-warning"><i class="bi bi-exclamation-circle me-1"></i>Unassigned</span>
                   {% endif %}
                 </td>
                 <td class="text-center">

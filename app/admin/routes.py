@@ -977,13 +977,25 @@ def subjects():
     if dept_id:
         query = query.filter(Subject.department_id == dept_id)
     if semester:
-        query = query.filter(Subject.semester == semester)
+        query = query.filter(
+            (Subject.semester == semester) |
+            (Subject.id.in_(
+                db.session.query(TeacherSubjectAssignment.subject_id).filter(
+                    TeacherSubjectAssignment.semester.ilike(f"%{semester}%"),
+                    TeacherSubjectAssignment.is_active == True
+                )
+            ))
+        )
     if status == 'active':
         query = query.filter(Subject.is_active == True)
     elif status == 'inactive':
         query = query.filter(Subject.is_active == False)
 
-    subjects_list = query.order_by(Subject.is_active.desc(), Subject.subject_code.asc()).all()
+    from sqlalchemy.orm import selectinload
+    subjects_list = query.options(
+        selectinload(Subject.teachers),
+        selectinload(Subject.department)
+    ).order_by(Subject.is_active.desc(), Subject.subject_code.asc()).all()
     departments = Department.query.order_by(Department.name).all()
 
     return render_template(
@@ -1085,6 +1097,34 @@ def subject_assign_teachers(id):
     if form.validate_on_submit():
         selected_ids = set(form.teacher_ids.data or [])
         subject.teachers = [t for t in all_teachers if t.id in selected_ids]
+
+        # Synchronize formal TeacherSubjectAssignment records
+        sem = subject.semester or '4th Semester'
+        # Deactivate assignments for teachers no longer selected
+        for asgn in TeacherSubjectAssignment.query.filter_by(subject_id=subject.id, is_active=True).all():
+            if asgn.teacher_id not in selected_ids:
+                asgn.is_active = False
+
+        # Ensure active assignment exists for each selected teacher
+        for t_id in selected_ids:
+            asgn = TeacherSubjectAssignment.query.filter_by(
+                teacher_id=t_id,
+                subject_id=subject.id,
+                semester=sem
+            ).first()
+            if asgn:
+                asgn.is_active = True
+            else:
+                new_asgn = TeacherSubjectAssignment(
+                    teacher_id=t_id,
+                    subject_id=subject.id,
+                    semester=sem,
+                    department_id=subject.department_id,
+                    course=subject.course,
+                    is_active=True
+                )
+                db.session.add(new_asgn)
+
         db.session.commit()
 
         AuditLog.log(

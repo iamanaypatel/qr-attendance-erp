@@ -10,6 +10,7 @@ from app.models.teacher import Teacher
 from app.models.department import Department
 from app.models.attendance import Attendance
 from app.attendance.services import process_qr_attendance
+from app.utils.timezone import get_current_ist_date
 
 # Exempt API blueprint from form CSRF so mobile apps and fetch() can easily post
 csrf.exempt(api_bp)
@@ -181,7 +182,7 @@ def today_attendance():
     GET /api/attendance/today
     Returns today's recorded attendance list joined with Student.
     """
-    today = date.today()
+    today = get_current_ist_date()
     dept_id = request.args.get('dept', type=int)
 
     query = Attendance.query.join(Student).filter(Attendance.date == today)
@@ -222,7 +223,7 @@ def dashboard_stats():
     GET /api/dashboard/stats
     Returns realtime KPI counters and present students roster.
     """
-    today = date.today()
+    today = get_current_ist_date()
     total_students = Student.query.filter_by(is_active=True).count()
     total_teachers = Teacher.query.filter_by(is_active=True).count()
 
