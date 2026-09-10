@@ -102,12 +102,11 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
     today = get_current_ist_date()
     now_time = get_current_ist_time()
 
-    # Look up existing record for today scoped to (student_id, date, subject_id, semester)
+    # Look up existing record for today strictly scoped to (student_id, date, subject_id)
+    # This guarantees complete subject isolation: DBMS attendance does not overwrite Data Structures attendance.
     query = Attendance.query.filter(Attendance.student_id == student.id, Attendance.date == today)
     if subject_id is not None:
         query = query.filter(Attendance.subject_id == subject_id)
-        if semester:
-            query = query.filter(Attendance.semester == semester)
     else:
         query = query.filter(Attendance.subject_id.is_(None))
 
@@ -138,11 +137,17 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
             user_id=marker_user.id if marker_user and hasattr(marker_user, 'id') else None
         )
 
+        current_app.logger.info(
+            f"ATTENDANCE_TIME_IN: Teacher={teacher_id} Subject={subject_id} ({subject.subject_name if subject else 'General'}) "
+            f"Semester={semester} Student={student.student_id} AttendanceId={record.id}"
+        )
+
         return {
             'success': True,
             'action': 'TIME_IN',
             'message': f"Time In marked successfully for {student.full_name}{subject_label} at {now_time.strftime('%I:%M %p')}.",
             'student': student.to_dict(),
+            'subject_id': subject_id,
             'subject': {
                 'id': subject.id,
                 'code': subject.subject_code,
@@ -164,12 +169,13 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
             time_in_dt = datetime.combine(today, record.time_in)
             now_dt = datetime.combine(today, now_time)
             elapsed_seconds = (now_dt - time_in_dt).total_seconds()
-            if elapsed_seconds < cooldown:
+            if 0 <= elapsed_seconds < cooldown:
                 return {
                     'success': False,
                     'action': 'COOLDOWN',
                     'message': f"Scan cooldown active: Time In was just recorded {int(elapsed_seconds)}s ago. Please wait.",
                     'student': student.to_dict(),
+                    'subject_id': subject_id,
                     'subject': {
                         'id': subject.id,
                         'code': subject.subject_code,
@@ -180,6 +186,8 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
         record.time_out = now_time
         if teacher_id and not record.teacher_id:
             record.teacher_id = teacher_id
+        if semester and not record.semester:
+            record.semester = semester
         record.updated_at = datetime.utcnow()
         db.session.commit()
 
@@ -189,11 +197,17 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
             user_id=marker_user.id if marker_user and hasattr(marker_user, 'id') else None
         )
 
+        current_app.logger.info(
+            f"ATTENDANCE_TIME_OUT: Teacher={teacher_id} Subject={subject_id} ({subject.subject_name if subject else 'General'}) "
+            f"Semester={record.semester or semester} Student={student.student_id} AttendanceId={record.id}"
+        )
+
         return {
             'success': True,
             'action': 'TIME_OUT',
             'message': f"Time Out marked successfully for {student.full_name}{subject_label} at {now_time.strftime('%I:%M %p')}.",
             'student': student.to_dict(),
+            'subject_id': subject_id,
             'subject': {
                 'id': subject.id,
                 'code': subject.subject_code,
@@ -209,11 +223,18 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
     # Case 3: Both Time In and Time Out already completed for today in this subject session
     in_time_fmt = record.time_in.strftime('%I:%M %p') if record.time_in else '-'
     out_time_fmt = record.time_out.strftime('%I:%M %p') if record.time_out else '-'
+
+    current_app.logger.info(
+        f"ATTENDANCE_ALREADY_COMPLETED: Teacher={teacher_id} Subject={subject_id} ({subject.subject_name if subject else 'General'}) "
+        f"Semester={record.semester or semester} Student={student.student_id} AttendanceId={record.id}"
+    )
+
     return {
         'success': False,
         'action': 'ALREADY_COMPLETED',
         'message': f"Attendance already completed today for {student.full_name}{subject_label} (In: {in_time_fmt}, Out: {out_time_fmt}).",
         'student': student.to_dict(),
+        'subject_id': subject_id,
         'subject': {
             'id': subject.id,
             'code': subject.subject_code,

@@ -66,8 +66,17 @@ class Attendance(db.Model):
             'subject_id': self.subject_id,
             'subject_code': self.subject.subject_code if self.subject else None,
             'subject_name': self.subject.subject_name if self.subject else None,
+            'subject': {
+                'id': self.subject_id,
+                'code': self.subject.subject_code if self.subject else None,
+                'name': self.subject.subject_name if self.subject else None
+            } if self.subject else None,
             'teacher_id': self.teacher_id,
             'teacher_name': t_name,
+            'teacher': {
+                'id': self.teacher_id,
+                'name': t_name
+            } if self.teacher_id else None,
             'semester': self.semester or (self.subject.semester if self.subject else None),
             'section': self.section or (self.student.section if self.student else None),
             'student': {

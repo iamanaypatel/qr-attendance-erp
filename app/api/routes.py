@@ -191,21 +191,27 @@ def today_attendance():
 
     records = query.order_by(Attendance.updated_at.desc()).limit(100).all()
 
-    # Build unique present students list for "Present Today" section
+    # Build unique present entries scoped to (student_id, subject_id)
     present_students = []
-    seen_ids = set()
+    seen_keys = set()
     for r in records:
-        if r.student and r.status in ('Present', 'Late', 'Half Day') and r.student.id not in seen_ids:
-            seen_ids.add(r.student.id)
-            present_students.append({
-                'id': r.student.id,
-                'student_id': r.student.student_id,
-                'full_name': r.student.full_name,
-                'roll_number': r.student.roll_number,
-                'department': r.student.department.name if r.student.department else None,
-                'course': r.student.course,
-                'time_in': r.time_in.strftime('%I:%M %p') if r.time_in else '-'
-            })
+        if r.student and r.status in ('Present', 'Late', 'Half Day'):
+            key = (r.student.id, r.subject_id)
+            if key not in seen_keys:
+                seen_keys.add(key)
+                present_students.append({
+                    'id': r.student.id,
+                    'student_id': r.student.student_id,
+                    'full_name': r.student.full_name,
+                    'roll_number': r.student.roll_number,
+                    'department': r.student.department.name if r.student.department else None,
+                    'course': r.student.course,
+                    'subject_id': r.subject_id,
+                    'subject_code': r.subject.subject_code if r.subject else None,
+                    'subject_name': r.subject.subject_name if r.subject else None,
+                    'semester': r.semester,
+                    'time_in': r.time_in.strftime('%I:%M %p') if r.time_in else '-'
+                })
 
     return jsonify({
         'success': True,
@@ -252,6 +258,10 @@ def dashboard_stats():
             'roll_number': r.student.roll_number,
             'department': r.student.department.name if r.student.department else None,
             'course': r.student.course,
+            'subject_id': r.subject_id,
+            'subject_code': r.subject.subject_code if r.subject else None,
+            'subject_name': r.subject.subject_name if r.subject else None,
+            'semester': r.semester,
             'time_in': r.time_in.strftime('%I:%M %p') if r.time_in else '-'
         }
         for r in present_records if r.student
@@ -346,6 +356,7 @@ def teacher_subjects():
     from app.models.subject import Subject
     from app.models.subject_assignment import TeacherSubjectAssignment
 
+    today = get_current_ist_date()
     subject_list = []
     if current_user.is_teacher:
         teacher = current_user.teacher_profile
@@ -357,6 +368,20 @@ def teacher_subjects():
             s = asgn.subject
             if not s or not s.is_active:
                 continue
+
+            # Live attendance counters for this subject assignment
+            tot_q = Attendance.query.filter_by(subject_id=s.id)
+            if asgn.semester:
+                tot_q = tot_q.filter(
+                    (Attendance.semester.ilike(asgn.semester.strip())) | (Attendance.semester.is_(None))
+                )
+            total_sessions = tot_q.count()
+            today_sessions = tot_q.filter(Attendance.date == today).count()
+            present_today = tot_q.filter(
+                Attendance.date == today,
+                Attendance.status.in_(['Present', 'Late', 'Half Day'])
+            ).count()
+
             subject_list.append({
                 'id': s.id,
                 'assignment_id': asgn.id,
@@ -369,7 +394,12 @@ def teacher_subjects():
                 'semester': asgn.semester or (s.semester or ''),
                 'department': asgn.department.name if asgn.department else (s.department.name if s.department else ''),
                 'course': asgn.course or (s.course or ''),
-                'section': asgn.section or ''
+                'section': asgn.section or '',
+                'total_sessions': total_sessions,
+                'today_sessions': today_sessions,
+                'present_today': present_today,
+                'total_classes': total_sessions,
+                'scanned_today': today_sessions
             })
     elif current_user.is_admin:
         assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
@@ -378,6 +408,18 @@ def teacher_subjects():
                 s = asgn.subject
                 if not s or not s.is_active:
                     continue
+                tot_q = Attendance.query.filter_by(subject_id=s.id)
+                if asgn.semester:
+                    tot_q = tot_q.filter(
+                        (Attendance.semester.ilike(asgn.semester.strip())) | (Attendance.semester.is_(None))
+                    )
+                total_sessions = tot_q.count()
+                today_sessions = tot_q.filter(Attendance.date == today).count()
+                present_today = tot_q.filter(
+                    Attendance.date == today,
+                    Attendance.status.in_(['Present', 'Late', 'Half Day'])
+                ).count()
+
                 subject_list.append({
                     'id': s.id,
                     'assignment_id': asgn.id,
@@ -390,11 +432,24 @@ def teacher_subjects():
                     'semester': asgn.semester or (s.semester or ''),
                     'department': asgn.department.name if asgn.department else (s.department.name if s.department else ''),
                     'course': asgn.course or (s.course or ''),
-                    'section': asgn.section or ''
+                    'section': asgn.section or '',
+                    'total_sessions': total_sessions,
+                    'today_sessions': today_sessions,
+                    'present_today': present_today,
+                    'total_classes': total_sessions,
+                    'scanned_today': today_sessions
                 })
         else:
             subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
             for s in subjects:
+                total_sessions = Attendance.query.filter_by(subject_id=s.id).count()
+                today_sessions = Attendance.query.filter(Attendance.subject_id == s.id, Attendance.date == today).count()
+                present_today = Attendance.query.filter(
+                    Attendance.subject_id == s.id,
+                    Attendance.date == today,
+                    Attendance.status.in_(['Present', 'Late', 'Half Day'])
+                ).count()
+
                 subject_list.append({
                     'id': s.id,
                     'assignment_id': None,
@@ -407,7 +462,12 @@ def teacher_subjects():
                     'semester': s.semester or '',
                     'department': s.department.name if s.department else '',
                     'course': s.course or '',
-                    'section': ''
+                    'section': '',
+                    'total_sessions': total_sessions,
+                    'today_sessions': today_sessions,
+                    'present_today': present_today,
+                    'total_classes': total_sessions,
+                    'scanned_today': today_sessions
                 })
     else:
         return jsonify({'success': False, 'message': 'Unauthorized: Only faculty can access assigned subjects.'}), 403
@@ -440,7 +500,35 @@ def student_attendance_summary():
         'student_id': student.student_id,
         'student_name': student.full_name,
         'overall_stats': overall_stats,
-        'subject_wise': subject_wise
+        'subject_wise': subject_wise,
+        # Normalized aliases for Flutter mobile client
+        'overall': {
+            'rate': overall_stats.get('percentage', 0.0),
+            'total': overall_stats.get('total_sessions', 0),
+            'present': overall_stats.get('present_count', 0),
+            'absent': overall_stats.get('absent_count', 0)
+        },
+        'subjects': [
+            {
+                'id': s.get('subject_id'),
+                'subject_id': s.get('subject_id'),
+                'subject_code': s.get('subject_code'),
+                'code': s.get('subject_code'),
+                'subject_name': s.get('subject_name'),
+                'name': s.get('subject_name'),
+                'teacher': s.get('teacher_name'),
+                'teacher_name': s.get('teacher_name'),
+                'total': s.get('total_classes', 0),
+                'total_classes': s.get('total_classes', 0),
+                'present': s.get('present_classes', 0),
+                'present_classes': s.get('present_classes', 0),
+                'absent': s.get('absent_classes', 0),
+                'absent_classes': s.get('absent_classes', 0),
+                'percentage': s.get('attendance_percentage', 0.0),
+                'attendance_percentage': s.get('attendance_percentage', 0.0)
+            }
+            for s in subject_wise
+        ]
     })
 
 @api_bp.route('/student/attendance/<int:subject_id>')
@@ -466,14 +554,22 @@ def student_subject_attendance_detail(subject_id):
     absent_classes = sum(1 for a in records if a.status == 'Absent')
     pct = round((present_classes / total_classes * 100), 1) if total_classes > 0 else 0.0
 
+    records_list = [r.to_dict() for r in records]
+    stats_dict = {
+        'total_classes': total_classes,
+        'present_classes': present_classes,
+        'absent_classes': absent_classes,
+        'attendance_percentage': pct,
+        'total': total_classes,
+        'present': present_classes,
+        'absent': absent_classes,
+        'percentage': pct
+    }
+
     return jsonify({
         'success': True,
         'subject': subject.to_dict(),
-        'stats': {
-            'total_classes': total_classes,
-            'present_classes': present_classes,
-            'absent_classes': absent_classes,
-            'attendance_percentage': pct
-        },
-        'records': [r.to_dict() for r in records]
+        'stats': stats_dict,
+        'records': records_list,
+        'history': records_list
     })

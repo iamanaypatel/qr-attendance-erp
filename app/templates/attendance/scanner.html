@@ -361,6 +361,9 @@
       statusBadge.className = 'badge bg-secondary';
       statusBadge.textContent = 'Stopped';
 
+      lastScannedToken = null;
+      lastScannedTime = 0;
+
       // Unlock subject selector
       if (assignmentSelect) {
         assignmentSelect.disabled = false;
@@ -391,6 +394,8 @@
   const subjectHelper = document.getElementById('subjectHelperText');
 
   function updateAssignmentPreview() {
+    lastScannedToken = null;
+    lastScannedTime = 0;
     if (!assignmentSelect) return;
     const opt = assignmentSelect.selectedOptions[0];
     if (!opt) return;

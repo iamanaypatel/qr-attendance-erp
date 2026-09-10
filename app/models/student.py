@@ -75,15 +75,23 @@ class Student(db.Model):
         for a in records:
             records_by_subject.setdefault(a.subject_id, []).append(a)
 
-        # Subjects associated with student's department & semester
+        # Subjects associated with student's department & semester (direct or through assignments)
         dept_subjects_dict = {}
         if self.department_id:
-            active_dept_subjects = Subject.query.filter_by(
-                department_id=self.department_id,
-                is_active=True
+            active_dept_subjects = Subject.query.filter(
+                (Subject.department_id == self.department_id) | (Subject.department_id.is_(None)),
+                Subject.is_active == True
             ).all()
             for s in active_dept_subjects:
+                match_sem = False
                 if not s.semester or not self.semester or s.semester.strip().lower() == self.semester.strip().lower():
+                    match_sem = True
+                elif hasattr(s, 'display_semesters') and s.display_semesters:
+                    for ds in s.display_semesters:
+                        if self.semester and ds.strip().lower() == self.semester.strip().lower():
+                            match_sem = True
+                            break
+                if match_sem:
                     dept_subjects_dict[s.id] = s
 
         all_subject_ids = set(dept_subjects_dict.keys()) | {sid for sid in records_by_subject.keys() if sid is not None}
@@ -94,13 +102,30 @@ class Student(db.Model):
             if not subject:
                 continue
             sub_records = records_by_subject.get(sid, [])
-            total = len(sub_records)
+
+            # Compute total conducted classes vs student present classes
+            total_conducted_query = Attendance.query.filter(Attendance.subject_id == subject.id)
+            if self.semester:
+                total_conducted_query = total_conducted_query.filter(
+                    (Attendance.semester.ilike(self.semester.strip())) | (Attendance.semester.is_(None))
+                )
+            if start_date:
+                total_conducted_query = total_conducted_query.filter(Attendance.date >= start_date)
+            if end_date:
+                total_conducted_query = total_conducted_query.filter(Attendance.date <= end_date)
+            conducted_dates = total_conducted_query.with_entities(Attendance.date).distinct().count()
+
+            total = max(len(sub_records), conducted_dates)
             present = sum(1 for a in sub_records if a.status in ('Present', 'Late', 'Half Day'))
-            absent = sum(1 for a in sub_records if a.status == 'Absent')
+            absent = max(0, total - present)
             pct = round((present / total * 100), 1) if total > 0 else 0.0
 
-            teacher_names = [t.full_name for t in subject.teachers]
-            teacher_str = ", ".join(teacher_names) if teacher_names else "Faculty"
+            assigned_teachers = [t['name'] for t in getattr(subject, 'assigned_faculty_list', [])]
+            if not assigned_teachers and sub_records:
+                assigned_teachers = [a.teacher.full_name for a in sub_records if a.teacher]
+            if not assigned_teachers and subject.teachers:
+                assigned_teachers = [t.full_name for t in subject.teachers]
+            teacher_str = ", ".join(dict.fromkeys(assigned_teachers)) if assigned_teachers else "Faculty"
 
             results.append({
                 'subject_id': subject.id,

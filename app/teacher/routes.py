@@ -7,12 +7,13 @@ from app.models.teacher import Teacher
 from app.models.subject import Subject
 from app.models.attendance import Attendance
 from app.utils.decorators import role_required
+from app.utils.timezone import get_current_ist_date, get_current_ist_datetime
 
 @teacher_bp.route('/dashboard')
 @login_required
 @role_required('teacher', 'admin')
 def dashboard():
-    today = date.today()
+    today = get_current_ist_date()
     teacher = current_user.teacher_profile
 
     # Department scoped records
@@ -37,13 +38,14 @@ def dashboard():
         today_records=today_records,
         today_scan_count=today_scan_count,
         assigned_assignments=assigned_assignments,
-        now=datetime.now()
+        now=get_current_ist_datetime()
     )
 
 @teacher_bp.route('/subjects')
 @login_required
 @role_required('teacher', 'admin')
 def subjects():
+    today = get_current_ist_date()
     teacher = current_user.teacher_profile
     from app.models.subject_assignment import TeacherSubjectAssignment
 
@@ -62,9 +64,11 @@ def subjects():
             continue
         query = Attendance.query.filter_by(subject_id=s.id)
         if asgn.semester:
-            query = query.filter(Attendance.semester.ilike(asgn.semester.strip()))
+            query = query.filter(
+                (Attendance.semester.ilike(asgn.semester.strip())) | (Attendance.semester.is_(None))
+            )
         total_sessions = query.count()
-        today_sessions = query.filter(Attendance.date == date.today()).count()
+        today_sessions = query.filter(Attendance.date == today).count()
         subject_stats.append({
             'assignment': asgn,
             'subject': s,
@@ -126,8 +130,13 @@ def subject_attendance(subject_id):
         page=page, per_page=20, error_out=False
     )
 
-    # Compute overall subject metrics
-    all_subject_records = Attendance.query.filter_by(subject_id=subject_id).all()
+    # Compute overall subject metrics (scoped to semester if provided)
+    metrics_query = Attendance.query.filter_by(subject_id=subject_id)
+    if semester:
+        metrics_query = metrics_query.filter(
+            (Attendance.semester.ilike(semester.strip())) | (Attendance.semester.is_(None))
+        )
+    all_subject_records = metrics_query.all()
     total_records = len(all_subject_records)
     present_records = sum(1 for a in all_subject_records if a.status in ('Present', 'Late', 'Half Day'))
     absent_records = sum(1 for a in all_subject_records if a.status == 'Absent')

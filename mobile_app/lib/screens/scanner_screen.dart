@@ -76,6 +76,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
     _selectedCourse = item['course'] as String?;
     _selectedSection = item['section'] as String?;
     _selectedSubjectLabel = "${_selectedSubjectCode ?? ''} - ${_selectedSubjectName ?? ''}";
+
+    // Clear previous scan session token cache so switching subjects allows immediate scanning
+    _lastScannedToken = null;
+    _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+    debugPrint("SUBJECT_SWITCHED: Teacher=${ApiService().currentUser?['id']} Subject=$_selectedSubjectId ($_selectedSubjectName) Sem=$_selectedSemester");
   }
 
   @override
@@ -113,11 +118,15 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     HapticFeedback.mediumImpact();
 
+    debugPrint("ATTENDANCE_SCAN_REQUEST: Teacher=${ApiService().currentUser?['id']} Subject=$_selectedSubjectId ($_selectedSubjectName) Sem=$_selectedSemester Token=$token");
+
     final result = await ApiService().scanAttendance(
       token,
       subjectId: _selectedSubjectId,
       semester: _selectedSemester,
     );
+
+    debugPrint("ATTENDANCE_SCAN_RESPONSE: Success=${result['success']} Action=${result['action']} RecordId=${result['attendance']?['id']}");
 
     if (!mounted) return;
 
@@ -640,6 +649,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           onPressed: () {
                             setState(() {
                               _isScanningActive = !_isScanningActive;
+                              _lastScannedToken = null;
+                              _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
                             });
                           },
                           icon: Icon(_isScanningActive ? Icons.stop_circle : Icons.play_circle_fill, size: 20),

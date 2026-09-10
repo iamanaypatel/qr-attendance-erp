@@ -238,9 +238,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
           builder: (context, snapshot) {
             final loading = snapshot.connectionState == ConnectionState.waiting;
             final data = snapshot.data;
-            final history = (data?['history'] as List<dynamic>?) ?? [];
+            final history = (data?['history'] as List<dynamic>?) ?? (data?['records'] as List<dynamic>?) ?? [];
             final sub = (data?['subject'] as Map<String, dynamic>?) ?? subject;
-            final percentage = (sub['percentage'] is num) ? (sub['percentage'] as num).toDouble() : 0.0;
+            final stats = (data?['stats'] as Map<String, dynamic>?) ?? {};
+
+            final subName = sub['subject_name'] ?? sub['name'] ?? 'Subject';
+            final subCode = sub['subject_code'] ?? sub['code'] ?? '-';
+            final teacher = sub['teacher'] ?? sub['teacher_name'] ?? 'Unassigned';
+
+            final total = stats['total_classes'] ?? stats['total'] ?? sub['total'] ?? sub['total_classes'] ?? 0;
+            final present = stats['present_classes'] ?? stats['present'] ?? sub['present'] ?? sub['present_classes'] ?? 0;
+            final absent = stats['absent_classes'] ?? stats['absent'] ?? sub['absent'] ?? sub['absent_classes'] ?? 0;
+
+            final percentage = (stats['attendance_percentage'] is num)
+                ? (stats['attendance_percentage'] as num).toDouble()
+                : (stats['percentage'] is num)
+                    ? (stats['percentage'] as num).toDouble()
+                    : (sub['percentage'] is num)
+                        ? (sub['percentage'] as num).toDouble()
+                        : (sub['attendance_percentage'] is num)
+                            ? (sub['attendance_percentage'] as num).toDouble()
+                            : 0.0;
             final color = _getPercentageColor(percentage);
 
             return Container(
@@ -272,14 +290,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              sub['subject_name'] ?? sub['name'] ?? 'Subject',
+                              subName,
                               style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                               maxLines: 2,
                               overflow: TextOverflow.ellipsis,
                             ),
                             const SizedBox(height: 2),
                             Text(
-                              "Code: ${sub['subject_code'] ?? sub['code'] ?? '-'} • Faculty: ${sub['teacher'] ?? 'Unassigned'}",
+                              "Code: $subCode • Faculty: $teacher",
                               style: TextStyle(fontSize: 12, color: isDark ? Colors.grey.shade400 : Colors.grey.shade700),
                             ),
                           ],
@@ -311,9 +329,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
-                        _buildMiniMetric("Conducted", "${sub['total'] ?? 0}"),
-                        _buildMiniMetric("Present", "${sub['present'] ?? 0}", color: Colors.green),
-                        _buildMiniMetric("Absent", "${sub['absent'] ?? 0}", color: Colors.redAccent),
+                        _buildMiniMetric("Conducted", "$total"),
+                        _buildMiniMetric("Present", "$present", color: Colors.green),
+                        _buildMiniMetric("Absent", "$absent", color: Colors.redAccent),
                       ],
                     ),
                   ),
@@ -407,12 +425,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildStudentAttendanceView() {
     final summary = _studentAttendanceSummary ?? {};
-    final overall = (summary['overall'] as Map<String, dynamic>?) ?? {};
-    final subjects = (summary['subjects'] as List<dynamic>?) ?? [];
-    final overallRate = (overall['rate'] is num) ? (overall['rate'] as num).toDouble() : 0.0;
-    final totalClasses = overall['total'] ?? 0;
-    final presentClasses = overall['present'] ?? 0;
-    final absentClasses = overall['absent'] ?? 0;
+    final overall = (summary['overall'] as Map<String, dynamic>?) ?? (summary['overall_stats'] as Map<String, dynamic>?) ?? {};
+    final subjects = (summary['subjects'] as List<dynamic>?) ?? (summary['subject_wise'] as List<dynamic>?) ?? [];
+    final overallRate = (overall['rate'] is num)
+        ? (overall['rate'] as num).toDouble()
+        : (overall['attendance_percentage'] is num)
+            ? (overall['attendance_percentage'] as num).toDouble()
+            : 0.0;
+    final totalClasses = overall['total'] ?? overall['total_classes'] ?? 0;
+    final presentClasses = overall['present'] ?? overall['present_classes'] ?? 0;
+    final absentClasses = overall['absent'] ?? overall['absent_classes'] ?? 0;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
@@ -569,7 +591,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
               separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (ctx, i) {
                 final sub = Map<String, dynamic>.from(subjects[i]);
-                final pct = (sub['percentage'] is num) ? (sub['percentage'] as num).toDouble() : 0.0;
+                final subName = sub['name'] ?? sub['subject_name'] ?? 'Subject';
+                final subCode = sub['code'] ?? sub['subject_code'] ?? '';
+                final teacher = sub['teacher'] ?? sub['teacher_name'] ?? 'Faculty';
+                final present = sub['present'] ?? sub['present_classes'] ?? 0;
+                final total = sub['total'] ?? sub['total_classes'] ?? 0;
+                final pct = (sub['percentage'] is num)
+                    ? (sub['percentage'] as num).toDouble()
+                    : (sub['attendance_percentage'] is num)
+                        ? (sub['attendance_percentage'] as num).toDouble()
+                        : 0.0;
                 final color = _getPercentageColor(pct);
 
                 return InkWell(
@@ -600,12 +631,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    sub['subject_name'] ?? 'Subject',
+                                    subName,
                                     style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    "${sub['subject_code']} • Faculty: ${sub['teacher'] ?? 'Faculty'}",
+                                    "${subCode.isNotEmpty ? '$subCode • ' : ''}Faculty: $teacher",
                                     style: TextStyle(
                                       fontSize: 12,
                                       color: isDark ? Colors.grey.shade400 : Colors.grey.shade600,
@@ -646,7 +677,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              "Present: ${sub['present']}  •  Total: ${sub['total']}",
+                              "Present: $present  •  Total: $total",
                               style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                             ),
                             Row(
@@ -849,7 +880,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final name = rec['student_name'] ?? s['full_name'] ?? 'Unknown Student';
         final id = rec['student_id'] ?? s['student_id'] ?? '';
         final sub = (rec['subject'] is Map ? rec['subject'] : null) ?? {};
-        final subName = sub['code'] ?? sub['name'] ?? '';
+        final subName = rec['subject_name'] ?? rec['subject_code'] ?? sub['code'] ?? sub['name'] ?? '';
 
         final key = "${id.isNotEmpty ? id : name}_$subName";
         if (!seen.contains(key)) {
@@ -859,6 +890,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             'student_id': id,
             'time_in': rec['time_in'] ?? '-',
             'subject': subName,
+            'semester': rec['semester'] ?? s['semester'] ?? '',
           });
         }
       }
