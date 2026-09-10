@@ -21,15 +21,32 @@ class Teacher(db.Model):
         if not subject_id:
             return False
         from app.models.subject_assignment import TeacherSubjectAssignment
-        query = self.subject_assignments.filter_by(subject_id=subject_id, is_active=True)
+        assignments = self.subject_assignments.filter_by(subject_id=subject_id, is_active=True).all()
+        if not assignments:
+            # Fallback to secondary association table for legacy setups
+            if hasattr(self, 'assigned_subjects') and self.assigned_subjects.filter_by(id=subject_id, is_active=True).first() is not None:
+                return True
+            return False
+
         if semester and semester.strip():
-            query = query.filter(TeacherSubjectAssignment.semester.ilike(semester.strip()))
-        if query.first() is not None:
-            return True
-        # Fallback to secondary association table for legacy setups
-        if hasattr(self, 'assigned_subjects') and self.assigned_subjects.filter_by(id=subject_id, is_active=True).first() is not None:
-            return True
-        return False
+            import re
+            sem_clean = semester.strip().lower()
+            req_digits = re.findall(r'\d+', sem_clean)
+            # If an assignment matches the semester (exact, substring, or digit match e.g. '4th' vs '4th Semester')
+            for asgn in assignments:
+                if not asgn.semester:
+                    return True
+                asgn_sem = asgn.semester.strip().lower()
+                if asgn_sem == sem_clean or sem_clean in asgn_sem or asgn_sem in sem_clean:
+                    return True
+                asgn_digits = re.findall(r'\d+', asgn_sem)
+                if req_digits and asgn_digits and req_digits == asgn_digits:
+                    return True
+            # Explicit semester was specified and teacher is not assigned to this semester
+            return False
+
+        # Teacher has active assignment for this subject when semester is not specified
+        return True
 
     def get_active_assignments(self):
         """Returns list of active TeacherSubjectAssignment objects."""

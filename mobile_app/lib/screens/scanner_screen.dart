@@ -19,6 +19,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   );
 
   bool _isProcessing = false;
+  bool _isSheetOpen = false;
   String? _lastScannedToken;
   DateTime _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
   final List<Map<String, dynamic>> _sessionScans = [];
@@ -35,11 +36,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
   String? _selectedSubjectLabel;
   int _selectedSubjectIndex = 0;
   bool _loadingSubjects = true;
-  bool _isScanningActive = false;
+  bool _isScanningActive = true;
 
   @override
   void initState() {
     super.initState();
+    _isScanningActive = true;
     _fetchSubjects();
   }
 
@@ -67,19 +69,30 @@ class _ScannerScreenState extends State<ScannerScreen> {
     if (index < 0 || index >= _subjects.length) return;
     final item = _subjects[index];
     _selectedSubjectIndex = index;
-    _selectedSubjectId = item['subject_id'] ?? item['id'] as int?;
-    _selectedSemester = item['semester'] as String?;
-    _selectedTeacherName = item['teacher_name'] as String?;
-    _selectedSubjectCode = item['code'] ?? item['subject_code'] as String?;
-    _selectedSubjectName = item['name'] ?? item['subject_name'] as String?;
-    _selectedDept = item['department'] as String?;
-    _selectedCourse = item['course'] as String?;
-    _selectedSection = item['section'] as String?;
+
+    final rawSubId = item['subject_id'] ?? item['id'];
+    if (rawSubId is int) {
+      _selectedSubjectId = rawSubId;
+    } else if (rawSubId != null) {
+      _selectedSubjectId = int.tryParse(rawSubId.toString());
+    } else {
+      _selectedSubjectId = null;
+    }
+
+    _selectedSemester = item['semester']?.toString();
+    _selectedTeacherName = item['teacher_name']?.toString();
+    _selectedSubjectCode = (item['code'] ?? item['subject_code'])?.toString();
+    _selectedSubjectName = (item['name'] ?? item['subject_name'])?.toString();
+    _selectedDept = item['department']?.toString();
+    _selectedCourse = item['course']?.toString();
+    _selectedSection = item['section']?.toString();
     _selectedSubjectLabel = "${_selectedSubjectCode ?? ''} - ${_selectedSubjectName ?? ''}";
 
     // Clear previous scan session token cache so switching subjects allows immediate scanning
     _lastScannedToken = null;
     _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+    _isProcessing = false;
+    _isScanningActive = true;
     debugPrint("SUBJECT_SWITCHED: Teacher=${ApiService().currentUser?['id']} Subject=$_selectedSubjectId ($_selectedSubjectName) Sem=$_selectedSemester");
   }
 
@@ -90,7 +103,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   void _onDetect(BarcodeCapture capture) {
-    if (_isProcessing || !_isScanningActive) return;
+    if (_isProcessing || !_isScanningActive || _isSheetOpen) return;
 
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
@@ -114,47 +127,190 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   void _completeSessionAndSwitchSubject() {
     setState(() {
-      _isScanningActive = false;
       _lastScannedToken = null;
       _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+      _isProcessing = false;
+      _isScanningActive = true;
     });
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text("${_selectedSubjectCode ?? 'Subject'} session complete. Select next subject to start immediately."),
-        duration: const Duration(seconds: 2),
-        backgroundColor: const Color(0xFF10B981),
-      ),
-    );
+    if (_subjects.length > 1) {
+      _showSubjectPickerBottomSheet();
+    } else {
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text("${_selectedSubjectCode ?? 'Subject'} session complete. Ready to continue."),
+          duration: const Duration(seconds: 2),
+          backgroundColor: const Color(0xFF10B981),
+        ),
+      );
+    }
+  }
+
+  Future<void> _showSubjectPickerBottomSheet() async {
+    if (_subjects.isEmpty) return;
+    setState(() {
+      _isSheetOpen = true;
+      _isProcessing = false;
+    });
+
+    try {
+      await showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  const Icon(Icons.swap_horiz_rounded, color: Color(0xFF2563EB), size: 26),
+                  const SizedBox(width: 10),
+                  const Text(
+                    "Select Next Subject",
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.close),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const Text(
+                "Choose subject to switch context immediately with zero delay:",
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 12),
+              ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.45,
+                ),
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _subjects.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, idx) {
+                    final sub = _subjects[idx];
+                    final code = sub['code'] ?? sub['subject_code'] ?? '';
+                    final name = sub['name'] ?? sub['subject_name'] ?? '';
+                    final sem = sub['semester'] ?? '';
+                    final isCurrent = idx == _selectedSubjectIndex;
+
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      leading: CircleAvatar(
+                        backgroundColor: isCurrent ? const Color(0xFF10B981) : const Color(0xFF2563EB).withValues(alpha: 0.1),
+                        child: Icon(
+                          isCurrent ? Icons.check : Icons.book,
+                          color: isCurrent ? Colors.white : const Color(0xFF2563EB),
+                          size: 20,
+                        ),
+                      ),
+                      title: Text(
+                        "[$code] $name",
+                        style: TextStyle(
+                          fontWeight: isCurrent ? FontWeight.bold : FontWeight.w600,
+                          fontSize: 14,
+                          color: isCurrent ? const Color(0xFF10B981) : Colors.black87,
+                        ),
+                      ),
+                      subtitle: Text(
+                        sem.isNotEmpty ? "Semester: $sem" : "General",
+                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                      ),
+                      trailing: isCurrent
+                          ? const Chip(
+                              label: Text("Active", style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF047857))),
+                              backgroundColor: Color(0xFFD1FAE5),
+                              padding: EdgeInsets.zero,
+                            )
+                          : const Icon(Icons.chevron_right, color: Colors.grey),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        setState(() {
+                          _selectSubjectAtIndex(idx);
+                        });
+                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text("Switched to [$code] $name ($sem). Ready to scan."),
+                            duration: const Duration(seconds: 2),
+                            backgroundColor: const Color(0xFF10B981),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSheetOpen = false;
+          _isProcessing = false;
+          _lastScannedToken = null;
+          _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+        });
+      }
+    }
   }
 
   Future<void> _processToken(String token) async {
+    if (_isProcessing || _isSheetOpen) return;
+
+    // Immediately capture current selected subject context
+    final currentSubId = _selectedSubjectId;
+    final currentSubCode = _selectedSubjectCode;
+    final currentSubName = _selectedSubjectName;
+    final currentSem = _selectedSemester;
+    final currentLabel = _selectedSubjectLabel;
+
     setState(() {
       _isProcessing = true;
     });
 
     HapticFeedback.mediumImpact();
 
-    debugPrint("ATTENDANCE_SCAN_REQUEST: Teacher=${ApiService().currentUser?['id']} Subject=$_selectedSubjectId ($_selectedSubjectName) Sem=$_selectedSemester Token=$token");
+    debugPrint("ATTENDANCE_SCAN_REQUEST: Teacher=${ApiService().currentUser?['id']} Subject=$currentSubId [$currentSubCode - $currentSubName] Sem=$currentSem Token=$token");
 
-    final result = await ApiService().scanAttendance(
-      token,
-      subjectId: _selectedSubjectId,
-      semester: _selectedSemester,
-    );
+    Map<String, dynamic> result;
+    try {
+      result = await ApiService().scanAttendance(
+        token,
+        subjectId: currentSubId,
+        semester: currentSem,
+      );
+    } catch (e) {
+      debugPrint("ATTENDANCE_SCAN_EXCEPTION: $e");
+      result = {
+        'success': false,
+        'action': 'NETWORK_ERROR',
+        'message': 'Failed to mark attendance: $e',
+      };
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessing = false;
+        });
+      }
+    }
 
     debugPrint("ATTENDANCE_SCAN_RESPONSE: Success=${result['success']} Action=${result['action']} RecordId=${result['attendance']?['id']}");
 
     if (!mounted) return;
 
-    setState(() {
-      _isProcessing = false;
-    });
-
     if (result['success'] == true) {
       HapticFeedback.heavyImpact();
-      final student = result['student'] ?? {};
-      final attendance = result['attendance'] ?? {};
+      final student = result['student'] is Map ? Map<String, dynamic>.from(result['student']) : <String, dynamic>{};
+      final attendance = result['attendance'] is Map ? Map<String, dynamic>.from(result['attendance']) : <String, dynamic>{};
 
       setState(() {
         _sessionScans.insert(0, {
@@ -162,304 +318,371 @@ class _ScannerScreenState extends State<ScannerScreen> {
           'id': student['student_id'] ?? '-',
           'action': result['action'] ?? 'TIME_IN',
           'time': attendance['time_in'] ?? attendance['time_out'] ?? 'Just now',
-          'subject': _selectedSubjectLabel ?? 'General',
-          'semester': _selectedSemester ?? '',
+          'subject': currentLabel ?? 'General',
+          'semester': currentSem ?? '',
           'success': true,
         });
       });
 
-      _showScanFeedbackSheet(
+      await _showScanFeedbackSheet(
         isSuccess: true,
         title: result['action'] == 'TIME_IN' ? 'TIME IN RECORDED' : 'TIME OUT RECORDED',
         message: result['message'] ?? 'Attendance marked successfully.',
         action: result['action'] ?? 'TIME_IN',
         student: student,
-        subjectLabel: _selectedSubjectLabel,
+        attendance: attendance,
+        subject: result['subject'] is Map ? Map<String, dynamic>.from(result['subject']) : null,
+        subjectLabel: currentLabel,
       );
     } else {
       HapticFeedback.vibrate();
-      final student = result['student'] ?? {};
-      _showScanFeedbackSheet(
+      final student = result['student'] is Map ? Map<String, dynamic>.from(result['student']) : <String, dynamic>{};
+      await _showScanFeedbackSheet(
         isSuccess: false,
         title: result['action'] ?? 'SCAN ALERT',
         message: result['message'] ?? 'Unable to process QR code.',
         action: result['action'] ?? 'FAILED',
         student: student,
-        subjectLabel: _selectedSubjectLabel,
+        attendance: result['attendance'] is Map ? Map<String, dynamic>.from(result['attendance']) : null,
+        subject: result['subject'] is Map ? Map<String, dynamic>.from(result['subject']) : null,
+        subjectLabel: currentLabel,
       );
     }
   }
 
-  void _showManualEntryDialog() {
+  Future<void> _showManualEntryDialog() async {
     final controller = TextEditingController();
     bool searching = false;
     String status = "";
 
-    showDialog(
-      context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          title: const Row(
-            children: [
-              Icon(Icons.keyboard, color: Colors.blue),
-              SizedBox(width: 8),
-              Text("Manual Student ID"),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Text(
-                "Enter student roll number or ID to mark attendance:",
-                style: TextStyle(fontSize: 13),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                decoration: const InputDecoration(
-                  labelText: "Student ID or Roll No",
-                  hintText: "e.g. STU2026001 or CS-2024-042",
-                  border: OutlineInputBorder(),
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-              ),
-              if (status.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                Text(
-                  status,
-                  style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: status.startsWith("✓") ? Colors.green : Colors.orange,
-                  ),
-                ),
-              ],
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text("Cancel"),
-            ),
-            ElevatedButton(
-              onPressed: searching
-                  ? null
-                  : () async {
-                      final q = controller.text.trim();
-                      if (q.isEmpty) return;
+    setState(() {
+      _isSheetOpen = true;
+      _isProcessing = false;
+    });
 
-                      setDialogState(() {
-                        searching = true;
-                        status = "Looking up student...";
-                      });
-
-                      final nav = Navigator.of(ctx);
-                      final students = await ApiService().searchStudents(q);
-                      if (students.isNotEmpty) {
-                        final student = students.first;
-                        final token = student['student_id'];
-                        nav.pop();
-                        _processToken(token);
-                      } else {
-                        setDialogState(() {
-                          searching = false;
-                          status = "No student found with that ID.";
-                        });
-                      }
-                    },
-              child: searching
-                  ? const SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text("Verify & Mark"),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _showScanFeedbackSheet({
-    required bool isSuccess,
-    required String title,
-    required String message,
-    required String action,
-    required Map<String, dynamic> student,
-    String? subjectLabel,
-  }) {
-    final color = isSuccess
-        ? (action == 'TIME_IN' ? const Color(0xFF10B981) : const Color(0xFF3B82F6))
-        : const Color(0xFFF59E0B);
-
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
+    try {
+      await showDialog(
+        context: context,
+        builder: (ctx) => StatefulBuilder(
+          builder: (context, setDialogState) => AlertDialog(
+            title: const Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: color.withValues(alpha: 0.15),
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isSuccess ? Icons.check_circle : Icons.warning_amber_rounded,
-                    color: color,
-                    size: 32,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: color,
-                        ),
-                      ),
-                      Text(
-                        message,
-                        style: const TextStyle(fontSize: 13),
-                      ),
-                      if (subjectLabel != null) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.withValues(alpha: 0.12),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Text(
-                            "Subject: $subjectLabel",
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
+                Icon(Icons.keyboard, color: Colors.blue),
+                SizedBox(width: 8),
+                Text("Manual Student ID"),
               ],
             ),
-            const SizedBox(height: 20),
-
-            if (student.isNotEmpty) ...[
-              Container(
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: Theme.of(context).colorScheme.surface,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-                ),
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 24,
-                      backgroundColor: Theme.of(context).colorScheme.primary,
-                      child: Text(
-                        (student['full_name'] ?? 'S')[0].toUpperCase(),
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 18,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            student['full_name'] ?? 'Student Name',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.bold,
-                              fontSize: 15,
-                            ),
-                          ),
-                          Text(
-                            "ID: ${student['student_id']} • Roll: ${student['roll_number'] ?? '-'}",
-                            style: const TextStyle(fontSize: 12, color: Colors.grey),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: color.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Text(
-                        action,
-                        style: TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                          color: color,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 20),
-            ],
-
-            Row(
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: color,
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                    ),
-                    child: const Text("Continue Scanning"),
+                const Text(
+                  "Enter student roll number or ID to mark attendance:",
+                  style: TextStyle(fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  decoration: const InputDecoration(
+                    labelText: "Student ID or Roll No",
+                    hintText: "e.g. STU2026001 or CS-2024-042",
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.badge_outlined),
                   ),
                 ),
-                if (_isScanningActive) ...[
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.pop(ctx);
-                        _completeSessionAndSwitchSubject();
-                      },
-                      icon: const Icon(Icons.check_circle_outline, size: 16),
-                      label: const Text("Complete & Switch"),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
+                if (status.isNotEmpty) ...[
+                  const SizedBox(height: 10),
+                  Text(
+                    status,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.bold,
+                      color: status.startsWith("✓") ? Colors.green : Colors.orange,
                     ),
                   ),
                 ],
               ],
             ),
-          ],
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text("Cancel"),
+              ),
+              ElevatedButton(
+                onPressed: searching
+                    ? null
+                    : () async {
+                        final q = controller.text.trim();
+                        if (q.isEmpty) return;
+
+                        setDialogState(() {
+                          searching = true;
+                          status = "Looking up student...";
+                        });
+
+                        final nav = Navigator.of(ctx);
+                        final students = await ApiService().searchStudents(q);
+                        if (students.isNotEmpty) {
+                          final student = students.first;
+                          final token = student['student_id'];
+                          nav.pop();
+                          _processToken(token);
+                        } else {
+                          setDialogState(() {
+                            searching = false;
+                            status = "No student found with that ID.";
+                          });
+                        }
+                      },
+                child: searching
+                    ? const SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text("Verify & Mark"),
+              ),
+            ],
+          ),
         ),
-      ),
-    );
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSheetOpen = false;
+          _isProcessing = false;
+          _lastScannedToken = null;
+          _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+        });
+      }
+    }
+  }
+
+  Future<void> _showScanFeedbackSheet({
+    required bool isSuccess,
+    required String title,
+    required String message,
+    required String action,
+    required Map<String, dynamic> student,
+    Map<String, dynamic>? attendance,
+    Map<String, dynamic>? subject,
+    String? subjectLabel,
+  }) async {
+    setState(() {
+      _isSheetOpen = true;
+      _isProcessing = false;
+    });
+
+    final color = isSuccess
+        ? (action == 'TIME_IN' ? const Color(0xFF10B981) : const Color(0xFF3B82F6))
+        : const Color(0xFFF59E0B);
+
+    final subName = subject?['name'] ?? _selectedSubjectName ?? 'Subject';
+    final subCode = subject?['code'] ?? _selectedSubjectCode ?? '';
+    final subSem = subject?['semester'] ?? _selectedSemester ?? '';
+    final timeStr = attendance?['time_in'] ?? attendance?['time_out'] ?? 'Just now';
+    final statusStr = attendance?['status'] ?? (action == 'TIME_IN' ? 'Present' : action);
+
+    try {
+      await showModalBottomSheet(
+        context: context,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(
+                      isSuccess ? Icons.check_circle : Icons.warning_amber_rounded,
+                      color: color,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          title,
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: color,
+                          ),
+                        ),
+                        Text(
+                          message,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              if (student.isNotEmpty) ...[
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.surface,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
+                  ),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          CircleAvatar(
+                            radius: 20,
+                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            child: Text(
+                              (student['full_name'] ?? 'S')[0].toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  student['full_name'] ?? 'Student Name',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
+                                Text(
+                                  "ID: ${student['student_id']} • Roll: ${student['roll_number'] ?? '-'}",
+                                  style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: color.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              statusStr,
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                                color: color,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Row(
+                              children: [
+                                const Icon(Icons.menu_book, size: 14, color: Color(0xFF2563EB)),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: Text(
+                                    "[$subCode] $subName (${subSem.isNotEmpty ? subSem : 'General'})",
+                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Row(
+                            children: [
+                              const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                              const SizedBox(width: 4),
+                              Text(
+                                timeStr,
+                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: color,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: const Text("Continue Scanning"),
+                    ),
+                  ),
+                  if (_subjects.length > 1) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(ctx);
+                          WidgetsBinding.instance.addPostFrameCallback((_) {
+                            if (mounted) _showSubjectPickerBottomSheet();
+                          });
+                        },
+                        icon: const Icon(Icons.swap_horiz_rounded, size: 16),
+                        label: const Text("Switch Subject"),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSheetOpen = false;
+          _isProcessing = false;
+          _lastScannedToken = null;
+          _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+        });
+      }
+    }
   }
 
   @override
@@ -599,71 +822,71 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                   "Select Subject",
                                   style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
                                 ),
-                                if (_isScanningActive)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.amber.withValues(alpha: 0.2),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: Colors.amber.shade600, width: 0.8),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.lock, size: 12, color: Colors.amber.shade900),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          "Session Locked",
-                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
-                                        ),
-                                      ],
-                                    ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withValues(alpha: 0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFF10B981), width: 0.8),
                                   ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: const BoxDecoration(
+                                          color: Color(0xFF10B981),
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      const Text(
+                                        "Live Ready",
+                                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF047857)),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 4),
-                            if (_isScanningActive)
-                              Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.08),
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                child: Text(
-                                  "${_selectedSubjectCode ?? ''} - ${_selectedSubjectName ?? ''} (${_selectedSemester ?? ''})",
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
-                                ),
-                              )
-                            else
-                              DropdownButtonHideUnderline(
-                                child: DropdownButton<int>(
-                                  value: _selectedSubjectIndex,
-                                  isExpanded: true,
-                                  items: _subjects.asMap().entries.map((entry) {
-                                    final idx = entry.key;
-                                    final sub = entry.value;
-                                    final code = sub['code'] ?? sub['subject_code'] ?? '';
-                                    final name = sub['name'] ?? sub['subject_name'] ?? '';
-                                    final sem = sub['semester'] ?? '';
-                                    return DropdownMenuItem<int>(
-                                      value: idx,
-                                      child: Text(
-                                        "[$code] $name — $sem",
-                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                                        overflow: TextOverflow.ellipsis,
+                            DropdownButtonHideUnderline(
+                              child: DropdownButton<int>(
+                                value: _selectedSubjectIndex,
+                                isExpanded: true,
+                                items: _subjects.asMap().entries.map((entry) {
+                                  final idx = entry.key;
+                                  final sub = entry.value;
+                                  final code = sub['code'] ?? sub['subject_code'] ?? '';
+                                  final name = sub['name'] ?? sub['subject_name'] ?? '';
+                                  final sem = sub['semester'] ?? '';
+                                  return DropdownMenuItem<int>(
+                                    value: idx,
+                                    child: Text(
+                                      "[$code] $name — $sem",
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  );
+                                }).toList(),
+                                onChanged: (idx) {
+                                  if (idx != null) {
+                                    setState(() {
+                                      _selectSubjectAtIndex(idx);
+                                    });
+                                    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("Switched to [${_selectedSubjectCode ?? ''}] ${_selectedSubjectName ?? ''}. Ready to scan."),
+                                        duration: const Duration(seconds: 2),
+                                        backgroundColor: const Color(0xFF10B981),
                                       ),
                                     );
-                                  }).toList(),
-                                  onChanged: (idx) {
-                                    if (idx != null) {
-                                      setState(() {
-                                        _selectSubjectAtIndex(idx);
-                                      });
-                                    }
-                                  },
-                                ),
+                                  }
+                                },
                               ),
+                            ),
                             const Divider(height: 10),
                             Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -682,14 +905,14 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         ),
                       ),
 
-                    // START / COMPLETE ATTENDANCE ACTION BUTTON
+                    // START / SWITCH ATTENDANCE ACTION BUTTON
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            if (_isScanningActive) {
+                            if (_subjects.length > 1) {
                               _completeSessionAndSwitchSubject();
                             } else {
                               setState(() {
@@ -697,15 +920,28 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                 _lastScannedToken = null;
                                 _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
                               });
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text("${_selectedSubjectCode ?? 'Subject'} scanner active and ready."),
+                                  duration: const Duration(seconds: 2),
+                                  backgroundColor: const Color(0xFF10B981),
+                                ),
+                              );
                             }
                           },
-                          icon: Icon(_isScanningActive ? Icons.check_circle_rounded : Icons.play_circle_fill, size: 20),
+                          icon: Icon(
+                            _subjects.length > 1 ? Icons.swap_horiz_rounded : Icons.check_circle_rounded,
+                            size: 20,
+                          ),
                           label: Text(
-                            _isScanningActive ? "Complete ${_selectedSubjectCode ?? 'Subject'} & Switch" : "Start Attendance",
+                            _subjects.length > 1
+                                ? "Switch Subject (${_selectedSubjectCode ?? ''})"
+                                : "${_selectedSubjectCode ?? 'Subject'} Active",
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _isScanningActive ? const Color(0xFF10B981) : const Color(0xFF2563EB),
+                            backgroundColor: const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 11),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

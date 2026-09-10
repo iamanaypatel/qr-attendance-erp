@@ -332,15 +332,9 @@
       statusBadge.className = 'badge bg-success';
       statusBadge.textContent = 'Active & Scanning';
 
-      // Rule 12: Lock subject during active session
-      if (assignmentSelect) {
-        assignmentSelect.disabled = true;
-      }
-      if (sessionLockBadge) {
-        sessionLockBadge.style.display = 'inline-flex';
-      }
+      // Ensure subject selector remains active for instant subject switching with 0s delay
       if (subjectHelper) {
-        subjectHelper.innerHTML = '<span class="text-warning"><i class="bi bi-lock-fill me-1"></i>Subject locked for active session. Stop attendance to switch subject.</span>';
+        subjectHelper.innerHTML = '<span class="text-success"><i class="bi bi-broadcast me-1"></i>Scanner active. You can switch subject context anytime from the selector above.</span>';
       }
     } catch (err) {
       console.error("Camera start error:", err);
@@ -422,6 +416,10 @@
     if (teacherEl) teacherEl.textContent = teacher;
     if (deptEl) deptEl.innerHTML = `<i class="bi bi-building me-1"></i>${dept}`;
     if (courseEl) courseEl.textContent = course + (sec ? ` (Sec ${sec})` : '');
+
+    if (isScanning) {
+      showToast(`Active attendance context switched to [${code}] ${name} (${sem}). Ready to scan.`, "info", "Subject Changed");
+    }
   }
 
   if (assignmentSelect) {

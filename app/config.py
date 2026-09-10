@@ -21,6 +21,7 @@ class Config:
     MAX_CONTENT_LENGTH = int(os.environ.get('MAX_CONTENT_LENGTH', 5 * 1024 * 1024))
     UPLOAD_FOLDER = BASE_DIR / os.environ.get('UPLOAD_FOLDER', 'app/static/uploads')
     ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'webp'}
+    SEND_FILE_MAX_AGE_DEFAULT = 0
     
     # Institution defaults
     INSTITUTION_NAME = os.environ.get('INSTITUTION_NAME', 'Dr. Virendra Swarup Memorial Trust Group of Institutions')

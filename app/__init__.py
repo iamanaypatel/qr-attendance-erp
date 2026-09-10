@@ -24,6 +24,16 @@ def create_app(config_name=None):
     login_manager.init_app(app)
     csrf.init_app(app)
 
+    @login_manager.unauthorized_handler
+    def unauthorized():
+        if request.path.startswith('/api/') or request.is_json:
+            return jsonify({
+                'success': False,
+                'action': 'UNAUTHORIZED',
+                'message': 'Authentication session expired or invalid. Please log in again.'
+            }), 401
+        return redirect(url_for('auth.login', next=request.url))
+
     # Reverse proxy header support for HTTPS behind Render/PaaS load balancers
     from werkzeug.middleware.proxy_fix import ProxyFix
     app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_port=1)
@@ -86,6 +96,15 @@ def create_app(config_name=None):
     # Error handlers
     register_error_handlers(app)
 
+    # Cache control for brand assets so updates reflect immediately
+    @app.after_request
+    def add_header(response):
+        if request.path.startswith('/static/images/'):
+            response.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+            response.headers['Pragma'] = 'no-cache'
+            response.headers['Expires'] = '0'
+        return response
+
     return app
 
 def _auto_bootstrap_database(app):
@@ -106,6 +125,7 @@ def _auto_bootstrap_database(app):
             db.create_all()
 
             # Ensure attendances table has subject_id, teacher_id, semester, section columns
+            # AND enforce composite uniqueness on (student_id, date, subject_id)
             try:
                 inspector = inspect(db.engine)
                 if 'attendances' in inspector.get_table_names():
@@ -134,6 +154,76 @@ def _auto_bootstrap_database(app):
                             db.session.commit()
                         except Exception as e:
                             db.session.rollback()
+
+                    # Migrate UNIQUE constraint to include subject_id
+                    dialect_name = db.engine.dialect.name
+                    if dialect_name == 'sqlite':
+                        res = db.session.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='attendances'")).fetchone()
+                        table_sql = res[0] if res else ""
+                        if 'UNIQUE (student_id, date)' in table_sql or 'uq_student_date_attendance' in table_sql:
+                            app.logger.info("Migrating SQLite attendances table to support subject-wise attendance uniqueness...")
+                            raw_conn = db.engine.raw_connection()
+                            try:
+                                cur = raw_conn.cursor()
+                                cur.execute("PRAGMA foreign_keys = OFF")
+                                cur.execute("BEGIN TRANSACTION")
+                                cur.execute("""
+                                CREATE TABLE attendances_migrated (
+                                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                                    student_id INTEGER NOT NULL,
+                                    subject_id INTEGER,
+                                    teacher_id INTEGER,
+                                    semester VARCHAR(32),
+                                    section VARCHAR(32),
+                                    date DATE NOT NULL,
+                                    time_in TIME,
+                                    time_out TIME,
+                                    status VARCHAR(20) NOT NULL DEFAULT 'Present',
+                                    marked_by INTEGER,
+                                    method VARCHAR(20) NOT NULL DEFAULT 'QR',
+                                    remarks VARCHAR(255),
+                                    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                    updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                                    CONSTRAINT uq_student_date_subject_attendance UNIQUE (student_id, date, subject_id),
+                                    FOREIGN KEY(student_id) REFERENCES students (id) ON DELETE CASCADE,
+                                    FOREIGN KEY(subject_id) REFERENCES subjects (id) ON DELETE SET NULL,
+                                    FOREIGN KEY(teacher_id) REFERENCES teachers (id) ON DELETE SET NULL,
+                                    FOREIGN KEY(marked_by) REFERENCES users (id) ON DELETE SET NULL
+                                )
+                                """)
+                                cur.execute("""
+                                INSERT INTO attendances_migrated (id, student_id, subject_id, teacher_id, semester, section, date, time_in, time_out, status, marked_by, method, remarks, created_at, updated_at)
+                                SELECT id, student_id, subject_id, teacher_id, semester, section, date, time_in, time_out, status, marked_by, method, remarks, created_at, updated_at
+                                FROM attendances
+                                """)
+                                cur.execute("DROP TABLE attendances")
+                                cur.execute("ALTER TABLE attendances_migrated RENAME TO attendances")
+                                cur.execute("CREATE INDEX IF NOT EXISTS ix_attendances_date ON attendances (date)")
+                                cur.execute("CREATE INDEX IF NOT EXISTS ix_attendances_student_id ON attendances (student_id)")
+                                cur.execute("CREATE INDEX IF NOT EXISTS ix_attendances_subject_id ON attendances (subject_id)")
+                                cur.execute("CREATE INDEX IF NOT EXISTS idx_attendance_date_student_subject ON attendances (date, student_id, subject_id)")
+                                raw_conn.commit()
+                                cur.execute("PRAGMA foreign_keys = ON")
+                                app.logger.info("✓ SQLite attendances migration completed successfully.")
+                            finally:
+                                raw_conn.close()
+                    elif dialect_name == 'postgresql':
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances DROP CONSTRAINT IF EXISTS uq_student_date_attendance"))
+                            db.session.execute(text("ALTER TABLE attendances DROP CONSTRAINT IF EXISTS uq_student_date"))
+                            db.session.execute(text("ALTER TABLE attendances DROP CONSTRAINT IF EXISTS uq_attendances_student_date"))
+                            db.session.execute(text("""
+                                DO $$
+                                BEGIN
+                                    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_student_date_subject_attendance') THEN
+                                        ALTER TABLE attendances ADD CONSTRAINT uq_student_date_subject_attendance UNIQUE (student_id, date, subject_id);
+                                    END IF;
+                                END $$;
+                            """))
+                            db.session.commit()
+                        except Exception as pge:
+                            db.session.rollback()
+                            app.logger.warning(f"PostgreSQL attendances constraint migration notice: {pge}")
             except Exception as e:
                 db.session.rollback()
                 app.logger.warning(f"Attendance table inspection/alter skipped: {e}")

@@ -1,5 +1,6 @@
 from datetime import datetime, date, time
 from flask import current_app
+from sqlalchemy.exc import IntegrityError
 from app.extensions import db
 from app.models.student import Student
 from app.models.teacher import Teacher
@@ -115,21 +116,40 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
 
     if not record:
         # Case 1: First scan -> Check In (Time In)
-        record = Attendance(
-            student_id=student.id,
-            subject_id=subject_id,
-            teacher_id=teacher_id,
-            semester=semester,
-            section=student.section if student else None,
-            date=today,
-            time_in=now_time,
-            time_out=None,
-            status='Present',
-            marked_by=marker_user.id if marker_user and hasattr(marker_user, 'id') else None,
-            method='QR'
-        )
-        db.session.add(record)
-        db.session.commit()
+        try:
+            record = Attendance(
+                student_id=student.id,
+                subject_id=subject_id,
+                teacher_id=teacher_id,
+                semester=semester,
+                section=student.section if student else None,
+                date=today,
+                time_in=now_time,
+                time_out=None,
+                status='Present',
+                marked_by=marker_user.id if marker_user and hasattr(marker_user, 'id') else None,
+                method='QR'
+            )
+            db.session.add(record)
+            db.session.commit()
+        except IntegrityError as ie:
+            db.session.rollback()
+            current_app.logger.warning(f"Integrity warning on check-in: {ie}. Querying existing record...")
+            record = Attendance.query.filter_by(student_id=student.id, date=today, subject_id=subject_id).first()
+            if not record:
+                return {
+                    'success': False,
+                    'error_code': 'DATABASE_ERROR',
+                    'message': 'Unable to record attendance due to database unique constraint.'
+                }
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected database error saving Time In: {e}")
+            return {
+                'success': False,
+                'error_code': 'SERVER_ERROR',
+                'message': f"Failed to save attendance: {str(e)}"
+            }
 
         AuditLog.log(
             'ATTENDANCE_TIME_IN',
@@ -179,17 +199,28 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
                     'subject': {
                         'id': subject.id,
                         'code': subject.subject_code,
-                        'name': subject.subject_name
-                    } if subject else None
+                        'name': subject.subject_name,
+                        'semester': record.semester or (subject.semester if subject else None)
+                    } if subject else None,
+                    'attendance': record.to_dict()
                 }
 
-        record.time_out = now_time
-        if teacher_id and not record.teacher_id:
-            record.teacher_id = teacher_id
-        if semester and not record.semester:
-            record.semester = semester
-        record.updated_at = datetime.utcnow()
-        db.session.commit()
+        try:
+            record.time_out = now_time
+            if teacher_id and not record.teacher_id:
+                record.teacher_id = teacher_id
+            if semester and not record.semester:
+                record.semester = semester
+            record.updated_at = datetime.utcnow()
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.error(f"Unexpected database error saving Time Out: {e}")
+            return {
+                'success': False,
+                'error_code': 'SERVER_ERROR',
+                'message': f"Failed to save Time Out: {str(e)}"
+            }
 
         AuditLog.log(
             'ATTENDANCE_TIME_OUT',
@@ -211,7 +242,8 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None, semes
             'subject': {
                 'id': subject.id,
                 'code': subject.subject_code,
-                'name': subject.subject_name
+                'name': subject.subject_name,
+                'semester': record.semester or (subject.semester if subject else None)
             } if subject else None,
             'teacher': {
                 'id': teacher_obj.id,

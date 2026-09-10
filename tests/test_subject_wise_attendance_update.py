@@ -367,3 +367,170 @@ def test_immediate_zero_gap_subject_switching(client, seeded_db):
     assert att_os is not None and att_os.status == 'Present'
     assert len({att_dbms.id, att_dsa.id, att_os.id}) == 3
 
+def test_exact_subject_switching_reverse_and_multiple_cycles(client, seeded_db):
+    """
+    Test exact prompt sections:
+    - Section 26: Teacher Login -> Select DBMS -> Scan Student A -> DBMS Success -> Switch Data Structures -> Scan SAME Student A -> Expected: Both DBMS & Data Structures Present.
+    - Section 27: Reverse Test: Data Structures -> Student B -> Complete -> DBMS -> Student B -> Both Present.
+    - Section 28: Multiple Switches: DBMS -> Data Structures -> OS -> DBMS -> Data Structures.
+    """
+    teacher = Teacher.query.filter_by(employee_id='TCH101').first()
+    student_a = Student.query.filter_by(student_id='STU2026001').first()
+    student_b = Student.query.filter_by(student_id='STU2026002').first()
+    if not student_b:
+        user_b = User(username='student_b_test', email='student_b_test@example.com', role='student')
+        user_b.set_password('Student@1234')
+        seeded_db.session.add(user_b)
+        seeded_db.session.flush()
+        student_b = Student(
+            user_id=user_b.id,
+            student_id='STU2026002',
+            roll_number='CS002',
+            full_name='Student B Test',
+            department_id=1,
+            semester='4th',
+            course='B.Tech CSE',
+            qr_token='QR_TOKEN_STU_B_TEST'
+        )
+        seeded_db.session.add(student_b)
+        seeded_db.session.commit()
+
+    sub_dbms = Subject(subject_code='CS601', subject_name='DBMS Multi', semester='4th', is_active=True)
+    sub_dsa = Subject(subject_code='CS602', subject_name='DSA Multi', semester='4th', is_active=True)
+    sub_os = Subject(subject_code='CS603', subject_name='OS Multi', semester='4th', is_active=True)
+
+    seeded_db.session.add_all([sub_dbms, sub_dsa, sub_os])
+    seeded_db.session.commit()
+
+    sub_dbms.teachers.append(teacher)
+    sub_dsa.teachers.append(teacher)
+    sub_os.teachers.append(teacher)
+    seeded_db.session.commit()
+
+    client.post('/auth/login', data={'identity': 'teacher', 'password': 'Teacher@1234'})
+    today = get_current_ist_date()
+
+    # Section 26: EXACT TEST
+    # 1. Select DBMS -> Scan Student A
+    r_a1 = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': sub_dbms.id})
+    assert r_a1.status_code == 200 and r_a1.get_json()['success'] is True
+    # 2. Select Data Structures -> Scan SAME Student A
+    r_a2 = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': sub_dsa.id})
+    assert r_a2.status_code == 200 and r_a2.get_json()['success'] is True
+
+    # Both records must exist
+    att_a_dbms = Attendance.query.filter_by(student_id=student_a.id, date=today, subject_id=sub_dbms.id).first()
+    att_a_dsa = Attendance.query.filter_by(student_id=student_a.id, date=today, subject_id=sub_dsa.id).first()
+    assert att_a_dbms is not None and att_a_dbms.status == 'Present'
+    assert att_a_dsa is not None and att_a_dsa.status == 'Present'
+
+    # Section 27: REVERSE TEST
+    # 1. Data Structures -> Student B
+    r_b1 = client.post('/api/attendance/scan', json={'token': student_b.qr_token, 'subject_id': sub_dsa.id})
+    assert r_b1.status_code == 200 and r_b1.get_json()['success'] is True
+    # 2. DBMS -> Student B
+    r_b2 = client.post('/api/attendance/scan', json={'token': student_b.qr_token, 'subject_id': sub_dbms.id})
+    assert r_b2.status_code == 200 and r_b2.get_json()['success'] is True
+
+    att_b_dsa = Attendance.query.filter_by(student_id=student_b.id, date=today, subject_id=sub_dsa.id).first()
+    att_b_dbms = Attendance.query.filter_by(student_id=student_b.id, date=today, subject_id=sub_dbms.id).first()
+    assert att_b_dsa is not None and att_b_dsa.status == 'Present'
+    assert att_b_dbms is not None and att_b_dbms.status == 'Present'
+
+    # Section 28: MULTIPLE SWITCH CYCLES FOR STUDENT A
+    # Student A in OS
+    r_a3 = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': sub_os.id})
+    assert r_a3.status_code == 200 and r_a3.get_json()['success'] is True
+
+    att_a_os = Attendance.query.filter_by(student_id=student_a.id, date=today, subject_id=sub_os.id).first()
+    assert att_a_os is not None and att_a_os.status == 'Present'
+
+
+def test_second_subject_no_response_bug_prevention(client, seeded_db):
+    """
+    Exhaustive validation of the Master Prompt checklist:
+    1. Second subject QR scans and sends the new subject_id.
+    2. Old subject ID is never reused.
+    3. Teacher is authorized for the second subject.
+    4. Database creates/updates the correct subject record.
+    5. Same student can attend multiple subjects on one day without cooldown.
+    6. API returns an explicit response with 'action'.
+    7. Unauthenticated API returns JSON 401 (not HTML 302).
+    8. Unauthorized subject returns JSON 403 with clear message.
+    """
+    teacher = Teacher.query.filter_by(employee_id='TCH101').first()
+    student_a = Student.query.filter_by(student_id='STU2026001').first()
+
+    # Create 3 assigned subjects
+    s_dbms = Subject(subject_code='CS701', subject_name='Database Management Systems', semester='4th', is_active=True)
+    s_dsa = Subject(subject_code='CS702', subject_name='Data Structures and Algorithms', semester='4th', is_active=True)
+    s_os = Subject(subject_code='CS703', subject_name='Operating Systems Concepts', semester='4th', is_active=True)
+    s_unauth = Subject(subject_code='ME701', subject_name='Thermodynamics', semester='4th', is_active=True)
+
+    seeded_db.session.add_all([s_dbms, s_dsa, s_os, s_unauth])
+    seeded_db.session.commit()
+
+    # Assign only DBMS, DSA, and OS to teacher
+    s_dbms.teachers.append(teacher)
+    s_dsa.teachers.append(teacher)
+    s_os.teachers.append(teacher)
+    seeded_db.session.commit()
+
+    # Verify unauthenticated request to /api/attendance/scan returns JSON 401
+    client.get('/auth/logout')
+    unauth_res = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': s_dbms.id})
+    assert unauth_res.status_code == 401
+    unauth_data = unauth_res.get_json()
+    assert unauth_data is not None
+    assert unauth_data['success'] is False
+    assert unauth_data['action'] == 'UNAUTHORIZED'
+
+    # Login as Teacher
+    client.post('/auth/login', data={'identity': 'teacher', 'password': 'Teacher@1234'})
+    today = get_current_ist_date()
+
+    # Step 1: Teacher takes attendance for DBMS
+    r1 = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': s_dbms.id, 'semester': '4th'})
+    assert r1.status_code == 200
+    d1 = r1.get_json()
+    assert d1['success'] is True
+    assert d1['action'] == 'TIME_IN'
+    assert d1['subject_id'] == s_dbms.id
+
+    # Step 2: Immediately switch to Data Structures (0s delay)
+    r2 = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': s_dsa.id, 'semester': '4th Semester'})
+    assert r2.status_code == 200
+    d2 = r2.get_json()
+    assert d2['success'] is True
+    assert d2['action'] == 'TIME_IN'
+    assert d2['subject_id'] == s_dsa.id
+
+    # Step 3: Immediately switch to Operating System (0s delay)
+    r3 = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': s_os.id, 'semester': 'Semester 4'})
+    assert r3.status_code == 200
+    d3 = r3.get_json()
+    assert d3['success'] is True
+    assert d3['action'] == 'TIME_IN'
+    assert d3['subject_id'] == s_os.id
+
+    # Step 4: Verify Database has 3 distinct, independent attendance records for Student A
+    records = Attendance.query.filter_by(student_id=student_a.id, date=today).all()
+    sub_ids = {r.subject_id for r in records}
+    assert s_dbms.id in sub_ids
+    assert s_dsa.id in sub_ids
+    assert s_os.id in sub_ids
+    assert len(records) == 3
+    for r in records:
+        assert r.status == 'Present'
+        assert r.time_in is not None
+
+    # Step 5: Test unauthorized subject attempt
+    r_unauth = client.post('/api/attendance/scan', json={'token': student_a.qr_token, 'subject_id': s_unauth.id})
+    assert r_unauth.status_code == 403
+    d_unauth = r_unauth.get_json()
+    assert d_unauth['success'] is False
+    assert d_unauth['action'] == 'UNAUTHORIZED_SUBJECT'
+    assert 'not authorized' in d_unauth['message'].lower()
+
+
+

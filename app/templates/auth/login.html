@@ -12,8 +12,9 @@
         
         <!-- Header -->
         <div class="text-center mb-4">
-          <img src="{{ url_for('static', filename='images/logo.png') }}" alt="VSGOI Logo" class="rounded-4 shadow mb-3" style="width: 72px; height: 72px; object-fit: cover; border: 2px solid var(--border-glass);">
-          <h2 class="fw-bold brand-font mb-0" style="letter-spacing: 0.04em;">VSGOI</h2>
+          <div class="d-inline-block bg-white rounded-4 shadow-sm p-3 mb-3" style="border: 2px solid var(--border-glass);">
+            <img src="{{ url_for('static', filename='images/logo_full.png') }}?v=3" alt="VSGOI Logo" style="height: 72px; max-width: 100%; object-fit: contain;">
+          </div>
           <div class="text-primary fw-semibold small mb-1" style="font-size: 0.8rem; letter-spacing: 0.05em;">ATTENDANCE ERP</div>
           <p class="text-muted mb-0" style="font-size: 0.82rem;">Dr. Virendra Swarup Memorial Trust Group of Institutions</p>
         </div>

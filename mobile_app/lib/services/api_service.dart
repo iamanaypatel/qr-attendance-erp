@@ -171,29 +171,65 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> scanAttendance(String token, {int? subjectId, String? semester}) async {
-    try {
-      final bodyMap = <String, dynamic>{'token': token.trim()};
-      if (subjectId != null) {
-        bodyMap['subject_id'] = subjectId;
-      }
-      if (semester != null && semester.isNotEmpty) {
-        bodyMap['semester'] = semester;
-      }
+    final endpoint = '$_baseUrl/api/attendance/scan';
+    final bodyMap = <String, dynamic>{'token': token.trim()};
+    if (subjectId != null) {
+      bodyMap['subject_id'] = subjectId;
+    }
+    if (semester != null && semester.isNotEmpty) {
+      bodyMap['semester'] = semester;
+    }
 
+    try {
       final response = await http
           .post(
-            Uri.parse('$_baseUrl/api/attendance/scan'),
+            Uri.parse(endpoint),
             headers: _headers(),
             body: jsonEncode(bodyMap),
           )
           .timeout(const Duration(seconds: 8));
 
-      final data = jsonDecode(response.body) as Map<String, dynamic>;
+      _updateCookie(response);
+
+      // Log non-sensitive request context per specification
+      final teacherId = _currentUser?['id'] ?? _currentUser?['teacher_id'] ?? 'Unknown';
+      debugPrint(
+        "ATTENDANCE_API_LOG: Teacher=$teacherId Subject=$subjectId Semester=$semester "
+        "POST /api/attendance/scan Status=${response.statusCode}",
+      );
+
+      if (response.statusCode == 401) {
+        return {
+          'success': false,
+          'action': 'UNAUTHORIZED',
+          'message': 'Session expired. Please log in again to mark attendance.',
+        };
+      }
+
+      Map<String, dynamic> data;
+      try {
+        data = jsonDecode(response.body) as Map<String, dynamic>;
+      } catch (jsonErr) {
+        debugPrint("ATTENDANCE_API_LOG: Non-JSON body: ${response.body}");
+        return {
+          'success': false,
+          'action': 'SERVER_ERROR',
+          'message': 'Server returned an invalid response (Status ${response.statusCode}).',
+        };
+      }
+
+      final studentId = data['student']?['student_id'] ?? '-';
+      debugPrint(
+        "ATTENDANCE_API_LOG: Student=$studentId Action=${data['action']} Success=${data['success']}",
+      );
+
       return data;
     } catch (e) {
+      debugPrint("ATTENDANCE_API_LOG: Network failure: $e");
       return {
         'success': false,
-        'message': 'Network scan failure: $e',
+        'action': 'NETWORK_ERROR',
+        'message': 'Unable to connect to server: $e',
       };
     }
   }

@@ -5,7 +5,9 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}Dashboard{% endblock %} — {{ institution_name or 'QR Attendance ERP' }}</title>
-  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}">
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='images/favicon.png') }}?v=3">
+  <link rel="shortcut icon" href="{{ url_for('static', filename='images/favicon.ico') }}?v=3">
+  <link rel="apple-touch-icon" href="{{ url_for('static', filename='images/logo.png') }}?v=3">
 
   <!-- Prevent FOUC: Apply user saved theme before render -->
   <script>
@@ -60,7 +62,7 @@
       <aside class="app-sidebar" id="appSidebar">
         <div class="sidebar-header">
           <a href="/" class="sidebar-brand d-flex align-items-center gap-2">
-            <img src="{{ url_for('static', filename='images/logo.png') }}" alt="Logo" class="rounded-3 shadow-sm" style="width: 38px; height: 38px; object-fit: cover; border: 1.5px solid var(--border-glass);">
+            <img src="{{ url_for('static', filename='images/logo.png') }}?v=3" alt="Logo" class="rounded-3 shadow-sm" style="width: 38px; height: 38px; object-fit: contain; border: 1.5px solid var(--border-glass); background: #ffffff; padding: 2px;">
             <div class="overflow-hidden">
               <div class="fw-bold lh-1 brand-font text-truncate" style="font-size: 1.05rem; letter-spacing: 0.05em;">VSGOI</div>
               <small class="text-primary fw-semibold text-truncate d-block" style="font-size: 0.65rem; letter-spacing: 0.04em;">ATTENDANCE ERP</small>
@@ -240,6 +242,26 @@
 
     <!-- Main Content Area -->
     <div class="main-content">
+      {% if not current_user.is_authenticated %}
+        <!-- Guest / Login Top Navbar -->
+        <nav class="navbar glass-nav px-3 px-lg-4 py-2 border-bottom" style="border-color: var(--border-glass) !important;">
+          <div class="container-fluid p-0 d-flex align-items-center justify-content-between">
+            <a href="/" class="d-flex align-items-center gap-2 text-decoration-none">
+              <img src="{{ url_for('static', filename='images/logo.png') }}?v=3" alt="VSGOI Logo" class="rounded-3 shadow-sm" style="width: 36px; height: 36px; object-fit: contain; border: 1.5px solid var(--border-glass); background: #ffffff; padding: 2px;">
+              <div>
+                <div class="fw-bold lh-1 brand-font" style="font-size: 1rem; letter-spacing: 0.04em;">VSGOI</div>
+                <small class="text-primary fw-semibold d-block" style="font-size: 0.65rem; letter-spacing: 0.04em;">ATTENDANCE ERP</small>
+              </div>
+            </a>
+            <div class="d-flex align-items-center gap-2">
+              <button class="btn btn-sm btn-outline-secondary rounded-circle" id="theme-toggle-btn" type="button" title="Toggle Theme" style="width: 36px; height: 36px;">
+                <i class="bi bi-moon-stars-fill" id="theme-toggle-icon"></i>
+              </button>
+            </div>
+          </div>
+        </nav>
+      {% endif %}
+
       {% if current_user.is_authenticated %}
         <!-- Top Navbar -->
         <nav class="navbar glass-nav px-3 px-lg-4">

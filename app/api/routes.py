@@ -1,5 +1,5 @@
 from datetime import date, datetime
-from flask import jsonify, request
+from flask import jsonify, request, current_app
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 from app.api import api_bp
@@ -162,7 +162,15 @@ def scan_attendance():
         except (ValueError, TypeError):
             subject_id = None
 
+    current_app.logger.info(
+        f"API_SCAN_REQUEST: MarkerUser={current_user.id} ({current_user.username}) "
+        f"SubjectId={subject_id} Semester={semester} TokenPrefix={token[:6] if token else ''}"
+    )
+
     result = process_qr_attendance(token, marker_user=current_user, subject_id=subject_id, semester=semester)
+    if 'action' not in result:
+        result['action'] = 'SUCCESS' if result.get('success') else (result.get('error_code') or 'SCAN_FAILED')
+
     if result.get('success'):
         status_code = 200
     elif result.get('error_code') in ('UNAUTHORIZED_SUBJECT', 'UNAUTHORIZED_TEACHER'):
@@ -172,6 +180,12 @@ def scan_attendance():
         status_code = 200
     else:
         status_code = 400
+
+    current_app.logger.info(
+        f"API_SCAN_RESPONSE: Status={status_code} Success={result.get('success')} "
+        f"Action={result.get('action')} StudentId={result.get('student', {}).get('student_id')} "
+        f"SubjectId={result.get('subject_id')}"
+    )
 
     return jsonify(result), status_code
 
