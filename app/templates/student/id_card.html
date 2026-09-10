@@ -266,13 +266,17 @@
           <!-- Left: Photo with Initial Fallback -->
           <div class="id-card-photo-box">
             {% if student.photo %}
-              <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="{{ student.full_name }}" class="id-card-photo-img">
+              <img src="{{ student.photo_url }}" alt="{{ student.full_name }}" class="id-card-photo-img" onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+              <div class="id-card-photo-fallback" style="display: none;">
+                {{ student.full_name[0] | upper }}
+              </div>
             {% else %}
               <div class="id-card-photo-fallback">
                 {{ student.full_name[0] | upper }}
               </div>
             {% endif %}
           </div>
+
 
           <!-- Middle: Student Details (Label-Value Pairs) -->
           <div class="id-card-details">

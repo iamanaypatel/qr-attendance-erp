@@ -23,6 +23,38 @@ class _ScannerScreenState extends State<ScannerScreen> {
   DateTime _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
   final List<Map<String, dynamic>> _sessionScans = [];
 
+  List<Map<String, dynamic>> _subjects = [];
+  int? _selectedSubjectId;
+  String? _selectedSubjectLabel;
+  bool _loadingSubjects = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchSubjects();
+  }
+
+  Future<void> _fetchSubjects() async {
+    final user = ApiService().currentUser;
+    List<dynamic> list = [];
+    if (user != null && user['role'] == 'teacher') {
+      list = await ApiService().getTeacherSubjects();
+    } else {
+      list = await ApiService().getSubjects();
+    }
+
+    if (mounted) {
+      setState(() {
+        _subjects = list.map((e) => Map<String, dynamic>.from(e)).toList();
+        _loadingSubjects = false;
+        if (_subjects.isNotEmpty) {
+          _selectedSubjectId = _subjects.first['id'] as int?;
+          _selectedSubjectLabel = "${_subjects.first['subject_code']} - ${_subjects.first['subject_name']}";
+        }
+      });
+    }
+  }
+
   @override
   void dispose() {
     _scannerController.dispose();
@@ -58,7 +90,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     HapticFeedback.mediumImpact();
 
-    final result = await ApiService().scanAttendance(token);
+    final result = await ApiService().scanAttendance(token, subjectId: _selectedSubjectId);
 
     if (!mounted) return;
 
@@ -77,6 +109,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
           'id': student['student_id'] ?? '-',
           'action': result['action'] ?? 'TIME_IN',
           'time': attendance['time_in'] ?? attendance['time_out'] ?? 'Just now',
+          'subject': _selectedSubjectLabel ?? 'General',
           'success': true,
         });
       });
@@ -87,6 +120,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         message: result['message'] ?? 'Attendance marked successfully.',
         action: result['action'] ?? 'TIME_IN',
         student: student,
+        subjectLabel: _selectedSubjectLabel,
       );
     } else {
       HapticFeedback.vibrate();
@@ -97,6 +131,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         message: result['message'] ?? 'Unable to process QR code.',
         action: result['action'] ?? 'FAILED',
         student: student,
+        subjectLabel: _selectedSubjectLabel,
       );
     }
   }
@@ -199,6 +234,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
     required String message,
     required String action,
     required Map<String, dynamic> student,
+    String? subjectLabel,
   }) {
     final color = isSuccess
         ? (action == 'TIME_IN' ? const Color(0xFF10B981) : const Color(0xFF3B82F6))
@@ -246,6 +282,20 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         message,
                         style: const TextStyle(fontSize: 13),
                       ),
+                      if (subjectLabel != null) ...[
+                        const SizedBox(height: 4),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.withValues(alpha: 0.12),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Text(
+                            "Subject: $subjectLabel",
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Colors.blue),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -358,6 +408,71 @@ class _ScannerScreenState extends State<ScannerScreen> {
       ),
       body: Column(
         children: [
+          // Subject Selector Bar
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.surface,
+              border: Border(
+                bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
+              ),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.book_outlined, size: 20, color: Color(0xFF2563EB)),
+                const SizedBox(width: 8),
+                const Text(
+                  "Subject:",
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _loadingSubjects
+                      ? const Align(
+                          alignment: Alignment.centerLeft,
+                          child: SizedBox(
+                            height: 16,
+                            width: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      : DropdownButtonHideUnderline(
+                          child: DropdownButton<int?>(
+                            value: _selectedSubjectId,
+                            isExpanded: true,
+                            hint: const Text("General (No Subject)", style: TextStyle(fontSize: 13)),
+                            items: [
+                              const DropdownMenuItem<int?>(
+                                value: null,
+                                child: Text("General / No Subject", style: TextStyle(fontSize: 13)),
+                              ),
+                              ..._subjects.map((sub) => DropdownMenuItem<int?>(
+                                    value: sub['id'] as int?,
+                                    child: Text(
+                                      "${sub['subject_code']} - ${sub['subject_name']}",
+                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  )),
+                            ],
+                            onChanged: (val) {
+                              setState(() {
+                                _selectedSubjectId = val;
+                                if (val != null) {
+                                  final found = _subjects.firstWhere((s) => s['id'] == val, orElse: () => {});
+                                  _selectedSubjectLabel = "${found['subject_code']} - ${found['subject_name']}";
+                                } else {
+                                  _selectedSubjectLabel = null;
+                                }
+                              });
+                            },
+                          ),
+                        ),
+                ),
+              ],
+            ),
+          ),
+
           // Scanner Viewport Box
           Expanded(
             flex: 5,
@@ -455,6 +570,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                             itemBuilder: (ctx, i) {
                               final item = _sessionScans[i];
                               final isTimeIn = item['action'] == 'TIME_IN';
+                              final subject = item['subject'] ?? 'General';
                               return ListTile(
                                 leading: CircleAvatar(
                                   backgroundColor: isTimeIn ? Colors.green : Colors.blue,
@@ -462,7 +578,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                   child: Icon(isTimeIn ? Icons.login : Icons.logout, size: 20),
                                 ),
                                 title: Text(item['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                                subtitle: Text("${item['id']} • ${item['time']}"),
+                                subtitle: Text("${item['id']} • ${item['time']}\n[$subject]"),
+                                isThreeLine: true,
                                 trailing: Text(
                                   item['action'],
                                   style: TextStyle(

@@ -40,6 +40,18 @@
             </select>
           </div>
 
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">SUBJECT (OPTIONAL)</label>
+            <select name="subject_id" class="form-select">
+              <option value="">-- General Campus Attendance (No Subject) --</option>
+              {% for sub in available_subjects %}
+                <option value="{{ sub.id }}">
+                  [{{ sub.subject_code }}] {{ sub.subject_name }} {% if sub.semester %}({{ sub.semester }} Sem){% endif %}
+                </option>
+              {% endfor %}
+            </select>
+          </div>
+
           <div class="row g-2 mb-3">
             <div class="col-md-6">
               <label class="form-label small fw-semibold text-muted">DATE *</label>

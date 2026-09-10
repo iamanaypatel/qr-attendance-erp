@@ -34,6 +34,14 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleLogin() async {
+    // Check if another user session is already active in the APK
+    if (ApiService().isAuthenticated) {
+      setState(() {
+        _errorMessage = "Another user is already logged in.\nPlease logout from the current account before signing in with another account.";
+      });
+      return;
+    }
+
     final user = _usernameController.text.trim();
     final pass = _passwordController.text.trim();
 
@@ -66,32 +74,6 @@ class _LoginScreenState extends State<LoginScreen> {
     } else {
       setState(() {
         _errorMessage = res['message'] ?? "Invalid credentials. Please verify your login details.";
-      });
-    }
-  }
-
-  Future<void> _quickSwitchAccount(String username) async {
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    final ok = await ApiService().switchAccount(username);
-    if (!mounted) return;
-
-    setState(() {
-      _isLoading = false;
-    });
-
-    if (ok) {
-      Navigator.of(context).pushReplacement(
-        MaterialPageRoute(
-          builder: (_) => HomeScreen(onToggleTheme: widget.onToggleTheme),
-        ),
-      );
-    } else {
-      setState(() {
-        _errorMessage = "Session expired for this account. Please enter password to log in.";
       });
     }
   }
@@ -208,36 +190,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Color _getRoleColor(String? role) {
-    switch (role?.toLowerCase()) {
-      case 'admin':
-        return Colors.amber.shade700;
-      case 'teacher':
-        return Colors.blue.shade600;
-      case 'student':
-        return const Color(0xFF10B981);
-      default:
-        return Colors.indigo;
-    }
-  }
-
-  IconData _getRoleIcon(String? role) {
-    switch (role?.toLowerCase()) {
-      case 'admin':
-        return Icons.admin_panel_settings_rounded;
-      case 'teacher':
-        return Icons.school_rounded;
-      case 'student':
-        return Icons.person_rounded;
-      default:
-        return Icons.account_circle_rounded;
-    }
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final saved = ApiService().savedAccounts;
 
     return Scaffold(
       appBar: AppBar(
@@ -371,100 +326,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
                 const SizedBox(height: 20),
 
-                // Multi-Account Switcher Section (if user has previously logged in accounts)
-                if (saved.isNotEmpty) ...[
-                  Card(
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
-                    child: Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Row(
-                                children: [
-                                  Icon(Icons.switch_account_rounded, size: 18, color: Color(0xFF2563EB)),
-                                  SizedBox(width: 8),
-                                  Text(
-                                    "SWITCH SAVED ACCOUNT",
-                                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, letterSpacing: 0.5),
-                                  ),
-                                ],
-                              ),
-                              Text(
-                                "${saved.length} Available",
-                                style: const TextStyle(fontSize: 11, color: Colors.grey),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          ...saved.map((acc) {
-                            final username = acc['username'] ?? '';
-                            final role = acc['role'] ?? 'user';
-                            final name = acc['display_name'] ?? username;
-                            final roleColor = _getRoleColor(role);
-
-                            return Container(
-                              margin: const EdgeInsets.only(bottom: 8),
-                              decoration: BoxDecoration(
-                                color: Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(color: Colors.grey.withValues(alpha: 0.2)),
-                              ),
-                              child: ListTile(
-                                dense: true,
-                                leading: CircleAvatar(
-                                  backgroundColor: roleColor.withValues(alpha: 0.2),
-                                  child: Icon(_getRoleIcon(role), color: roleColor, size: 18),
-                                ),
-                                title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                                subtitle: Text("@$username • ${role.toUpperCase()}", style: TextStyle(fontSize: 11, color: roleColor)),
-                                trailing: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.close, size: 16, color: Colors.grey),
-                                      tooltip: "Remove",
-                                      onPressed: () async {
-                                        await ApiService().removeAccount(username);
-                                        setState(() {});
-                                      },
-                                    ),
-                                    ElevatedButton(
-                                      style: ElevatedButton.styleFrom(
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                        visualDensity: VisualDensity.compact,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                      onPressed: _isLoading ? null : () => _quickSwitchAccount(username),
-                                      child: const Text("Enter", style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            );
-                          }),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  const Row(
-                    children: [
-                      Expanded(child: Divider()),
-                      Padding(
-                        padding: EdgeInsets.symmetric(horizontal: 12),
-                        child: Text("OR SIGN IN WITH NEW ACCOUNT", style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
-                      ),
-                      Expanded(child: Divider()),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                ],
-
-                // New Login Card
+                // Sign In Card
                 Card(
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                   child: Padding(
@@ -485,6 +347,78 @@ class _LoginScreenState extends State<LoginScreen> {
                           style: TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 18),
+
+                        // Active Session Notice if a user is already authenticated
+                        if (ApiService().isAuthenticated) ...[
+                          Container(
+                            padding: const EdgeInsets.all(14),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.amber.shade900.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(color: Colors.amber.shade700.withValues(alpha: 0.4)),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.warning_amber_rounded, color: Colors.amber, size: 20),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: Text(
+                                        "Active User: @${ApiService().currentUser?['username'] ?? 'User'}",
+                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                const Text(
+                                  "Another user is already logged in. Please logout before signing in with another account.",
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                                const SizedBox(height: 10),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: OutlinedButton.icon(
+                                        style: OutlinedButton.styleFrom(
+                                          foregroundColor: Colors.redAccent,
+                                          side: const BorderSide(color: Colors.redAccent),
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                        ),
+                                        icon: const Icon(Icons.logout_rounded, size: 16),
+                                        label: const Text("Logout", style: TextStyle(fontSize: 12)),
+                                        onPressed: () async {
+                                          await ApiService().logout();
+                                          if (mounted) setState(() {});
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Expanded(
+                                      child: ElevatedButton.icon(
+                                        style: ElevatedButton.styleFrom(
+                                          padding: const EdgeInsets.symmetric(vertical: 8),
+                                        ),
+                                        icon: const Icon(Icons.dashboard_rounded, size: 16),
+                                        label: const Text("Portal", style: TextStyle(fontSize: 12)),
+                                        onPressed: () {
+                                          Navigator.of(context).pushReplacement(
+                                            MaterialPageRoute(
+                                              builder: (_) => HomeScreen(onToggleTheme: widget.onToggleTheme),
+                                            ),
+                                          );
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
 
                         if (_errorMessage != null) ...[
                           Container(

@@ -90,6 +90,12 @@
               </a>
             </li>
             <li>
+              <a href="{{ url_for('admin.subjects') }}" class="sidebar-link {% if 'admin.subject' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-journal-bookmark-fill"></i>
+                <span>Subjects</span>
+              </a>
+            </li>
+            <li>
               <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if request.endpoint == 'attendance.scanner' %}active{% endif %}">
                 <i class="bi bi-qr-code-scan"></i>
                 <span>Take Attendance</span>
@@ -129,6 +135,12 @@
               </a>
             </li>
             <li>
+              <a href="{{ url_for('teacher.subjects') }}" class="sidebar-link {% if 'teacher.subject' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-journal-bookmark-fill"></i>
+                <span>My Subjects</span>
+              </a>
+            </li>
+            <li>
               <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if request.endpoint == 'attendance.scanner' %}active{% endif %}">
                 <i class="bi bi-qr-code-scan"></i>
                 <span>Take Attendance</span>
@@ -159,6 +171,12 @@
               <a href="{{ url_for('student.dashboard') }}" class="sidebar-link {% if request.endpoint == 'student.dashboard' %}active{% endif %}">
                 <i class="bi bi-grid-1x2-fill"></i>
                 <span>Dashboard</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('student.subjects') }}" class="sidebar-link {% if 'student.subject' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-journal-check"></i>
+                <span>Subject Attendance</span>
               </a>
             </li>
             <li>

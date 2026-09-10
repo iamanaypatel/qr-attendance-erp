@@ -22,14 +22,21 @@
   <div class="row g-4">
     <!-- Left Column: Photo & QR -->
     <div class="col-lg-4">
-      <div class="glass-card p-4 text-center mb-4">
-        {% if student.photo %}
-          <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="{{ student.full_name }}" class="rounded-4 object-fit-cover shadow-sm mb-3" style="width: 130px; height: 130px; border: 3px solid var(--border-glass);">
-        {% else %}
-          <div class="rounded-4 bg-primary text-white d-inline-flex align-items-center justify-content-center fw-bold shadow-sm mb-3" style="width: 130px; height: 130px; font-size: 3.5rem;">
-            {{ student.full_name[0] | upper }}
-          </div>
-        {% endif %}
+        <div class="position-relative d-inline-block mb-3">
+          {% if student.photo %}
+            <img src="{{ student.photo_url }}" alt="{{ student.full_name }}" id="studentProfileImg" class="rounded-4 object-fit-cover shadow-sm" style="width: 130px; height: 130px; border: 3px solid var(--border-glass);" onerror="this.style.display='none'; document.getElementById('studentProfileAvatarFallback').style.display='inline-flex';">
+            <div id="studentProfileAvatarFallback" class="rounded-4 bg-primary text-white align-items-center justify-content-center fw-bold shadow-sm" style="display: none; width: 130px; height: 130px; font-size: 3.5rem; border: 3px solid var(--border-glass);">
+              {{ student.full_name[0] | upper }}
+            </div>
+          {% else %}
+            <div class="rounded-4 bg-primary text-white d-inline-flex align-items-center justify-content-center fw-bold shadow-sm" style="width: 130px; height: 130px; font-size: 3.5rem; border: 3px solid var(--border-glass);">
+              {{ student.full_name[0] | upper }}
+            </div>
+          {% endif %}
+          <button type="button" class="btn btn-sm btn-primary position-absolute bottom-0 end-0 rounded-circle shadow" style="width: 32px; height: 32px; padding: 0; display: flex; align-items: center; justify-content: center;" data-bs-toggle="modal" data-bs-target="#uploadPhotoModal" title="Upload / Change Photo">
+            <i class="bi bi-camera-fill" style="font-size: 0.85rem;"></i>
+          </button>
+        </div>
 
         <h4 class="fw-bold mb-1">{{ student.full_name }}</h4>
         <div class="badge bg-secondary font-monospace mb-2">{{ student.student_id }}</div>
@@ -46,6 +53,7 @@
           </a>
         </div>
       </div>
+
 
       <!-- Attendance Percentage Card -->
       <div class="glass-card p-4">
@@ -137,6 +145,48 @@
         </div>
       </div>
     </div>
+<!-- Upload Photo Modal -->
+<div class="modal fade" id="uploadPhotoModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered modal-sm">
+    <div class="modal-content glass-card border">
+      <div class="modal-header border-0 pb-0">
+        <h5 class="modal-title fw-bold"><i class="bi bi-camera-fill text-primary me-2"></i>Update Photo</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <form method="POST" action="{{ url_for('student.upload_photo') }}" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="modal-body text-center">
+          <p class="text-muted small mb-3">Upload a clean passport-style photo (JPG, PNG, WEBP, max 5MB).</p>
+          
+          <div id="photoPreviewBox" class="mb-3 d-none">
+            <img id="modalPhotoPreview" src="#" alt="Preview" class="rounded-4 object-fit-cover border shadow-sm" style="width: 120px; height: 120px;">
+          </div>
+
+          <div class="mb-2">
+            <input type="file" name="photo" id="studentPhotoFileInput" class="form-control form-control-sm" accept="image/jpeg,image/png,image/webp" required onchange="previewStudentPhoto(this)">
+          </div>
+          <div class="text-muted small" style="font-size: 0.75rem;">Square photos look best on ID card.</div>
+        </div>
+        <div class="modal-footer border-0 pt-0 justify-content-center">
+          <button type="button" class="btn btn-sm btn-outline-secondary px-3" data-bs-dismiss="modal">Cancel</button>
+          <button type="submit" class="btn btn-sm btn-primary-glow px-4">Upload & Save</button>
+        </div>
+      </form>
+    </div>
   </div>
 </div>
+
+<script>
+function previewStudentPhoto(input) {
+  if (input.files && input.files[0]) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      document.getElementById('modalPhotoPreview').src = e.target.result;
+      document.getElementById('photoPreviewBox').classList.remove('d-none');
+    };
+    reader.readAsDataURL(input.files[0]);
+  }
+}
+</script>
 {% endblock %}
+

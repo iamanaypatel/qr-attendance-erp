@@ -17,16 +17,43 @@ from app.attendance.services import process_qr_attendance
 @role_required('admin', 'teacher')
 def scanner():
     today = date.today()
-    recent_scans = Attendance.query.filter_by(date=today).order_by(
-        Attendance.updated_at.desc()
-    ).limit(10).all()
+    selected_subject_id = request.args.get('subject_id', type=int)
 
-    return render_template('attendance/scanner.html', recent_scans=recent_scans, today=today)
+    from app.models.subject import Subject
+    if current_user.is_teacher and current_user.teacher_profile:
+        available_subjects = current_user.teacher_profile.assigned_subjects.filter_by(is_active=True).order_by(Subject.subject_name).all()
+        if selected_subject_id and not current_user.teacher_profile.is_assigned_to_subject(selected_subject_id):
+            flash("You are not assigned to take attendance for that subject. Please select from your assigned subjects.", "warning")
+            selected_subject_id = None
+        if not selected_subject_id and available_subjects:
+            selected_subject_id = available_subjects[0].id
+    else:
+        available_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_name).all()
+
+    recent_query = Attendance.query.filter_by(date=today)
+    if selected_subject_id:
+        recent_query = recent_query.filter_by(subject_id=selected_subject_id)
+    recent_scans = recent_query.order_by(Attendance.updated_at.desc()).limit(10).all()
+
+    return render_template(
+        'attendance/scanner.html',
+        recent_scans=recent_scans,
+        today=today,
+        available_subjects=available_subjects,
+        selected_subject_id=selected_subject_id
+    )
 
 @attendance_bp.route('/manual', methods=['GET', 'POST'])
 @login_required
 @role_required('admin', 'teacher')
 def manual():
+    from app.models.subject import Subject
+
+    if current_user.is_teacher and current_user.teacher_profile:
+        available_subjects = current_user.teacher_profile.assigned_subjects.filter_by(is_active=True).order_by(Subject.subject_name).all()
+    else:
+        available_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_name).all()
+
     if request.method == 'POST':
         student_id_str = request.form.get('student_id', '').strip()
         att_date_str = request.form.get('date', '').strip()
@@ -34,6 +61,20 @@ def manual():
         time_in_str = request.form.get('time_in', '').strip()
         time_out_str = request.form.get('time_out', '').strip()
         remarks = request.form.get('remarks', '').strip()
+        subject_id_str = request.form.get('subject_id', '').strip()
+
+        subject_id = None
+        if subject_id_str:
+            try:
+                subject_id = int(subject_id_str)
+            except (ValueError, TypeError):
+                subject_id = None
+
+        # Verify teacher authorization for subject
+        if subject_id and current_user.is_teacher:
+            if not current_user.teacher_profile or not current_user.teacher_profile.is_assigned_to_subject(subject_id):
+                flash("Unauthorized: You are not assigned to take attendance for this subject.", "danger")
+                return redirect(url_for('attendance.manual'))
 
         student = Student.query.filter(
             (Student.student_id == student_id_str) | (Student.id == student_id_str)
@@ -62,9 +103,16 @@ def manual():
             except ValueError:
                 pass
 
-        # Check existing record for that student + date
-        record = Attendance.query.filter_by(student_id=student.id, date=att_date).first()
+        # Check existing record for that student + date + subject
+        query = Attendance.query.filter(Attendance.student_id == student.id, Attendance.date == att_date)
+        if subject_id:
+            query = query.filter(Attendance.subject_id == subject_id)
+        else:
+            query = query.filter(Attendance.subject_id.is_(None))
+        record = query.first()
+
         method_name = 'Admin' if current_user.is_admin else 'Manual'
+        teacher_id = current_user.teacher_profile.id if current_user.is_teacher and current_user.teacher_profile else None
 
         if record:
             record.status = status
@@ -72,6 +120,8 @@ def manual():
             record.time_out = time_out
             record.remarks = remarks
             record.marked_by = current_user.id
+            if teacher_id:
+                record.teacher_id = teacher_id
             record.method = method_name
             record.updated_at = datetime.utcnow()
             AuditLog.log('ATTENDANCE_MANUAL_UPDATE', f"Manual update for {student.student_id} on {att_date} to {status}", user_id=current_user.id)
@@ -79,6 +129,8 @@ def manual():
         else:
             record = Attendance(
                 student_id=student.id,
+                subject_id=subject_id,
+                teacher_id=teacher_id,
                 date=att_date,
                 time_in=time_in or datetime.now().time(),
                 time_out=time_out,
@@ -107,6 +159,7 @@ def manual():
         'attendance/manual.html',
         students=students,
         departments=departments,
+        available_subjects=available_subjects,
         today=today,
         recent_manual=recent_manual
     )

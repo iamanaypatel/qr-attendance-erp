@@ -59,6 +59,88 @@ class Student(db.Model):
             'percentage': percentage
         }
 
+    def get_subject_wise_attendance(self, start_date=None, end_date=None):
+        """Calculate subject-wise attendance statistics for this student."""
+        from app.models.subject import Subject
+        from app.models.attendance import Attendance
+
+        query = self.attendances
+        if start_date:
+            query = query.filter(Attendance.date >= start_date)
+        if end_date:
+            query = query.filter(Attendance.date <= end_date)
+        records = query.all()
+
+        records_by_subject = {}
+        for a in records:
+            records_by_subject.setdefault(a.subject_id, []).append(a)
+
+        # Subjects associated with student's department & semester
+        dept_subjects_dict = {}
+        if self.department_id:
+            active_dept_subjects = Subject.query.filter_by(
+                department_id=self.department_id,
+                is_active=True
+            ).all()
+            for s in active_dept_subjects:
+                if not s.semester or not self.semester or s.semester.strip().lower() == self.semester.strip().lower():
+                    dept_subjects_dict[s.id] = s
+
+        all_subject_ids = set(dept_subjects_dict.keys()) | {sid for sid in records_by_subject.keys() if sid is not None}
+
+        results = []
+        for sid in sorted(all_subject_ids):
+            subject = dept_subjects_dict.get(sid) or Subject.query.get(sid)
+            if not subject:
+                continue
+            sub_records = records_by_subject.get(sid, [])
+            total = len(sub_records)
+            present = sum(1 for a in sub_records if a.status in ('Present', 'Late', 'Half Day'))
+            absent = sum(1 for a in sub_records if a.status == 'Absent')
+            pct = round((present / total * 100), 1) if total > 0 else 0.0
+
+            teacher_names = [t.full_name for t in subject.teachers]
+            teacher_str = ", ".join(teacher_names) if teacher_names else "Faculty"
+
+            results.append({
+                'subject_id': subject.id,
+                'subject_code': subject.subject_code,
+                'subject_name': subject.subject_name,
+                'teacher_name': teacher_str,
+                'total_classes': total,
+                'present_classes': present,
+                'absent_classes': absent,
+                'attendance_percentage': pct
+            })
+
+        # Also include general attendance if records exist without a subject_id
+        if None in records_by_subject and records_by_subject[None]:
+            sub_records = records_by_subject[None]
+            total = len(sub_records)
+            present = sum(1 for a in sub_records if a.status in ('Present', 'Late', 'Half Day'))
+            absent = sum(1 for a in sub_records if a.status == 'Absent')
+            pct = round((present / total * 100), 1) if total > 0 else 0.0
+            results.append({
+                'subject_id': None,
+                'subject_code': 'GEN',
+                'subject_name': 'General Campus Attendance',
+                'teacher_name': 'Campus Admin',
+                'total_classes': total,
+                'present_classes': present,
+                'absent_classes': absent,
+                'attendance_percentage': pct
+            })
+
+        return results
+
+    @property
+    def photo_url(self) -> str | None:
+        """Returns the public browser URL for the student's photo with a cache-busting timestamp."""
+        if not self.photo:
+            return None
+        from app.utils.photo import get_student_photo_url
+        return get_student_photo_url(self.photo, updated_at=self.updated_at)
+
     def to_dict(self):
         return {
             'id': self.id,
@@ -74,8 +156,11 @@ class Student(db.Model):
             'section': self.section,
             'roll_number': self.roll_number,
             'photo': self.photo,
+            'photo_url': self.photo_url,
+            'qr_token': self.qr_token,
             'is_active': self.is_active
         }
 
     def __repr__(self):
         return f"<Student {self.student_id} - {self.full_name}>"
+

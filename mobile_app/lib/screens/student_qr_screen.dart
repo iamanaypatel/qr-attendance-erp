@@ -10,46 +10,148 @@ class StudentQrScreen extends StatefulWidget {
 }
 
 class _StudentQrScreenState extends State<StudentQrScreen> {
-  String _studentToken = "STU2026001";
-  String _studentName = "Aarav Sharma";
-  String _studentId = "STU2026001";
-  String _rollNumber = "CS-2024-042";
-  String _department = "Computer Science & Engineering";
-  String _course = "B.Tech Computer Science";
-  String _semester = "4th Semester";
-  bool _isLoading = false;
+  String _studentToken = "";
+  String _studentName = "";
+  String _studentId = "";
+  String _rollNumber = "";
+  String _department = "";
+  String _course = "";
+  String _semester = "";
+  bool _isLoading = true;
+  bool _isNotLinked = false;
+  bool _isNetworkError = false;
+  String _networkErrorMessage =
+      "Unable to connect to server.\nPlease check your network connection and retry.";
+  final String _unlinkedMessage =
+      "Student profile is not linked to this account.\nPlease contact the administrator.";
 
   @override
   void initState() {
     super.initState();
-    _fetchDefaultStudent();
+    _initStudentData();
   }
 
-  Future<void> _fetchDefaultStudent() async {
+  void _applyStudentData(Map<String, dynamic> s) {
+    setState(() {
+      _studentToken = s['qr_token'] ?? s['student_id'] ?? '';
+      _studentName = s['full_name'] ?? 'Student';
+      _studentId = s['student_id'] ?? '';
+      _rollNumber = s['roll_number'] ?? '-';
+      _department = s['department_code'] ?? s['department_name'] ?? '-';
+      _course = s['course'] ?? '-';
+      _semester = s['semester'] != null ? "${s['semester']} Semester" : '-';
+      _isNotLinked = false;
+      _isNetworkError = false;
+    });
+  }
+
+  Future<void> _initStudentData() async {
+    final user = ApiService().currentUser;
+    final isStudent = user != null && user['role'] == 'student';
+
+    if (isStudent) {
+      // Automatic identity from authenticated student session
+      if (user['student'] is Map<String, dynamic> &&
+          (user['student'] as Map<String, dynamic>)['student_id'] != null) {
+        _applyStudentData(Map<String, dynamic>.from(user['student']));
+        setState(() {
+          _isLoading = false;
+          _isNotLinked = false;
+          _isNetworkError = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = true;
+        });
+      }
+
+      final freshStudent = await ApiService().getCurrentStudent();
+      if (!mounted) return;
+
+      if (freshStudent != null) {
+        if (freshStudent['error'] == 'NETWORK_ERROR') {
+          if (_studentId.isEmpty) {
+            setState(() {
+              _isLoading = false;
+              _isNetworkError = true;
+              _isNotLinked = false;
+              _networkErrorMessage = freshStudent['message'] ?? _networkErrorMessage;
+            });
+          } else {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+
+        if (freshStudent['error'] == 'PROFILE_NOT_LINKED') {
+          if (_studentId.isEmpty) {
+            setState(() {
+              _isLoading = false;
+              _isNotLinked = true;
+              _isNetworkError = false;
+            });
+          } else {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+          return;
+        }
+
+        if (freshStudent['student_id'] != null) {
+          _applyStudentData(freshStudent);
+          setState(() {
+            _isLoading = false;
+            _isNotLinked = false;
+            _isNetworkError = false;
+          });
+          return;
+        }
+      }
+
+      if (_studentId.isEmpty) {
+        setState(() {
+          _isLoading = false;
+          _isNotLinked = true;
+          _isNetworkError = false;
+        });
+      } else {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+      return;
+    }
+
+    // For Admin / Teacher roles viewing cards
     setState(() {
       _isLoading = true;
     });
 
     final students = await ApiService().searchStudents("");
-    if (students.isNotEmpty) {
-      final s = students.first;
-      setState(() {
-        _studentToken = s['student_id'] ?? 'STU2026001';
-        _studentName = s['full_name'] ?? 'Aarav Sharma';
-        _studentId = s['student_id'] ?? 'STU2026001';
-        _rollNumber = s['roll_number'] ?? 'CS-2024-042';
-        _department = s['department_code'] ?? 'CSE';
-        _course = s['course'] ?? 'B.Tech';
-        _semester = "${s['semester'] ?? 4}th Semester";
-      });
+    if (students.isNotEmpty && mounted) {
+      final s = Map<String, dynamic>.from(students.first);
+      _applyStudentData(s);
     }
 
-    setState(() {
-      _isLoading = false;
-    });
+    if (mounted) {
+      setState(() {
+        _isLoading = false;
+        _isNotLinked = students.isEmpty;
+        _isNetworkError = false;
+      });
+    }
   }
 
   void _showStudentPicker() async {
+    final user = ApiService().currentUser;
+    if (user != null && user['role'] == 'student') {
+      // Security: Students are never allowed to open student picker
+      return;
+    }
+
     final students = await ApiService().searchStudents("");
     if (!mounted) return;
 
@@ -73,7 +175,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
               child: ListView.builder(
                 itemCount: students.length,
                 itemBuilder: (context, i) {
-                  final s = students[i];
+                  final s = Map<String, dynamic>.from(students[i]);
                   return ListTile(
                     leading: CircleAvatar(
                       child: Text((s['full_name'] ?? 'S')[0]),
@@ -81,15 +183,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                     title: Text(s['full_name'] ?? 'Student'),
                     subtitle: Text("${s['student_id']} • ${s['roll_number']}"),
                     onTap: () {
-                      setState(() {
-                        _studentToken = s['student_id'] ?? 'STU2026001';
-                        _studentName = s['full_name'] ?? 'Student';
-                        _studentId = s['student_id'] ?? 'STU2026001';
-                        _rollNumber = s['roll_number'] ?? '-';
-                        _department = s['department_code'] ?? 'General';
-                        _course = s['course'] ?? '-';
-                        _semester = "${s['semester'] ?? 1}th Sem";
-                      });
+                      _applyStudentData(s);
                       Navigator.pop(ctx);
                     },
                   );
@@ -102,27 +196,135 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
     );
   }
 
+  Widget _buildNetworkErrorView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.red.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.wifi_off_rounded,
+                size: 64,
+                color: Colors.redAccent,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              "Unable to Connect",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _networkErrorMessage,
+              style: const TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            ElevatedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _isLoading = true;
+                  _isNetworkError = false;
+                  _isNotLinked = false;
+                });
+                _initStudentData();
+              },
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text("Retry Connection"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildUnlinkedView() {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28.0),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: 0.12),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.person_off_rounded,
+                size: 64,
+                color: Colors.amber,
+              ),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              "Student Profile Not Linked",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 12),
+            Text(
+              _unlinkedMessage,
+              style: const TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 28),
+            OutlinedButton.icon(
+              onPressed: () {
+                setState(() {
+                  _isLoading = true;
+                  _isNotLinked = false;
+                  _isNetworkError = false;
+                });
+                _initStudentData();
+              },
+              icon: const Icon(Icons.refresh_rounded),
+              label: const Text("Check Again"),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final user = ApiService().currentUser;
+    final isStudent = user != null && user['role'] == 'student';
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Digital Student ID & QR"),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.people_outline),
-            tooltip: "Switch Student Card",
-            onPressed: _showStudentPicker,
-          ),
-        ],
+        title: Text(isStudent ? "My Pass" : "Digital Student ID & QR"),
+        actions: isStudent
+            ? null
+            : [
+                IconButton(
+                  icon: const Icon(Icons.people_outline),
+                  tooltip: "Switch Student Card",
+                  onPressed: _showStudentPicker,
+                ),
+              ],
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
+          : _isNetworkError
+              ? _buildNetworkErrorView()
+              : _isNotLinked
+                  ? _buildUnlinkedView()
+                  : SingleChildScrollView(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
                   // Vector Digital ID Card
                   Container(
                     width: double.infinity,
@@ -257,7 +459,7 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                                   border: Border.all(color: Colors.grey.shade300),
                                 ),
                                 child: QrImageView(
-                                  data: _studentToken,
+                                  data: _studentToken.isNotEmpty ? _studentToken : _studentId,
                                   version: QrVersions.auto,
                                   size: 180,
                                   backgroundColor: Colors.white,
@@ -314,12 +516,14 @@ class _StudentQrScreenState extends State<StudentQrScreen> {
                     ),
                   ),
 
-                  const SizedBox(height: 20),
-                  ElevatedButton.icon(
-                    onPressed: _showStudentPicker,
-                    icon: const Icon(Icons.swap_horiz),
-                    label: const Text("Switch / Select Another Student"),
-                  ),
+                  if (!isStudent) ...[
+                    const SizedBox(height: 20),
+                    ElevatedButton.icon(
+                      onPressed: _showStudentPicker,
+                      icon: const Icon(Icons.swap_horiz),
+                      label: const Text("Switch / Select Another Student"),
+                    ),
+                  ],
                 ],
               ),
             ),

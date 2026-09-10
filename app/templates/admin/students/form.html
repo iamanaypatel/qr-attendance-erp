@@ -120,16 +120,27 @@
           <h5 class="fw-bold text-primary mb-3"><i class="bi bi-camera me-2"></i>Photo & Portal Credentials</h5>
           <div class="row g-3 mb-4">
             <div class="col-md-6">
-              <label class="form-label small fw-semibold text-muted">STUDENT PHOTO (MAX 2MB: JPG, PNG, WEBP)</label>
-              {{ form.photo(class="form-control") }}
+              <label class="form-label small fw-semibold text-muted">STUDENT PHOTO (MAX 5MB: JPG, PNG, WEBP)</label>
+              {{ form.photo(class="form-control", id="student_photo_input", onchange="previewStudentPhotoForm(this)") }}
+              {% for err in form.photo.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+              <div id="newPhotoPreviewContainer" class="mt-2 d-none align-items-center gap-2">
+                <img id="newPhotoPreviewImg" src="#" alt="New Photo Preview" class="rounded border shadow-sm" style="width: 54px; height: 54px; object-fit: cover;">
+                <small class="text-success fw-semibold"><i class="bi bi-check-circle me-1"></i>New photo selected for upload</small>
+              </div>
               {% if student and student.photo %}
-                <div class="mt-2 d-flex align-items-center gap-2">
-                  <img src="{{ url_for('static', filename='uploads/' + student.photo) }}" alt="Preview" class="rounded border" style="width: 50px; height: 50px; object-fit: cover;">
+                <div class="mt-2 d-flex align-items-center gap-2" id="currentPhotoContainer">
+                  <img src="{{ student.photo_url }}" alt="Preview" class="rounded border" style="width: 50px; height: 50px; object-fit: cover;" onerror="this.style.display='none'; document.getElementById('currentPhotoFallback').style.display='inline-flex';">
+                  <div id="currentPhotoFallback" class="rounded bg-primary text-white align-items-center justify-content-center fw-bold" style="display: none; width: 50px; height: 50px;">
+                    {{ student.full_name[0] | upper }}
+                  </div>
                   <small class="text-muted">Current photo attached</small>
                 </div>
               {% endif %}
             </div>
           </div>
+
 
           <h5 class="fw-bold text-primary mb-3"><i class="bi bi-shield-lock me-2"></i>Portal Login Credentials</h5>
           <div class="p-3 rounded-3 bg-body-tertiary border mb-4">
@@ -182,6 +193,19 @@
     const input = document.getElementById('student_id_input');
     if (input) {
       input.value = `STU${year}${rand}`;
+    }
+  }
+
+  function previewStudentPhotoForm(input) {
+    if (input.files && input.files[0]) {
+      const reader = new FileReader();
+      reader.onload = function(e) {
+        document.getElementById('newPhotoPreviewImg').src = e.target.result;
+        const box = document.getElementById('newPhotoPreviewContainer');
+        box.classList.remove('d-none');
+        box.classList.add('d-flex');
+      };
+      reader.readAsDataURL(input.files[0]);
     }
   }
 </script>

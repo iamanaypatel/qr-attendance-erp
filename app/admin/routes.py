@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from flask import render_template, redirect, url_for, flash, request, send_file, current_app
 from flask_login import login_required, current_user
 from app.admin import admin_bp
-from app.admin.forms import StudentForm, TeacherForm, DepartmentForm, HolidayForm, AcademicSessionForm, SystemSettingsForm
+from app.admin.forms import StudentForm, TeacherForm, DepartmentForm, HolidayForm, AcademicSessionForm, SystemSettingsForm, SubjectForm, SubjectAssignTeachersForm
 from sqlalchemy import func
 from app.extensions import db
 from app.models.user import User
@@ -17,31 +17,23 @@ from app.models.holiday import Holiday
 from app.models.session import AcademicSession
 from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
+from app.models.subject import Subject, teacher_subjects
 from app.utils.decorators import role_required
 from app.utils.qr_generator import generate_qr_bytes, generate_qr_data_uri
 from app.utils.id_card import generate_student_id_card_pdf
 
+from app.utils.photo import validate_and_save_photo, delete_student_photo
+
 # Helper for secure image uploads
-def save_uploaded_photo(file_storage):
+def save_uploaded_photo(file_storage, student_id=None, old_photo=None):
     if not file_storage or isinstance(file_storage, str):
         return None
-    if not hasattr(file_storage, 'filename') or not file_storage.filename:
+    filename, err = validate_and_save_photo(file_storage, student_id=student_id or 'student', old_photo_filename=old_photo)
+    if err:
+        current_app.logger.warning(f"Photo upload rejected: {err}")
         return None
-    ext = file_storage.filename.rsplit('.', 1)[-1].lower()
-    if ext not in current_app.config['ALLOWED_EXTENSIONS']:
-        return None
-    unique_name = f"{uuid.uuid4().hex}_{secure_filename(file_storage.filename)}"
-    try:
-        upload_folder = current_app.config['UPLOAD_FOLDER']
-        if isinstance(upload_folder, str):
-            from pathlib import Path
-            upload_folder = Path(upload_folder)
-        upload_folder.mkdir(parents=True, exist_ok=True)
-        file_storage.save(upload_folder / unique_name)
-        return unique_name
-    except Exception as e:
-        current_app.logger.error(f"Error saving uploaded photo: {e}", exc_info=True)
-        return None
+    return filename
+
 
 # ============================================================================
 # Dashboard Route
@@ -87,8 +79,26 @@ def dashboard():
         ).count()
         dept_data.append(c)
 
-    # Recent Scans
-    recent_scans = Attendance.query.filter(Attendance.date == today).order_by(Attendance.time_in.desc().nullslast()).limit(8).all()
+    # Recent Scans & Present Today Roster
+    recent_scans = (
+        Attendance.query
+        .join(Student)
+        .filter(Attendance.date == today)
+        .order_by(Attendance.updated_at.desc())
+        .limit(10)
+        .all()
+    )
+
+    present_students = (
+        Attendance.query
+        .join(Student)
+        .filter(
+            Attendance.date == today,
+            Attendance.status.in_(['Present', 'Late', 'Half Day'])
+        )
+        .order_by(Attendance.time_in.asc().nullslast())
+        .all()
+    )
 
     return render_template(
         'admin/dashboard.html',
@@ -101,7 +111,8 @@ def dashboard():
         trend_data=trend_data,
         dept_labels=dept_labels,
         dept_data=dept_data,
-        recent_scans=recent_scans
+        recent_scans=recent_scans,
+        present_students=present_students
     )
 
 # ============================================================================
@@ -181,7 +192,12 @@ def student_create():
                 flash(f"Portal Username '{custom_username}' is already taken. Please choose another username.", 'danger')
                 return render_template('admin/students/form.html', form=form, title='Add New Student')
 
-        photo_filename = save_uploaded_photo(form.photo.data)
+        photo_filename = None
+        if form.photo.data and not isinstance(form.photo.data, str) and hasattr(form.photo.data, 'filename') and form.photo.data.filename:
+            photo_filename, photo_err = validate_and_save_photo(form.photo.data, student_id=raw_sid)
+            if photo_err:
+                flash(photo_err, 'danger')
+                return render_template('admin/students/form.html', form=form, title='Add New Student')
 
         try:
             # Create portal user account if requested
@@ -304,7 +320,10 @@ def student_edit(id):
 
             # Safe photo update: only upload if it is a real file storage object
             if form.photo.data and not isinstance(form.photo.data, str) and hasattr(form.photo.data, 'filename') and form.photo.data.filename:
-                new_photo = save_uploaded_photo(form.photo.data)
+                new_photo, photo_err = validate_and_save_photo(form.photo.data, student_id=student.student_id, old_photo_filename=student.photo)
+                if photo_err:
+                    flash(photo_err, 'danger')
+                    return render_template('admin/students/form.html', form=form, title='Edit Student', student=student)
                 if new_photo:
                     student.photo = new_photo
 
@@ -449,6 +468,41 @@ def student_credentials_update(id):
     return redirect(url_for('admin.student_detail', id=student.id))
 
 
+
+@admin_bp.route('/students/<int:id>/photo', methods=['POST'])
+@login_required
+@role_required('admin')
+def student_photo_update(id):
+    student = Student.query.get_or_404(id)
+    photo_file = request.files.get('photo')
+
+    if not photo_file or not photo_file.filename:
+        flash("Please select an image file to upload.", 'warning')
+        return redirect(url_for('admin.student_detail', id=student.id))
+
+    saved_filename, error_msg = validate_and_save_photo(
+        photo_file,
+        student_id=student.student_id,
+        old_photo_filename=student.photo
+    )
+
+    if error_msg:
+        flash(error_msg, 'danger')
+        return redirect(url_for('admin.student_detail', id=student.id))
+
+    student.photo = saved_filename
+    student.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    try:
+        AuditLog.log('STUDENT_PHOTO_UPDATE', f"Updated photo for student {student.student_id}", user_id=current_user.id)
+    except Exception:
+        pass
+
+    flash(f"Profile photo for {student.full_name} updated successfully.", 'success')
+    return redirect(url_for('admin.student_detail', id=student.id))
+
+
 @admin_bp.route('/students/<int:id>/delete', methods=['POST'])
 @login_required
 @role_required('admin')
@@ -456,6 +510,10 @@ def student_delete(id):
     student = Student.query.get_or_404(id)
     name = student.full_name
     sid = student.student_id
+
+    # Remove photo file if present
+    if student.photo:
+        delete_student_photo(student.photo)
 
     # If student has a user account, delete it as well
     if student.user:
@@ -466,6 +524,7 @@ def student_delete(id):
     AuditLog.log('STUDENT_DELETE', f"Deleted student {name} ({sid})", user_id=current_user.id)
     flash(f"Student {name} ({sid}) deleted successfully.", 'info')
     return redirect(url_for('admin.students'))
+
 
 @admin_bp.route('/students/<int:id>/qr.png')
 @login_required
@@ -892,3 +951,207 @@ def settings():
     audit_logs = AuditLog.query.order_by(AuditLog.created_at.desc()).limit(25).all()
 
     return render_template('admin/settings.html', form=form, sessions=sessions, audit_logs=audit_logs)
+
+
+# ============================================================================
+# Subjects Management
+# ============================================================================
+@admin_bp.route('/subjects')
+@login_required
+@role_required('admin')
+def subjects():
+    search = request.args.get('q', '').strip()
+    dept_id = request.args.get('dept', type=int)
+    semester = request.args.get('semester', '').strip()
+    status = request.args.get('status', '').strip()
+
+    query = Subject.query
+
+    if search:
+        query = query.filter(
+            (Subject.subject_code.ilike(f'%{search}%')) |
+            (Subject.subject_name.ilike(f'%{search}%')) |
+            (Subject.course.ilike(f'%{search}%'))
+        )
+    if dept_id:
+        query = query.filter(Subject.department_id == dept_id)
+    if semester:
+        query = query.filter(Subject.semester == semester)
+    if status == 'active':
+        query = query.filter(Subject.is_active == True)
+    elif status == 'inactive':
+        query = query.filter(Subject.is_active == False)
+
+    subjects_list = query.order_by(Subject.is_active.desc(), Subject.subject_code.asc()).all()
+    departments = Department.query.order_by(Department.name).all()
+
+    return render_template(
+        'admin/subjects/index.html',
+        subjects=subjects_list,
+        departments=departments,
+        search=search,
+        selected_dept=dept_id,
+        selected_semester=semester,
+        selected_status=status
+    )
+
+@admin_bp.route('/subjects/create', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def subject_create():
+    form = SubjectForm()
+    departments = Department.query.order_by(Department.name).all()
+    form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
+
+    if form.validate_on_submit():
+        code = form.subject_code.data.strip().upper()
+        name = form.subject_name.data.strip()
+
+        # Check code uniqueness
+        existing = Subject.query.filter(func.upper(Subject.subject_code) == code).first()
+        if existing:
+            flash(f"A subject with code '{code}' already exists ({existing.subject_name}).", 'danger')
+            return render_template('admin/subjects/form.html', form=form, title='Add New Subject', is_edit=False)
+
+        dept_val = form.department_id.data if form.department_id.data != 0 else None
+
+        new_subject = Subject(
+            subject_code=code,
+            subject_name=name,
+            description=form.description.data.strip() if form.description.data else None,
+            department_id=dept_val,
+            course=form.course.data.strip() if form.course.data else None,
+            semester=form.semester.data if form.semester.data else None,
+            is_active=form.is_active.data
+        )
+        db.session.add(new_subject)
+        db.session.commit()
+
+        AuditLog.log('SUBJECT_CREATE', f"Created subject {code} - {name}", user_id=current_user.id)
+        flash(f"Subject '{name}' ({code}) created successfully.", 'success')
+        return redirect(url_for('admin.subjects'))
+
+    return render_template('admin/subjects/form.html', form=form, title='Add New Subject', is_edit=False)
+
+@admin_bp.route('/subjects/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def subject_edit(id):
+    subject = Subject.query.get_or_404(id)
+    form = SubjectForm(obj=subject)
+    departments = Department.query.order_by(Department.name).all()
+    form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
+
+    if form.validate_on_submit():
+        code = form.subject_code.data.strip().upper()
+        name = form.subject_name.data.strip()
+
+        # Check duplicate code on another subject
+        existing = Subject.query.filter(func.upper(Subject.subject_code) == code, Subject.id != id).first()
+        if existing:
+            flash(f"Another subject with code '{code}' already exists ({existing.subject_name}).", 'danger')
+            return render_template('admin/subjects/form.html', form=form, title=f'Edit {subject.subject_code}', is_edit=True, subject=subject)
+
+        subject.subject_code = code
+        subject.subject_name = name
+        subject.description = form.description.data.strip() if form.description.data else None
+        subject.department_id = form.department_id.data if form.department_id.data != 0 else None
+        subject.course = form.course.data.strip() if form.course.data else None
+        subject.semester = form.semester.data if form.semester.data else None
+        subject.is_active = form.is_active.data
+        subject.updated_at = datetime.utcnow()
+
+        db.session.commit()
+        AuditLog.log('SUBJECT_UPDATE', f"Updated subject {code} - {name}", user_id=current_user.id)
+        flash(f"Subject '{name}' ({code}) updated successfully.", 'success')
+        return redirect(url_for('admin.subjects'))
+
+    if request.method == 'GET':
+        form.department_id.data = subject.department_id or 0
+
+    return render_template('admin/subjects/form.html', form=form, title=f'Edit {subject.subject_code}', is_edit=True, subject=subject)
+
+@admin_bp.route('/subjects/<int:id>/assign-teachers', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def subject_assign_teachers(id):
+    subject = Subject.query.get_or_404(id)
+    form = SubjectAssignTeachersForm()
+
+    all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    form.teacher_ids.choices = [(t.id, f"{t.full_name} ({t.employee_id}) — {t.department.name if t.department else 'General'}") for t in all_teachers]
+
+    if form.validate_on_submit():
+        selected_ids = set(form.teacher_ids.data or [])
+        subject.teachers = [t for t in all_teachers if t.id in selected_ids]
+        db.session.commit()
+
+        AuditLog.log(
+            'SUBJECT_ASSIGN_TEACHERS',
+            f"Assigned {len(subject.teachers)} teachers to subject {subject.subject_code}",
+            user_id=current_user.id
+        )
+        flash(f"Teacher assignments for {subject.subject_name} updated successfully.", 'success')
+        return redirect(url_for('admin.subjects'))
+
+    if request.method == 'GET':
+        form.teacher_ids.data = [t.id for t in subject.teachers]
+
+    return render_template(
+        'admin/subjects/assign.html',
+        subject=subject,
+        form=form,
+        teachers=all_teachers
+    )
+
+@admin_bp.route('/subjects/<int:id>/toggle-status', methods=['POST'])
+@login_required
+@role_required('admin')
+def subject_toggle_status(id):
+    subject = Subject.query.get_or_404(id)
+    subject.is_active = not subject.is_active
+    subject.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    status_str = "activated" if subject.is_active else "deactivated"
+    AuditLog.log('SUBJECT_TOGGLE', f"Subject {subject.subject_code} {status_str}", user_id=current_user.id)
+    flash(f"Subject '{subject.subject_name}' ({subject.subject_code}) has been {status_str}.", 'info')
+    return redirect(url_for('admin.subjects'))
+
+@admin_bp.route('/subjects/<int:id>/delete', methods=['POST'])
+@login_required
+@role_required('admin')
+def subject_delete(id):
+    subject = Subject.query.get_or_404(id)
+    code = subject.subject_code
+    name = subject.subject_name
+
+    # Safe Deletion: Check if referenced by historical attendance
+    attendance_count = subject.attendances.count()
+
+    if attendance_count > 0:
+        # Soft delete / Deactivate to protect historical attendance records
+        subject.is_active = False
+        subject.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        AuditLog.log(
+            'SUBJECT_SOFT_DELETE',
+            f"Soft-deleted/Deactivated subject {code} ({attendance_count} attendance records preserved)",
+            user_id=current_user.id
+        )
+        flash(
+            f"Subject '{name}' ({code}) has {attendance_count} historical attendance records. "
+            f"To protect student academic history, the subject has been safely deactivated instead of deleted.",
+            'warning'
+        )
+    else:
+        # No attendance records exist: safe to remove teacher associations and delete
+        subject.teachers = []
+        db.session.delete(subject)
+        db.session.commit()
+
+        AuditLog.log('SUBJECT_DELETE', f"Permanently deleted unused subject {code} - {name}", user_id=current_user.id)
+        flash(f"Subject '{name}' ({code}) has been permanently deleted.", 'success')
+
+    return redirect(url_for('admin.subjects'))

@@ -1,0 +1,105 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex align-items-center gap-2 mb-4">
+    <a href="{{ url_for('admin.subjects') }}" class="btn btn-sm btn-outline-secondary">
+      <i class="bi bi-arrow-left"></i> Back to Subjects
+    </a>
+    <h2 class="fw-bold brand-font mb-0">{{ title }}</h2>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="glass-card p-4 p-md-5">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+
+          {% if form.errors %}
+            <div class="alert alert-danger mb-4">
+              <div class="fw-bold mb-1"><i class="bi bi-exclamation-triangle-fill me-2"></i>Please resolve the following fields:</div>
+              <ul class="mb-0 ps-3">
+                {% for field_name, err_list in form.errors.items() %}
+                  {% for err in err_list %}
+                    <li><strong>{{ form[field_name].label.text if field_name in form else field_name }}:</strong> {{ err }}</li>
+                  {% endfor %}
+                {% endfor %}
+              </ul>
+            </div>
+          {% endif %}
+
+          <h5 class="fw-bold text-primary mb-3"><i class="bi bi-journal-bookmark me-2"></i>Subject Details</h5>
+          
+          <div class="row g-3 mb-3">
+            <div class="col-md-5">
+              <label class="form-label small fw-semibold text-muted">SUBJECT CODE *</label>
+              {{ form.subject_code(class="form-control font-monospace", placeholder="e.g. CS101", required=True) }}
+              {% for err in form.subject_code.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+              <div class="form-text small">Unique course code (uppercase).</div>
+            </div>
+            <div class="col-md-7">
+              <label class="form-label small fw-semibold text-muted">SUBJECT NAME *</label>
+              {{ form.subject_name(class="form-control", placeholder="e.g. Data Structures & Algorithms", required=True) }}
+              {% for err in form.subject_name.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="row g-3 mb-3">
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">DEPARTMENT</label>
+              {{ form.department_id(class="form-select") }}
+              {% for err in form.department_id.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+            <div class="col-md-6">
+              <label class="form-label small fw-semibold text-muted">SEMESTER</label>
+              {{ form.semester(class="form-select") }}
+              {% for err in form.semester.errors %}
+                <div class="text-danger small mt-1">{{ err }}</div>
+              {% endfor %}
+            </div>
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label small fw-semibold text-muted">COURSE / PROGRAM SPECIFICATION</label>
+            {{ form.course(class="form-control", placeholder="e.g. B.Tech Computer Science & Engineering") }}
+            {% for err in form.course.errors %}
+              <div class="text-danger small mt-1">{{ err }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-4">
+            <label class="form-label small fw-semibold text-muted">SYLLABUS / DESCRIPTION</label>
+            {{ form.description(class="form-control", rows=3, placeholder="Brief overview of the subject curriculum and topics covered...") }}
+            {% for err in form.description.errors %}
+              <div class="text-danger small mt-1">{{ err }}</div>
+            {% endfor %}
+          </div>
+
+          <div class="mb-4 p-3 rounded-3 bg-body-tertiary border">
+            <div class="form-check form-switch">
+              {{ form.is_active(class="form-check-input", role="switch", id="isActiveSwitch") }}
+              <label class="form-check-label fw-semibold" for="isActiveSwitch">Active Subject</label>
+            </div>
+            <small class="text-muted d-block mt-1">Inactive subjects cannot be selected by teachers for new attendance sessions, but historical data is preserved.</small>
+          </div>
+
+          <div class="d-flex justify-content-end gap-2">
+            <a href="{{ url_for('admin.subjects') }}" class="btn btn-outline-secondary">Cancel</a>
+            <button type="submit" class="btn btn-primary-glow px-4">
+              <i class="bi bi-check-lg me-1"></i> {{ 'Update Subject' if is_edit else 'Create Subject' }}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

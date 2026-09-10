@@ -43,9 +43,32 @@ class User(UserMixin, db.Model):
     def is_student(self) -> bool:
         return self.role == 'student'
 
+    @property
+    def student(self):
+        """Convenience alias for student_profile with auto-healing resolution."""
+        if self.student_profile:
+            return self.student_profile
+        if self.role == 'student':
+            from app.models.student import Student
+            from sqlalchemy import func
+            match = Student.query.filter(
+                (func.lower(Student.student_id) == func.lower(self.username)) |
+                (func.lower(Student.roll_number) == func.lower(self.username)) |
+                (func.lower(Student.email) == func.lower(self.email))
+            ).first()
+            if match:
+                match.user_id = self.id
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
+                return match
+        return None
+
     def get_display_name(self) -> str:
-        if self.role == 'student' and self.student_profile:
-            return self.student_profile.full_name
+        s = self.student
+        if self.role == 'student' and s:
+            return s.full_name
         if self.role == 'teacher' and self.teacher_profile:
             return self.teacher_profile.full_name
         return self.username

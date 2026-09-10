@@ -16,6 +16,12 @@ class Teacher(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    def is_assigned_to_subject(self, subject_id: int) -> bool:
+        """Check if teacher is assigned to the given subject_id."""
+        if not subject_id:
+            return False
+        return self.assigned_subjects.filter_by(id=subject_id).first() is not None
+
     def to_dict(self):
         return {
             'id': self.id,

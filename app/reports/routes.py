@@ -19,6 +19,9 @@ def build_filtered_query(args):
     from_date_str = args.get('from_date', '').strip()
     to_date_str = args.get('to_date', '').strip()
     dept_id = args.get('dept', type=int)
+    subject_id = args.get('subject', type=int)
+    teacher_id = args.get('teacher', type=int)
+    semester = args.get('semester', '').strip()
     student_query = args.get('student', '').strip()
     status = args.get('status', '').strip()
     method = args.get('method', '').strip()
@@ -46,6 +49,24 @@ def build_filtered_query(args):
         dept = Department.query.get(dept_id)
         if dept:
             filter_desc.append(f"Dept: {dept.code}")
+
+    if subject_id:
+        from app.models.subject import Subject
+        query = query.filter(Attendance.subject_id == subject_id)
+        sub = Subject.query.get(subject_id)
+        if sub:
+            filter_desc.append(f"Subject: {sub.subject_code}")
+
+    if teacher_id:
+        from app.models.teacher import Teacher
+        query = query.filter(Attendance.teacher_id == teacher_id)
+        t = Teacher.query.get(teacher_id)
+        if t:
+            filter_desc.append(f"Teacher: {t.full_name}")
+
+    if semester:
+        query = query.filter(Student.semester == semester)
+        filter_desc.append(f"Sem: {semester}")
 
     if student_query:
         query = query.filter(
@@ -76,6 +97,11 @@ def index():
     pagination = query.paginate(page=page, per_page=20, error_out=False)
     departments = Department.query.order_by(Department.name).all()
 
+    from app.models.subject import Subject
+    from app.models.teacher import Teacher
+    subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+    teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+
     # Precalculate summary stats on filtered dataset
     all_filtered = query.all()
     total = len(all_filtered)
@@ -95,6 +121,8 @@ def index():
         pagination=pagination,
         records=pagination.items,
         departments=departments,
+        subjects=subjects,
+        teachers=teachers,
         stats=stats,
         filter_summary=filter_desc,
         args=request.args
@@ -149,17 +177,23 @@ def export_csv():
     # Headers
     writer.writerow([
         "Student ID", "Student Name", "Department", "Course", "Semester",
+        "Subject Code", "Subject Name", "Faculty",
         "Date", "Time In", "Time Out", "Status", "Method", "Marked By", "Remarks"
     ])
 
     for r in records:
         s = r.student
+        sub = r.subject
+        t = r.teacher
         writer.writerow([
             s.student_id if s else "",
             s.full_name if s else "",
             s.department.code if (s and s.department) else "",
             s.course if s else "",
             s.semester if s else "",
+            sub.subject_code if sub else "GEN",
+            sub.subject_name if sub else "General Attendance",
+            t.full_name if t else (r.marker.username if r.marker else "System"),
             r.date.strftime('%Y-%m-%d') if r.date else "",
             r.time_in.strftime('%I:%M %p') if r.time_in else "",
             r.time_out.strftime('%I:%M %p') if r.time_out else "",

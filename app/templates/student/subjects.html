@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}Subject-Wise Attendance — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Subject-Wise Attendance</h2>
+      <p class="text-muted mb-0">Track your attendance breakdown, class counts, and percentages for each registered course.</p>
+    </div>
+    <div>
+      <span class="badge badge-soft-primary fs-6 px-3 py-2">
+        <i class="bi bi-mortarboard me-1"></i>{{ student.course }} &bull; {{ student.semester }} Sem (Sec {{ student.section or 'A' }})
+      </span>
+    </div>
+  </div>
+
+  <!-- Overall Attendance Summary Card -->
+  <div class="glass-card p-4 mb-4">
+    <div class="row align-items-center g-3">
+      <div class="col-md-3 text-center border-end">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Overall Attendance</div>
+        <div class="display-6 fw-bold {% if overall_stats.percentage >= 75 %}text-success{% elif overall_stats.percentage >= 60 %}text-warning{% else %}text-danger{% endif %} mt-1">
+          {{ overall_stats.percentage }}%
+        </div>
+        <small class="text-muted">Min Requirement: 75%</small>
+      </div>
+      <div class="col-md-3 text-center border-end">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Total Classes Held</div>
+        <div class="fs-3 fw-bold text-dark mt-1">{{ overall_stats.total_sessions }}</div>
+        <small class="text-muted">Across all subjects</small>
+      </div>
+      <div class="col-md-3 text-center border-end">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Classes Attended</div>
+        <div class="fs-3 fw-bold text-success mt-1">{{ overall_stats.present_count }}</div>
+        <small class="text-muted">Present / Late sessions</small>
+      </div>
+      <div class="col-md-3 text-center">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Classes Missed</div>
+        <div class="fs-3 fw-bold text-danger mt-1">{{ overall_stats.absent_count }}</div>
+        <small class="text-muted">Absent records</small>
+      </div>
+    </div>
+  </div>
+
+  <!-- Subjects Grid -->
+  <h5 class="fw-bold brand-font mb-3">
+    <i class="bi bi-journals text-primary me-2"></i>Enrolled Subjects
+  </h5>
+
+  {% if subject_attendance %}
+    <div class="row g-4">
+      {% for sub in subject_attendance %}
+        <div class="col-md-6 col-lg-4">
+          <div class="glass-card p-4 h-100 d-flex flex-column justify-content-between shadow-sm position-relative">
+            <div>
+              <div class="d-flex justify-content-between align-items-start mb-2">
+                <span class="badge bg-light text-dark font-mono border px-2 py-1 fs-7 fw-semibold">{{ sub.subject_code }}</span>
+                <span class="badge {% if sub.attendance_percentage >= 75 %}badge-soft-success{% elif sub.attendance_percentage >= 60 %}badge-soft-warning{% else %}badge-soft-danger{% endif %} font-mono fs-7">
+                  {{ sub.attendance_percentage }}%
+                </span>
+              </div>
+
+              <h5 class="fw-bold text-dark mb-1">{{ sub.subject_name }}</h5>
+              <small class="text-muted d-block mb-3">
+                <i class="bi bi-person-badge text-primary me-1"></i>Faculty: {{ sub.teacher_name }}
+              </small>
+
+              <!-- Progress bar -->
+              <div class="progress mb-3" style="height: 8px;">
+                <div class="progress-bar {% if sub.attendance_percentage >= 75 %}bg-success{% elif sub.attendance_percentage >= 60 %}bg-warning{% else %}bg-danger{% endif %}" 
+                     role="progressbar" 
+                     style="width: {{ sub.attendance_percentage }}%;" 
+                     aria-valuenow="{{ sub.attendance_percentage }}" 
+                     aria-valuemin="0" 
+                     aria-valuemax="100"></div>
+              </div>
+
+              <div class="row g-2 p-2 rounded-3 bg-body-tertiary border mb-4">
+                <div class="col-4 text-center border-end">
+                  <div class="text-muted extra-small fw-semibold text-uppercase">Present</div>
+                  <div class="fw-bold text-success fs-6 mt-0.5">{{ sub.present_classes }}</div>
+                </div>
+                <div class="col-4 text-center border-end">
+                  <div class="text-muted extra-small fw-semibold text-uppercase">Absent</div>
+                  <div class="fw-bold text-danger fs-6 mt-0.5">{{ sub.absent_classes }}</div>
+                </div>
+                <div class="col-4 text-center">
+                  <div class="text-muted extra-small fw-semibold text-uppercase">Total</div>
+                  <div class="fw-bold text-dark fs-6 mt-0.5">{{ sub.total_classes }}</div>
+                </div>
+              </div>
+            </div>
+
+            {% if sub.subject_id %}
+              <a href="{{ url_for('student.subject_detail', subject_id=sub.subject_id) }}" class="btn btn-outline-primary w-100 mt-auto">
+                <i class="bi bi-clock-history me-1"></i> Detailed History
+              </a>
+            {% else %}
+              <a href="{{ url_for('student.history') }}" class="btn btn-outline-secondary w-100 mt-auto">
+                <i class="bi bi-clock-history me-1"></i> View Campus History
+              </a>
+            {% endif %}
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="glass-card p-5 text-center text-muted">
+      <i class="bi bi-journal-x fs-1 d-block mb-3 text-primary opacity-50"></i>
+      <h5 class="fw-bold">No Subject Attendance Logged Yet</h5>
+      <p class="small text-muted mb-0">Your subject-wise attendance metrics will appear here as faculty members conduct classes and take attendance.</p>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

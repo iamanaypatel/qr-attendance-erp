@@ -7,6 +7,7 @@ from app.models.holiday import Holiday
 from app.models.session import AcademicSession
 from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
+from app.models.subject import Subject, teacher_subjects
 
 __all__ = [
     'User',
@@ -19,4 +20,6 @@ __all__ = [
     'AcademicSession',
     'SystemSetting',
     'AuditLog',
+    'Subject',
+    'teacher_subjects',
 ]

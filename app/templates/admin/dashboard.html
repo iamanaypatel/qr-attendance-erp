@@ -173,6 +173,41 @@
       </div>
     </div>
   </div>
+
+  <!-- Present Today Roster -->
+  <div class="glass-card p-4 mt-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+      <h5 class="fw-bold mb-0">
+        <span class="pulse-pip pulse-pip-teal me-1.5"></span>PRESENT TODAY — {{ present_students | length }}
+      </h5>
+      <span class="badge badge-soft-success font-mono">{{ present_students | length }} Verified on Campus</span>
+    </div>
+
+    {% if present_students %}
+      <div class="row g-3">
+        {% for att in present_students %}
+          <div class="col-sm-6 col-md-4 col-lg-3">
+            <div class="p-3 rounded-3 border d-flex align-items-center gap-2" style="background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.2) !important;">
+              <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center fw-bold" style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
+                {{ loop.index }}
+              </div>
+              <div class="text-truncate">
+                <div class="fw-bold text-truncate" style="font-size: 0.88rem;">{{ att.student.full_name }}</div>
+                <small class="text-muted font-mono d-block" style="font-size: 0.72rem;">
+                  {{ att.student.student_id }} &bull; In: {{ att.time_in.strftime('%I:%M %p') if att.time_in else '-' }}
+                </small>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    {% else %}
+      <div class="text-center py-4 text-muted">
+        <i class="bi bi-people fs-3 d-block mb-1"></i>
+        No students currently marked present today.
+      </div>
+    {% endif %}
+  </div>
 </div>
 {% endblock %}
 

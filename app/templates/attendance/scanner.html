@@ -51,6 +51,29 @@
           </span>
         </div>
 
+        <!-- Subject Selection -->
+        <div class="mb-3 p-3 rounded-3 bg-body-tertiary border">
+          <label class="form-label small fw-bold text-muted mb-1" for="subjectSelect">
+            <i class="bi bi-journal-bookmark-fill text-primary me-1"></i>ACTIVE ATTENDANCE SUBJECT
+          </label>
+          <select id="subjectSelect" class="form-select fw-semibold">
+            {% if current_user.is_admin %}
+              <option value="">-- General Campus Attendance (No Subject) --</option>
+            {% endif %}
+            {% for sub in available_subjects %}
+              <option value="{{ sub.id }}" {% if selected_subject_id == sub.id %}selected{% endif %}>
+                [{{ sub.subject_code }}] {{ sub.subject_name }} {% if sub.semester %}({{ sub.semester }} Sem){% endif %}
+              </option>
+            {% endfor %}
+            {% if not available_subjects and current_user.is_teacher %}
+              <option value="" disabled selected>No subjects assigned — Contact Administrator</option>
+            {% endif %}
+          </select>
+          <div class="form-text extra-small mt-1 text-muted">
+            <i class="bi bi-info-circle me-1"></i>Scans will be credited towards the selected subject.
+          </div>
+        </div>
+
         <!-- Camera Viewport Box with Laser Line -->
         <div class="scanner-viewport-box mb-3 position-relative">
           <div class="scanner-laser" id="scannerLaser" style="display: none;"></div>
@@ -291,12 +314,18 @@
 
   async function processScanPayload(token) {
     try {
+      const subjectVal = document.getElementById('subjectSelect')?.value;
+      const payload = { token: token };
+      if (subjectVal) {
+        payload.subject_id = parseInt(subjectVal);
+      }
+
       const response = await fetch('/api/attendance/scan', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify({ token: token })
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -342,10 +371,12 @@
       alertMsg.textContent = data.message;
 
       // Update photo or avatar
-      if (s.photo) {
-        photoContainer.innerHTML = `<img src="/static/uploads/${s.photo}" class="rounded-circle object-fit-cover shadow-sm" style="width: 58px; height: 58px;">`;
+      const initial = (s.full_name && s.full_name.length > 0) ? s.full_name[0].toUpperCase() : 'S';
+      const photoSrc = s.photo_url || (s.photo ? `/static/uploads/${s.photo}` : null);
+      if (photoSrc) {
+        photoContainer.innerHTML = `<img src="${photoSrc}" class="rounded-circle object-fit-cover shadow-sm" style="width: 58px; height: 58px;" onerror="this.outerHTML='<div class=\\'rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4\\' style=\\'width: 58px; height: 58px;\\'>${initial}</div>';">`;
       } else {
-        photoContainer.innerHTML = `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4" style="width: 58px; height: 58px;">${s.full_name[0].toUpperCase()}</div>`;
+        photoContainer.innerHTML = `<div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold fs-4" style="width: 58px; height: 58px;">${initial}</div>`;
       }
 
       // Add to session feed
@@ -373,11 +404,14 @@
     const emptyRow = document.getElementById('emptyFeedRow');
     if (emptyRow) emptyRow.remove();
 
+    const subjectBadge = att.subject_name ? `<span class="badge badge-soft-primary extra-small font-mono d-block mt-1">${att.subject_name}</span>` : '';
+
     const row = document.createElement('tr');
     row.innerHTML = `
       <td>
         <div class="fw-semibold">${student.full_name}</div>
         <small class="text-muted font-monospace">${student.student_id}</small>
+        ${subjectBadge}
       </td>
       <td>${att.time_in || '-'}</td>
       <td>${att.time_out || '-'}</td>
@@ -412,18 +446,16 @@
         const data = await resp.json();
         if (data.students && data.students.length > 0) {
           const student = data.students[0];
-          // Look up student details to get their token
-          const detailResp = await fetch(`/api/students/${student.id}`);
-          const detailData = await detailResp.json();
-          
           feedback.innerHTML = '<span class="text-success">Found student! Marking attendance...</span>';
           
-          // Submit scan using their token
-          // Since client does not see qr_token from public API, we can mark attendance directly via manual route or API
           const form = new FormData();
           form.append('student_id', student.student_id);
           form.append('status', 'Present');
           form.append('csrf_token', '{{ csrf_token() }}');
+          const subjectVal = document.getElementById('subjectSelect')?.value;
+          if (subjectVal) {
+            form.append('subject_id', subjectVal);
+          }
           
           const postResp = await fetch("{{ url_for('attendance.manual') }}", {
             method: 'POST',

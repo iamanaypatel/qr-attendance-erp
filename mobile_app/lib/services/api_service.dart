@@ -11,12 +11,10 @@ class ApiService {
   String _baseUrl = "https://qr-attendance-erp.onrender.com";
   String? _sessionCookie;
   Map<String, dynamic>? _currentUser;
-  List<Map<String, dynamic>> _savedAccounts = [];
 
   String get baseUrl => _baseUrl;
   Map<String, dynamic>? get currentUser => _currentUser;
   bool get isAuthenticated => _currentUser != null;
-  List<Map<String, dynamic>> get savedAccounts => List.unmodifiable(_savedAccounts);
 
   Future<void> init() async {
     final prefs = await SharedPreferences.getInstance();
@@ -42,21 +40,13 @@ class ApiService {
       }
     }
 
-    // Load saved multi-accounts
-    final accountsJson = prefs.getString('saved_accounts_v2');
-    if (accountsJson != null) {
-      try {
-        final List list = jsonDecode(accountsJson);
-        _savedAccounts = list.map((e) => Map<String, dynamic>.from(e)).toList();
-      } catch (_) {
-        _savedAccounts = [];
-      }
+    // Clean up any legacy multi-account cache to enforce single-user session isolation
+    if (prefs.containsKey('saved_accounts_v2')) {
+      await prefs.remove('saved_accounts_v2');
     }
-  }
-
-  Future<void> _saveAccountsToPrefs() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('saved_accounts_v2', jsonEncode(_savedAccounts));
+    if (prefs.containsKey('saved_accounts')) {
+      await prefs.remove('saved_accounts');
+    }
   }
 
   Future<void> setServerUrl(String url) async {
@@ -104,6 +94,14 @@ class ApiService {
   }
 
   Future<Map<String, dynamic>> login(String identity, String password) async {
+    // Enforce strictly ONE active user session at a time in APK
+    if (_currentUser != null) {
+      return {
+        'success': false,
+        'message': 'Another user is already logged in. Please logout from the current account before signing in with another account.',
+      };
+    }
+
     try {
       final uri = Uri.parse('$_baseUrl/api/auth/login');
       final response = await http
@@ -125,19 +123,6 @@ class ApiService {
           _currentUser = data['user'];
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('current_user', jsonEncode(_currentUser));
-
-          // Save to multi-accounts list
-          final username = _currentUser!['username'] ?? identity;
-          _savedAccounts.removeWhere((a) => a['username'] == username);
-          _savedAccounts.insert(0, {
-            'username': username,
-            'role': _currentUser!['role'],
-            'display_name': _currentUser!['display_name'] ?? username,
-            'session_cookie': _sessionCookie ?? '',
-            'last_login': DateTime.now().toIso8601String(),
-            'full_user': _currentUser,
-          });
-          await _saveAccountsToPrefs();
 
           return {
             'success': true,
@@ -168,62 +153,35 @@ class ApiService {
     }
   }
 
-  Future<bool> switchAccount(String username) async {
+  Future<void> logout() async {
     try {
-      final account = _savedAccounts.firstWhere(
-        (a) => a['username'] == username,
-        orElse: () => {},
-      );
-      if (account.isEmpty) return false;
-
-      _currentUser = Map<String, dynamic>.from(account['full_user'] ?? {});
-      _sessionCookie = account['session_cookie'];
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('current_user', jsonEncode(_currentUser));
-      if (_sessionCookie != null) {
-        await prefs.setString('session_cookie', _sessionCookie!);
-      }
-
-      return true;
-    } catch (e) {
-      debugPrint("Switch account error: $e");
-      return false;
-    }
-  }
-
-  Future<void> removeAccount(String username) async {
-    _savedAccounts.removeWhere((a) => a['username'] == username);
-    await _saveAccountsToPrefs();
-    if (_currentUser != null && _currentUser!['username'] == username) {
-      await logout();
-    }
-  }
-
-  Future<void> logout({bool removeCurrent = false}) async {
-    try {
-      await http.get(Uri.parse('$_baseUrl/auth/logout'), headers: _headers(isJson: false));
+      await http
+          .get(Uri.parse('$_baseUrl/auth/logout'), headers: _headers(isJson: false))
+          .timeout(const Duration(seconds: 4));
     } catch (_) {}
-
-    if (removeCurrent && _currentUser != null) {
-      _savedAccounts.removeWhere((a) => a['username'] == _currentUser!['username']);
-      await _saveAccountsToPrefs();
-    }
 
     _sessionCookie = null;
     _currentUser = null;
+
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove('session_cookie');
     await prefs.remove('current_user');
+    await prefs.remove('saved_accounts_v2');
+    await prefs.remove('saved_accounts');
   }
 
-  Future<Map<String, dynamic>> scanAttendance(String token) async {
+  Future<Map<String, dynamic>> scanAttendance(String token, {int? subjectId}) async {
     try {
+      final bodyMap = <String, dynamic>{'token': token.trim()};
+      if (subjectId != null) {
+        bodyMap['subject_id'] = subjectId;
+      }
+
       final response = await http
           .post(
             Uri.parse('$_baseUrl/api/attendance/scan'),
             headers: _headers(),
-            body: jsonEncode({'token': token.trim()}),
+            body: jsonEncode(bodyMap),
           )
           .timeout(const Duration(seconds: 8));
 
@@ -234,6 +192,81 @@ class ApiService {
         'success': false,
         'message': 'Network scan failure: $e',
       };
+    }
+  }
+
+  Future<List<dynamic>> getSubjects({int? deptId, String? semester}) async {
+    try {
+      final queryParams = <String, String>{};
+      if (deptId != null) queryParams['department_id'] = deptId.toString();
+      if (semester != null && semester.isNotEmpty) queryParams['semester'] = semester;
+
+      final uri = Uri.parse('$_baseUrl/api/subjects').replace(queryParameters: queryParams);
+      final response = await http.get(uri, headers: _headers()).timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['subjects'] as List<dynamic>? ?? [];
+      }
+      return [];
+    } catch (e) {
+      debugPrint("getSubjects error: $e");
+      return [];
+    }
+  }
+
+  Future<List<dynamic>> getTeacherSubjects() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/teacher/subjects'), headers: _headers())
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return data['subjects'] as List<dynamic>? ?? [];
+      }
+      return [];
+    } catch (e) {
+      debugPrint("getTeacherSubjects error: $e");
+      return [];
+    }
+  }
+
+  Future<Map<String, dynamic>?> getStudentAttendanceSummary() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/student/attendance'), headers: _headers())
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return Map<String, dynamic>.from(data);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint("getStudentAttendanceSummary error: $e");
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getStudentSubjectAttendanceDetail(int subjectId) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/student/attendance/$subjectId'), headers: _headers())
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          return Map<String, dynamic>.from(data);
+        }
+      }
+      return null;
+    } catch (e) {
+      debugPrint("getStudentSubjectAttendanceDetail error: $e");
+      return null;
     }
   }
 
@@ -290,6 +323,203 @@ class ApiService {
       debugPrint("Search students error: $e");
       return [];
     }
+  }
+
+  Future<void> _cacheStudentProfile(Map<String, dynamic> student) async {
+    if (_currentUser != null) {
+      _currentUser!['student'] = student;
+      try {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('current_user', jsonEncode(_currentUser));
+      } catch (_) {}
+    }
+  }
+
+  Future<Map<String, dynamic>?> getStudentDetails(int id) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/students/$id'), headers: _headers())
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['student'] != null) {
+          return Map<String, dynamic>.from(data['student']);
+        }
+      }
+      return null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Map<String, dynamic>?> getCurrentStudent() async {
+    bool hasNetworkError = false;
+    bool isExplicitlyUnlinked = false;
+    String unlinkedMsg = "Student profile is not linked to this account. Please contact the administrator.";
+
+    // 1. Check if valid student is already cached in current session
+    if (_currentUser != null &&
+        _currentUser!['student'] is Map &&
+        (_currentUser!['student'] as Map)['student_id'] != null) {
+      final s = Map<String, dynamic>.from(_currentUser!['student']);
+      if (s['student_id'].toString().isNotEmpty) {
+        return s;
+      }
+    }
+
+    // 2. Try primary route: GET /api/student/me
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/student/me'), headers: _headers())
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['student'] != null) {
+          final student = Map<String, dynamic>.from(data['student']);
+          await _cacheStudentProfile(student);
+          return student;
+        }
+      } else if (response.statusCode == 404) {
+        try {
+          final data = jsonDecode(response.body);
+          if (data['error_code'] == 'PROFILE_NOT_LINKED') {
+            isExplicitlyUnlinked = true;
+            if (data['message'] != null) unlinkedMsg = data['message'];
+          }
+        } catch (_) {}
+      }
+    } catch (e) {
+      debugPrint("api/student/me error: $e");
+      hasNetworkError = true;
+    }
+
+    // 3. Try alternative route: GET /api/student/profile
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/student/profile'), headers: _headers())
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true && data['student'] != null) {
+          final student = Map<String, dynamic>.from(data['student']);
+          await _cacheStudentProfile(student);
+          return student;
+        }
+      }
+    } catch (e) {
+      debugPrint("api/student/profile error: $e");
+    }
+
+    // 4. Fallback: Search students by username / roll number / display name
+    if (_currentUser != null) {
+      final username = (_currentUser!['username'] ?? '').toString().trim();
+      final displayName = (_currentUser!['display_name'] ?? '').toString().trim();
+      final email = (_currentUser!['email'] ?? '').toString().trim();
+
+      if (username.isNotEmpty) {
+        final matches = await searchStudents(username);
+        for (final raw in matches) {
+          if (raw is Map) {
+            final s = Map<String, dynamic>.from(raw);
+            final sid = (s['student_id'] ?? '').toString().toLowerCase();
+            final roll = (s['roll_number'] ?? '').toString().toLowerCase();
+            if (sid == username.toLowerCase() || roll == username.toLowerCase()) {
+              await _cacheStudentProfile(s);
+              return s;
+            }
+          }
+        }
+        if (matches.length == 1 && matches.first is Map) {
+          final s = Map<String, dynamic>.from(matches.first);
+          await _cacheStudentProfile(s);
+          return s;
+        }
+      }
+
+      if (displayName.isNotEmpty && displayName.toLowerCase() != username.toLowerCase()) {
+        final matches = await searchStudents(displayName);
+        for (final raw in matches) {
+          if (raw is Map) {
+            final s = Map<String, dynamic>.from(raw);
+            final sname = (s['full_name'] ?? '').toString().toLowerCase();
+            if (sname == displayName.toLowerCase()) {
+              await _cacheStudentProfile(s);
+              return s;
+            }
+          }
+        }
+      }
+
+      if (email.isNotEmpty) {
+        final matches = await searchStudents(email);
+        for (final raw in matches) {
+          if (raw is Map) {
+            final s = Map<String, dynamic>.from(raw);
+            final semail = (s['email'] ?? '').toString().toLowerCase();
+            if (semail == email.toLowerCase()) {
+              await _cacheStudentProfile(s);
+              return s;
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Fallback: Reuse identity from working Attendance scans
+    try {
+      final scans = await getTodayAttendance();
+      if (_currentUser != null && scans.isNotEmpty) {
+        final username = (_currentUser!['username'] ?? '').toString().trim().toLowerCase();
+        final displayName = (_currentUser!['display_name'] ?? '').toString().trim().toLowerCase();
+
+        for (final rec in scans) {
+          if (rec is Map) {
+            final sid = (rec['student_id'] ?? '').toString().toLowerCase();
+            final roll = (rec['roll_number'] ?? '').toString().toLowerCase();
+            final sname = (rec['student_name'] ?? '').toString().toLowerCase();
+            final sObj = rec['student'] is Map ? Map<String, dynamic>.from(rec['student']) : null;
+
+            if ((sid.isNotEmpty && sid == username) ||
+                (roll.isNotEmpty && roll == username) ||
+                (sname.isNotEmpty && sname == displayName)) {
+              if (sObj != null && sObj['student_id'] != null) {
+                await _cacheStudentProfile(sObj);
+                return sObj;
+              }
+              if (sObj != null && sObj['id'] is int) {
+                final fullStudent = await getStudentDetails(sObj['id']);
+                if (fullStudent != null) {
+                  await _cacheStudentProfile(fullStudent);
+                  return fullStudent;
+                }
+              }
+              final synth = {
+                'student_id': rec['student_id'] ?? username,
+                'full_name': rec['student_name'] ?? _currentUser!['display_name'] ?? 'Student',
+                'roll_number': rec['roll_number'] ?? '-',
+                'qr_token': rec['student_id'] ?? username,
+              };
+              await _cacheStudentProfile(synth);
+              return synth;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Attendance identity reuse fallback error: $e");
+    }
+
+    // 6. Return specific error structure to distinguish Network Error vs Unlinked
+    if (isExplicitlyUnlinked) {
+      return {'error': 'PROFILE_NOT_LINKED', 'message': unlinkedMsg};
+    }
+    if (hasNetworkError) {
+      return {'error': 'NETWORK_ERROR', 'message': 'Unable to connect to server. Please check your network and retry.'};
+    }
+
+    return {'error': 'PROFILE_NOT_LINKED', 'message': unlinkedMsg};
   }
 }
 

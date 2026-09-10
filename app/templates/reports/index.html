@@ -54,6 +54,28 @@
         </select>
       </div>
       <div class="col-md-3">
+        <label class="form-label small fw-semibold text-muted">SUBJECT</label>
+        <select name="subject" class="form-select">
+          <option value="">All Subjects</option>
+          {% for sub in subjects %}
+            <option value="{{ sub.id }}" {% if args.get('subject')|int == sub.id %}selected{% endif %}>
+              [{{ sub.subject_code }}] {{ sub.subject_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold text-muted">FACULTY</label>
+        <select name="teacher" class="form-select">
+          <option value="">All Faculty</option>
+          {% for t in teachers %}
+            <option value="{{ t.id }}" {% if args.get('teacher')|int == t.id %}selected{% endif %}>
+              {{ t.full_name }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
         <label class="form-label small fw-semibold text-muted">STATUS</label>
         <select name="status" class="form-select">
           <option value="">All Statuses</option>
@@ -136,6 +158,7 @@
           <tr>
             <th>Student</th>
             <th>Dept</th>
+            <th>Subject</th>
             <th>Date</th>
             <th>Time In</th>
             <th>Time Out</th>
@@ -153,6 +176,14 @@
                   <small class="text-muted font-monospace">{{ r.student.student_id }} &bull; Roll: {{ r.student.roll_number }}</small>
                 </td>
                 <td><span class="badge bg-secondary">{{ r.student.department.code if r.student.department else 'GEN' }}</span></td>
+                <td>
+                  {% if r.subject %}
+                    <span class="badge badge-soft-primary">{{ r.subject.subject_code }}</span>
+                    <small class="text-muted d-block text-truncate" style="max-width: 140px;" title="{{ r.subject.subject_name }}">{{ r.subject.subject_name }}</small>
+                  {% else %}
+                    <span class="text-muted small font-mono">General</span>
+                  {% endif %}
+                </td>
                 <td class="fw-semibold">{{ r.date.strftime('%d %b %Y') }}</td>
                 <td>{{ r.time_in.strftime('%I:%M %p') if r.time_in else '-' }}</td>
                 <td>{{ r.time_out.strftime('%I:%M %p') if r.time_out else '-' }}</td>
@@ -166,7 +197,9 @@
                   {% endif %}
                 </td>
                 <td><span class="badge bg-secondary">{{ r.method }}</span></td>
-                <td class="small text-muted">{{ r.marker.username if r.marker else 'System' }}</td>
+                <td class="small text-muted">
+                  {{ r.teacher.full_name if r.teacher else (r.marker.username if r.marker else 'System') }}
+                </td>
               </tr>
             {% endfor %}
           {% else %}

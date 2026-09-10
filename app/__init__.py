@@ -99,7 +99,32 @@ def _auto_bootstrap_database(app):
             from app.models.teacher import Teacher
             from app.models.settings import SystemSetting
             from app.models.session import AcademicSession
+            from app.models.subject import Subject, teacher_subjects
+            from sqlalchemy import inspect, text
+
             db.create_all()
+
+            # Ensure attendances table has subject_id and teacher_id columns
+            try:
+                inspector = inspect(db.engine)
+                if 'attendances' in inspector.get_table_names():
+                    cols = [c['name'] for c in inspector.get_columns('attendances')]
+                    if 'subject_id' not in cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN subject_id INTEGER REFERENCES subjects(id)"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+                    if 'teacher_id' not in cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN teacher_id INTEGER REFERENCES teachers(id)"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+            except Exception as e:
+                db.session.rollback()
+                app.logger.warning(f"Attendance table inspection/alter skipped: {e}")
+
             from datetime import date
 
             # 1. System Settings
@@ -207,6 +232,35 @@ def _auto_bootstrap_database(app):
                     db.session.add(student_profile)
                 app.logger.info("Auto-bootstrap: Created student user.")
 
+            # 7. Default Subjects
+            cse = depts.get('CSE') or Department.query.filter_by(code='CSE').first()
+            if cse:
+                sample_subjects = [
+                    ('CS101', 'Data Structures', 'Fundamental data structures, trees, graphs, and algorithmic complexity.', '4th'),
+                    ('CS102', 'Database Management System', 'Relational database design, SQL, normalization, transactions, and indexing.', '4th'),
+                    ('CS103', 'Web Technology', 'Modern web architecture, REST APIs, client-server models, and security.', '4th'),
+                    ('CS104', 'Software Engineering', 'Software development lifecycle, agile methodologies, and QA testing.', '4th'),
+                    ('CS105', 'Operating System', 'Processes, memory virtualization, concurrency, and file systems.', '4th'),
+                ]
+                teacher_obj = Teacher.query.filter_by(employee_id='TCH101').first()
+                for scode, sname, sdesc, sem in sample_subjects:
+                    sub = Subject.query.filter_by(subject_code=scode).first()
+                    if not sub:
+                        sub = Subject(
+                            subject_code=scode,
+                            subject_name=sname,
+                            description=sdesc,
+                            department_id=cse.id,
+                            course='B.Tech Computer Science',
+                            semester=sem,
+                            is_active=True
+                        )
+                        db.session.add(sub)
+                        db.session.flush()
+                        if teacher_obj and teacher_obj not in sub.teachers:
+                            sub.teachers.append(teacher_obj)
+                            app.logger.info(f"Auto-bootstrap: Assigned {scode} to {teacher_obj.full_name}")
+
             db.session.commit()
             app.logger.info("✓ Database auto-bootstrap completed.")
         except Exception as e:
@@ -244,8 +298,13 @@ def register_error_handlers(app):
     def not_found(e):
         return make_error_response(404, 'Page Not Found', 'The page or resource you are looking for does not exist or has been moved.')
 
+    @app.errorhandler(413)
+    def request_entity_too_large(e):
+        return make_error_response(413, 'File Too Large', 'The uploaded file exceeds the maximum allowed size (5MB). Please select a smaller photo.')
+
     @app.errorhandler(500)
     def internal_error(e):
         db.session.rollback()
         app.logger.error(f"500 Internal Server Error: {e}", exc_info=True)
         return make_error_response(500, 'Server Error', 'An unexpected internal server error occurred. Please try again or check the details.')
+

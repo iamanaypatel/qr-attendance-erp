@@ -60,13 +60,15 @@ def generate_student_id_card_pdf(student, institution_name: str = "Dr. Virendra 
 
     photo_rendered = False
     if student.photo:
-        photo_path = Path("app/static/uploads") / student.photo
-        if photo_path.exists():
+        from app.utils.photo import get_student_photo_path
+        photo_path = get_student_photo_path(student.photo)
+        if photo_path and photo_path.exists():
             try:
                 c.drawImage(str(photo_path), photo_x, photo_y, width=photo_w, height=photo_h, preserveAspectRatio=True, anchor='c')
                 photo_rendered = True
             except Exception:
                 photo_rendered = False
+
 
     if not photo_rendered:
         # Placeholder avatar box

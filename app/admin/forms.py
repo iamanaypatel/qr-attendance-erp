@@ -1,6 +1,6 @@
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
-from wtforms import StringField, SelectField, DateField, TextAreaField, BooleanField, SubmitField, PasswordField
+from wtforms import StringField, SelectField, SelectMultipleField, DateField, TextAreaField, BooleanField, SubmitField, PasswordField, widgets
 from wtforms.validators import DataRequired, Email, Length, Optional
 
 class StudentForm(FlaskForm):
@@ -23,7 +23,7 @@ class StudentForm(FlaskForm):
     section = StringField('Section', validators=[Optional(), Length(max=10)])
     roll_number = StringField('Roll Number', validators=[DataRequired(), Length(max=50)])
     address = TextAreaField('Permanent Address', validators=[Optional()])
-    photo = FileField('Student Photo', validators=[Optional(), FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Images only (.jpg, .png, .webp)')])
+    photo = FileField('Student Photo', validators=[Optional(), FileAllowed(['jpg', 'jpeg', 'png', 'webp'], 'Images only (.jpg, .png, .webp)')], render_kw={'accept': 'image/jpeg,image/png,image/webp'})
     portal_username = StringField('Portal Username', validators=[Optional(), Length(min=3, max=64)])
     portal_password = PasswordField('Portal Password (Leave empty for default: Student@1234)', validators=[Optional(), Length(min=6, max=128)])
     create_user_account = BooleanField('Enable Student Portal Login Account', default=True)
@@ -69,3 +69,29 @@ class SystemSettingsForm(FlaskForm):
     attendance_end_time = StringField('Attendance Check-Out End (HH:MM)', validators=[DataRequired()])
     duplicate_scan_cooldown_seconds = StringField('Duplicate Scan Cooldown (seconds)', validators=[DataRequired()])
     submit = SubmitField('Save Settings')
+
+class SubjectForm(FlaskForm):
+    subject_code = StringField('Subject Code (e.g. CS101)', validators=[DataRequired(), Length(max=32)])
+    subject_name = StringField('Subject Name', validators=[DataRequired(), Length(max=120)])
+    description = TextAreaField('Description / Syllabus', validators=[Optional()])
+    department_id = SelectField('Department', coerce=int, validators=[Optional()])
+    course = StringField('Course / Degree (e.g. B.Tech Computer Science)', validators=[Optional(), Length(max=100)])
+    semester = SelectField('Semester', choices=[
+        ('', '-- All / Not Specified --'),
+        ('1st', '1st Semester'), ('2nd', '2nd Semester'),
+        ('3rd', '3rd Semester'), ('4th', '4th Semester'),
+        ('5th', '5th Semester'), ('6th', '6th Semester'),
+        ('7th', '7th Semester'), ('8th', '8th Semester')
+    ], validators=[Optional()])
+    is_active = BooleanField('Active Subject', default=True)
+    submit = SubmitField('Save Subject')
+
+class SubjectAssignTeachersForm(FlaskForm):
+    teacher_ids = SelectMultipleField(
+        'Assigned Faculty Members',
+        coerce=int,
+        validators=[Optional()],
+        widget=widgets.ListWidget(prefix_label=False),
+        option_widget=widgets.CheckboxInput()
+    )
+    submit = SubmitField('Update Faculty Assignments')

@@ -96,6 +96,30 @@ def init_system():
         flash(f'Initialization note: {str(e)}', 'warning')
     return redirect(url_for('auth.login'))
 
+def find_user_by_identity(identity: str):
+    """
+    Resolve a user by username, email, or linked Student's student_id / roll_number.
+    """
+    identity = (identity or '').strip()
+    if not identity:
+        return None
+    user = User.query.filter(
+        (func.lower(User.username) == func.lower(identity)) |
+        (func.lower(User.email) == func.lower(identity))
+    ).first()
+    if user:
+        return user
+
+    from app.models.student import Student
+    student = Student.query.filter(
+        (func.lower(Student.student_id) == func.lower(identity)) |
+        (func.lower(Student.roll_number) == func.lower(identity))
+    ).first()
+    if student and student.user:
+        return student.user
+
+    return None
+
 from app.extensions import csrf, db
 
 @auth_bp.route('/login', methods=['GET', 'POST'])
@@ -116,10 +140,7 @@ def login():
         password = data.get('password') or ''
 
         if identity and password:
-            user = User.query.filter(
-                (func.lower(User.username) == func.lower(identity)) |
-                (func.lower(User.email) == func.lower(identity))
-            ).first()
+            user = find_user_by_identity(identity)
 
             if user and user.check_password(password):
                 if not user.is_active:
@@ -132,15 +153,25 @@ def login():
                 AuditLog.log('USER_LOGIN', f'User logged in: {user.username} [{user.role}]', user_id=user.id)
 
                 if request.is_json or 'application/json' in request.headers.get('Accept', ''):
+                    user_payload = {
+                        'id': user.id,
+                        'username': user.username,
+                        'email': user.email,
+                        'role': user.role,
+                        'display_name': user.get_display_name()
+                    }
+                    if user.is_student:
+                        stu = user.student
+                        if stu:
+                            user_payload['student'] = stu.to_dict()
+                        else:
+                            user_payload['student'] = None
+                            user_payload['student_unlinked'] = True
+
                     return jsonify({
                         'success': True,
                         'message': f'Welcome back, {user.get_display_name()}!',
-                        'user': {
-                            'id': user.id,
-                            'username': user.username,
-                            'role': user.role,
-                            'display_name': user.get_display_name()
-                        }
+                        'user': user_payload
                     })
 
                 flash(f'Welcome back, {user.get_display_name()}!', 'success')
@@ -149,6 +180,8 @@ def login():
                 elif user.is_teacher:
                     return redirect(url_for('teacher.dashboard'))
                 elif user.is_student:
+                    if not user.student:
+                        flash('Student profile is not linked to this account. Please contact the administrator.', 'warning')
                     return redirect(url_for('student.dashboard'))
             else:
                 if request.is_json or 'application/json' in request.headers.get('Accept', ''):
@@ -161,11 +194,8 @@ def login():
         identity = form.identity.data.strip()
         password = form.password.data
 
-        # Support login by username or email (case-insensitive)
-        user = User.query.filter(
-            (func.lower(User.username) == func.lower(identity)) |
-            (func.lower(User.email) == func.lower(identity))
-        ).first()
+        # Support login by username, email, student_id, or roll_number (case-insensitive)
+        user = find_user_by_identity(identity)
 
         if user and user.check_password(password):
             if not user.is_active:
@@ -175,6 +205,8 @@ def login():
             login_user(user, remember=form.remember_me.data)
             AuditLog.log('USER_LOGIN', f'User logged in: {user.username} [{user.role}]', user_id=user.id)
             flash(f'Welcome back, {user.get_display_name()}!', 'success')
+            if user.is_student and not user.student:
+                flash('Student profile is not linked to this account. Please contact the administrator.', 'warning')
 
             # Handle next parameter safely (prevent open redirect attacks)
             next_page = request.args.get('next')

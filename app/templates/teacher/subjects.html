@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+
+{% block title %}My Subjects — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">My Assigned Subjects</h2>
+      <p class="text-muted mb-0">Select a course to launch attendance scanning, review historical student logs, or export reports.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('attendance.scanner') }}" class="btn btn-primary-glow">
+        <i class="bi bi-qr-code-scan me-1"></i> QR Scanner
+      </a>
+    </div>
+  </div>
+
+  {% if subject_stats %}
+    <div class="row g-4">
+      {% for item in subject_stats %}
+        {% set s = item.subject %}
+        <div class="col-md-6 col-lg-4">
+          <div class="glass-card p-4 h-100 d-flex flex-column justify-content-between shadow-sm position-relative overflow-hidden">
+            <div class="position-absolute top-0 end-0 p-3">
+              <span class="badge bg-primary text-white font-mono fs-7 px-2.5 py-1.5 shadow-sm">{{ s.subject_code }}</span>
+            </div>
+
+            <div>
+              <div class="d-flex align-items-center gap-2 mb-2">
+                {% if s.department %}
+                  <span class="badge badge-soft-info">{{ s.department.code }}</span>
+                {% endif %}
+                {% if s.semester %}
+                  <span class="badge badge-soft-secondary">{{ s.semester }} Sem</span>
+                {% endif %}
+              </div>
+
+              <h4 class="fw-bold brand-font text-dark mb-2">{{ s.subject_name }}</h4>
+              
+              {% if s.course %}
+                <p class="text-muted small mb-3">
+                  <i class="bi bi-mortarboard text-primary me-1"></i>{{ s.course }}
+                </p>
+              {% endif %}
+
+              {% if s.description %}
+                <p class="text-muted small mb-3 text-truncate-2" style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
+                  {{ s.description }}
+                </p>
+              {% endif %}
+
+              <div class="row g-2 p-2 rounded-3 bg-body-tertiary border mb-4">
+                <div class="col-6 text-center border-end">
+                  <div class="text-muted extra-small fw-semibold text-uppercase">Total Classes</div>
+                  <div class="fs-5 fw-bold text-dark mt-0.5">{{ item.total_sessions }}</div>
+                </div>
+                <div class="col-6 text-center">
+                  <div class="text-muted extra-small fw-semibold text-uppercase">Scanned Today</div>
+                  <div class="fs-5 fw-bold text-success mt-0.5">{{ item.today_sessions }}</div>
+                </div>
+              </div>
+            </div>
+
+            <div class="d-flex flex-column gap-2 mt-auto">
+              <a href="{{ url_for('attendance.scanner', subject_id=s.id) }}" class="btn btn-primary-glow w-100">
+                <i class="bi bi-qr-code-scan me-1"></i> Take Attendance
+              </a>
+              <div class="d-flex gap-2">
+                <a href="{{ url_for('teacher.subject_attendance', subject_id=s.id) }}" class="btn btn-outline-secondary flex-grow-1">
+                  <i class="bi bi-clock-history me-1"></i> View Attendance
+                </a>
+                <a href="{{ url_for('reports.index', subject=s.id) }}" class="btn btn-outline-secondary" title="Subject Report">
+                  <i class="bi bi-file-earmark-bar-graph"></i>
+                </a>
+              </div>
+            </div>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% else %}
+    <div class="glass-card p-5 text-center text-muted">
+      <i class="bi bi-journal-x fs-1 d-block mb-3 text-primary opacity-50"></i>
+      <h5 class="fw-bold">No Subjects Assigned Yet</h5>
+      <p class="text-muted small mb-3">You do not currently have any active subjects assigned to your faculty profile. Please contact the administrator.</p>
+      <a href="{{ url_for('teacher.dashboard') }}" class="btn btn-outline-primary">Return to Dashboard</a>
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

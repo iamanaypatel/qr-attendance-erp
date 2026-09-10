@@ -1,0 +1,191 @@
+{% extends "base.html" %}
+
+{% block title %}{{ subject.subject_name }} — Attendance — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div class="d-flex align-items-center gap-3">
+      <a href="{{ url_for('teacher.subjects') }}" class="btn btn-sm btn-outline-secondary">
+        <i class="bi bi-arrow-left"></i>
+      </a>
+      <div>
+        <div class="d-flex align-items-center gap-2">
+          <h2 class="fw-bold brand-font mb-0">{{ subject.subject_name }}</h2>
+          <span class="badge bg-primary text-white font-mono px-2 py-1">{{ subject.subject_code }}</span>
+        </div>
+        <p class="text-muted mb-0 small mt-1">
+          {% if subject.department %}{{ subject.department.name }} &bull; {% endif %}
+          {% if subject.semester %}{{ subject.semester }} Semester &bull; {% endif %}
+          Subject-Wise Attendance Records & History
+        </p>
+      </div>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('attendance.scanner', subject_id=subject.id) }}" class="btn btn-primary-glow">
+        <i class="bi bi-qr-code-scan me-1"></i> Start Attendance
+      </a>
+      <a href="{{ url_for('reports.index', subject=subject.id) }}" class="btn btn-outline-secondary">
+        <i class="bi bi-file-earmark-bar-graph me-1"></i> Full Report
+      </a>
+    </div>
+  </div>
+
+  <!-- Metric Overview Cards -->
+  <div class="row g-3 mb-4">
+    <div class="col-6 col-md-3">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Total Records</div>
+        <div class="fs-4 fw-bold text-dark mt-1">{{ total_records }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Present Marks</div>
+        <div class="fs-4 fw-bold text-success mt-1">{{ present_records }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Absent Marks</div>
+        <div class="fs-4 fw-bold text-danger mt-1">{{ absent_records }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Average Rate</div>
+        <div class="fs-4 fw-bold text-primary mt-1">{{ attendance_pct }}%</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter Bar -->
+  <div class="glass-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('teacher.subject_attendance', subject_id=subject.id) }}" class="row g-2 align-items-center">
+      <div class="col-md-5">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0 text-muted">
+            <i class="bi bi-search"></i>
+          </span>
+          <input type="text" name="q" value="{{ search }}" class="form-control border-start-0 ps-0" placeholder="Search student name, roll number, or ID...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <input type="date" name="date" value="{{ filter_date }}" class="form-control">
+      </div>
+      <div class="col-md-2">
+        <select name="status" class="form-select">
+          <option value="">All Statuses</option>
+          <option value="Present" {% if selected_status == 'Present' %}selected{% endif %}>Present</option>
+          <option value="Absent" {% if selected_status == 'Absent' %}selected{% endif %}>Absent</option>
+          <option value="Late" {% if selected_status == 'Late' %}selected{% endif %}>Late</option>
+          <option value="Half Day" {% if selected_status == 'Half Day' %}selected{% endif %}>Half Day</option>
+        </select>
+      </div>
+      <div class="col-md-2 d-flex gap-2">
+        <button type="submit" class="btn btn-primary flex-grow-1">Filter</button>
+        {% if search or filter_date or selected_status %}
+          <a href="{{ url_for('teacher.subject_attendance', subject_id=subject.id) }}" class="btn btn-outline-secondary">
+            <i class="bi bi-arrow-counterclockwise"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Attendance Table -->
+  <div class="glass-card p-4">
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Student</th>
+            <th>Roll Number</th>
+            <th>Date</th>
+            <th>Time In</th>
+            <th>Time Out</th>
+            <th>Status</th>
+            <th>Method</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if records %}
+            {% for r in records %}
+              <tr>
+                <td>
+                  <div class="fw-semibold text-dark">{{ r.student.full_name if r.student else 'Unknown' }}</div>
+                  <small class="text-muted font-mono">{{ r.student.student_id if r.student else '-' }}</small>
+                </td>
+                <td>
+                  <span class="font-mono">{{ r.student.roll_number if r.student else '-' }}</span>
+                </td>
+                <td>
+                  <span class="font-mono text-muted">{{ r.date.strftime('%d %b %Y') }}</span>
+                </td>
+                <td>
+                  <span class="font-mono">{{ r.time_in.strftime('%I:%M %p') if r.time_in else '—' }}</span>
+                </td>
+                <td>
+                  <span class="font-mono">{{ r.time_out.strftime('%I:%M %p') if r.time_out else '—' }}</span>
+                </td>
+                <td>
+                  {% if r.status in ['Present', 'Late', 'Half Day'] %}
+                    <span class="badge badge-soft-success font-mono">{{ r.status }}</span>
+                  {% elif r.status == 'Absent' %}
+                    <span class="badge badge-soft-danger font-mono">{{ r.status }}</span>
+                  {% else %}
+                    <span class="badge badge-soft-secondary font-mono">{{ r.status }}</span>
+                  {% endif %}
+                </td>
+                <td>
+                  <span class="badge bg-light text-muted border font-mono small">{{ r.method or 'QR' }}</span>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="7" class="text-center py-5 text-muted">
+                <i class="bi bi-clipboard-x fs-1 d-block mb-2 text-primary opacity-50"></i>
+                <h6>No attendance records found</h6>
+                <p class="small text-muted mb-0">Start a QR scan session for {{ subject.subject_name }} to log attendance.</p>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    {% if pagination and pagination.pages > 1 %}
+      <div class="d-flex justify-content-between align-items-center mt-3 pt-3 border-top">
+        <small class="text-muted">
+          Showing page {{ pagination.page }} of {{ pagination.pages }}
+        </small>
+        <nav>
+          <ul class="pagination pagination-sm mb-0">
+            {% if pagination.has_prev %}
+              <li class="page-item">
+                <a class="page-link" href="{{ url_for('teacher.subject_attendance', subject_id=subject.id, page=pagination.prev_num, q=search, date=filter_date, status=selected_status) }}">Previous</a>
+              </li>
+            {% endif %}
+            {% for p in pagination.iter_pages(left_edge=1, right_edge=1, left_current=2, right_current=2) %}
+              {% if p %}
+                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('teacher.subject_attendance', subject_id=subject.id, page=p, q=search, date=filter_date, status=selected_status) }}">{{ p }}</a>
+                </li>
+              {% else %}
+                <li class="page-item disabled"><span class="page-link">&hellip;</span></li>
+              {% endif %}
+            {% endfor %}
+            {% if pagination.has_next %}
+              <li class="page-item">
+                <a class="page-link" href="{{ url_for('teacher.subject_attendance', subject_id=subject.id, page=pagination.next_num, q=search, date=filter_date, status=selected_status) }}">Next</a>
+              </li>
+            {% endif %}
+          </ul>
+        </nav>
+      </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
