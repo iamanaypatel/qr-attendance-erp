@@ -154,8 +154,8 @@
             <button class="btn btn-primary-glow" id="startScanBtn" {% if current_user.is_teacher and assignment_count == 0 %}disabled title="No subject assigned to your account"{% endif %}>
               <i class="bi bi-play-circle-fill me-1"></i> Start Attendance
             </button>
-            <button class="btn btn-outline-danger" id="stopScanBtn" disabled>
-              <i class="bi bi-stop-circle-fill me-1"></i> Stop Attendance
+            <button class="btn btn-outline-success" id="stopScanBtn" disabled>
+              <i class="bi bi-check-circle-fill me-1"></i> Complete Session & Switch Subject
             </button>
           </div>
           <select id="cameraSelect" class="form-select w-auto" style="min-width: 140px;">
@@ -364,7 +364,7 @@
       lastScannedToken = null;
       lastScannedTime = 0;
 
-      // Unlock subject selector
+      // Unlock subject selector immediately
       if (assignmentSelect) {
         assignmentSelect.disabled = false;
       }
@@ -372,8 +372,9 @@
         sessionLockBadge.style.display = 'none';
       }
       if (subjectHelper) {
-        subjectHelper.innerHTML = '<i class="bi bi-info-circle me-1"></i>Attendance will be locked to the chosen subject for this scan session.';
+        subjectHelper.innerHTML = '<i class="bi bi-info-circle me-1"></i>Session completed. Select next subject to begin immediately.';
       }
+      showToast("Session completed. Select next subject to begin immediately.", "success", "Session Completed");
     } catch (err) {
       console.error("Stop scanner error:", err);
     }
@@ -455,11 +456,13 @@
 
   function onScanSuccess(decodedText, decodedResult) {
     const now = Date.now();
-    // Debounce identical scans within 3 seconds
-    if (decodedText === lastScannedToken && (now - lastScannedTime) < 3000) {
+    const ctx = getActiveSubjectContext();
+    const scanKey = `${ctx.subject_id || 'gen'}_${decodedText}`;
+    // Debounce identical scans within 2 seconds for the SAME subject session
+    if (scanKey === lastScannedToken && (now - lastScannedTime) < 2000) {
       return;
     }
-    lastScannedToken = decodedText;
+    lastScannedToken = scanKey;
     lastScannedTime = now;
 
     processScanPayload(decodedText);

@@ -99,16 +99,33 @@ class _ScannerScreenState extends State<ScannerScreen> {
     if (rawValue == null || rawValue.isEmpty) return;
 
     final now = DateTime.now();
-    // Debounce identical scans within 3 seconds
-    if (rawValue == _lastScannedToken &&
-        now.difference(_lastScannedTime).inSeconds < 3) {
+    // Scope debounce key strictly by subject so switching subjects allows immediate scanning of the same student
+    final scanKey = "${_selectedSubjectId ?? 'gen'}_$rawValue";
+    if (scanKey == _lastScannedToken &&
+        now.difference(_lastScannedTime).inMilliseconds < 2000) {
       return;
     }
 
-    _lastScannedToken = rawValue;
+    _lastScannedToken = scanKey;
     _lastScannedTime = now;
 
     _processToken(rawValue);
+  }
+
+  void _completeSessionAndSwitchSubject() {
+    setState(() {
+      _isScanningActive = false;
+      _lastScannedToken = null;
+      _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+    });
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text("${_selectedSubjectCode ?? 'Subject'} session complete. Select next subject to start immediately."),
+        duration: const Duration(seconds: 2),
+        backgroundColor: const Color(0xFF10B981),
+      ),
+    );
   }
 
   Future<void> _processToken(String token) async {
@@ -402,17 +419,42 @@ class _ScannerScreenState extends State<ScannerScreen> {
               const SizedBox(height: 20),
             ],
 
-            ElevatedButton(
-              onPressed: () => Navigator.pop(ctx),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: color,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
+                    child: const Text("Continue Scanning"),
+                  ),
                 ),
-              ),
-              child: const Text("Continue Scanning"),
+                if (_isScanningActive) ...[
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _completeSessionAndSwitchSubject();
+                      },
+                      icon: const Icon(Icons.check_circle_outline, size: 16),
+                      label: const Text("Complete & Switch"),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -640,26 +682,30 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         ),
                       ),
 
-                    // START / STOP ATTENDANCE ACTION BUTTON
+                    // START / COMPLETE ATTENDANCE ACTION BUTTON
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
                       child: SizedBox(
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            setState(() {
-                              _isScanningActive = !_isScanningActive;
-                              _lastScannedToken = null;
-                              _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
-                            });
+                            if (_isScanningActive) {
+                              _completeSessionAndSwitchSubject();
+                            } else {
+                              setState(() {
+                                _isScanningActive = true;
+                                _lastScannedToken = null;
+                                _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+                              });
+                            }
                           },
-                          icon: Icon(_isScanningActive ? Icons.stop_circle : Icons.play_circle_fill, size: 20),
+                          icon: Icon(_isScanningActive ? Icons.check_circle_rounded : Icons.play_circle_fill, size: 20),
                           label: Text(
-                            _isScanningActive ? "Stop Attendance (Finish Session)" : "Start Attendance",
+                            _isScanningActive ? "Complete ${_selectedSubjectCode ?? 'Subject'} & Switch" : "Start Attendance",
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: _isScanningActive ? Colors.red.shade600 : const Color(0xFF2563EB),
+                            backgroundColor: _isScanningActive ? const Color(0xFF10B981) : const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 11),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
