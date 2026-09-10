@@ -95,3 +95,22 @@ class SubjectAssignTeachersForm(FlaskForm):
         option_widget=widgets.CheckboxInput()
     )
     submit = SubmitField('Update Faculty Assignments')
+
+class TeacherSubjectAssignmentForm(FlaskForm):
+    teacher_id = SelectField('Teacher / Faculty', coerce=int, validators=[DataRequired(message="Please select a faculty member.")])
+    subject_id = SelectField('Subject', coerce=int, validators=[DataRequired(message="Please select a subject.")])
+    semester = SelectField('Semester', choices=[
+        ('1st Semester', '1st Semester'),
+        ('2nd Semester', '2nd Semester'),
+        ('3rd Semester', '3rd Semester'),
+        ('4th Semester', '4th Semester'),
+        ('5th Semester', '5th Semester'),
+        ('6th Semester', '6th Semester'),
+        ('7th Semester', '7th Semester'),
+        ('8th Semester', '8th Semester')
+    ], validators=[DataRequired(message="Please select a semester.")])
+    department_id = SelectField('Department (Optional)', coerce=int, validators=[Optional()])
+    course = StringField('Course / Program (e.g. B.Tech)', validators=[Optional(), Length(max=100)])
+    section = StringField('Section (e.g. A, B)', validators=[Optional(), Length(max=32)])
+    is_active = BooleanField('Active Assignment', default=True)
+    submit = SubmitField('Save Subject Assignment')

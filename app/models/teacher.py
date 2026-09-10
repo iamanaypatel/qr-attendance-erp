@@ -16,11 +16,45 @@ class Teacher(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
-    def is_assigned_to_subject(self, subject_id: int) -> bool:
-        """Check if teacher is assigned to the given subject_id."""
+    def is_assigned_to_subject(self, subject_id: int, semester: str = None) -> bool:
+        """Check if teacher is actively assigned to the given subject_id (and optionally semester)."""
         if not subject_id:
             return False
-        return self.assigned_subjects.filter_by(id=subject_id).first() is not None
+        from app.models.subject_assignment import TeacherSubjectAssignment
+        query = self.subject_assignments.filter_by(subject_id=subject_id, is_active=True)
+        if semester and semester.strip():
+            query = query.filter(TeacherSubjectAssignment.semester.ilike(semester.strip()))
+        if query.first() is not None:
+            return True
+        # Fallback to secondary association table for legacy setups
+        if hasattr(self, 'assigned_subjects') and self.assigned_subjects.filter_by(id=subject_id, is_active=True).first() is not None:
+            return True
+        return False
+
+    def get_active_assignments(self):
+        """Returns list of active TeacherSubjectAssignment objects."""
+        assignments = self.subject_assignments.filter_by(is_active=True).all()
+        if not assignments and hasattr(self, 'assigned_subjects'):
+            # Fallback to secondary association table if no explicit TeacherSubjectAssignment exists
+            legacy_subs = self.assigned_subjects.filter_by(is_active=True).all()
+            if legacy_subs:
+                from app.models.subject_assignment import TeacherSubjectAssignment
+                for sub in legacy_subs:
+                    sem = sub.semester or 'General'
+                    existing = TeacherSubjectAssignment.query.filter_by(teacher_id=self.id, subject_id=sub.id, semester=sem).first()
+                    if not existing:
+                        existing = TeacherSubjectAssignment(
+                            teacher_id=self.id,
+                            subject_id=sub.id,
+                            semester=sem,
+                            department_id=sub.department_id or self.department_id,
+                            course=sub.course,
+                            is_active=True
+                        )
+                        db.session.add(existing)
+                db.session.commit()
+                assignments = self.subject_assignments.filter_by(is_active=True).all()
+        return assignments
 
     def to_dict(self):
         return {

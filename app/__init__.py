@@ -100,11 +100,12 @@ def _auto_bootstrap_database(app):
             from app.models.settings import SystemSetting
             from app.models.session import AcademicSession
             from app.models.subject import Subject, teacher_subjects
+            from app.models.subject_assignment import TeacherSubjectAssignment
             from sqlalchemy import inspect, text
 
             db.create_all()
 
-            # Ensure attendances table has subject_id and teacher_id columns
+            # Ensure attendances table has subject_id, teacher_id, semester, section columns
             try:
                 inspector = inspect(db.engine)
                 if 'attendances' in inspector.get_table_names():
@@ -118,6 +119,18 @@ def _auto_bootstrap_database(app):
                     if 'teacher_id' not in cols:
                         try:
                             db.session.execute(text("ALTER TABLE attendances ADD COLUMN teacher_id INTEGER REFERENCES teachers(id)"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+                    if 'semester' not in cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN semester VARCHAR(32)"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+                    if 'section' not in cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN section VARCHAR(32)"))
                             db.session.commit()
                         except Exception as e:
                             db.session.rollback()
@@ -257,9 +270,28 @@ def _auto_bootstrap_database(app):
                         )
                         db.session.add(sub)
                         db.session.flush()
-                        if teacher_obj and teacher_obj not in sub.teachers:
+
+                    if teacher_obj:
+                        if teacher_obj not in sub.teachers:
                             sub.teachers.append(teacher_obj)
-                            app.logger.info(f"Auto-bootstrap: Assigned {scode} to {teacher_obj.full_name}")
+                        
+                        # Also ensure formal TeacherSubjectAssignment exists
+                        existing_assign = TeacherSubjectAssignment.query.filter_by(
+                            teacher_id=teacher_obj.id,
+                            subject_id=sub.id,
+                            semester=sub.semester or '4th'
+                        ).first()
+                        if not existing_assign:
+                            new_assign = TeacherSubjectAssignment(
+                                teacher_id=teacher_obj.id,
+                                subject_id=sub.id,
+                                semester=sub.semester or '4th',
+                                department_id=sub.department_id,
+                                course=sub.course,
+                                is_active=True
+                            )
+                            db.session.add(new_assign)
+                            app.logger.info(f"Auto-bootstrap: Assigned {scode} to {teacher_obj.full_name} for {sub.semester} Semester")
 
             db.session.commit()
             app.logger.info("✓ Database auto-bootstrap completed.")

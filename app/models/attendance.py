@@ -8,6 +8,8 @@ class Attendance(db.Model):
     student_id = db.Column(db.Integer, db.ForeignKey('students.id', ondelete='CASCADE'), nullable=False, index=True)
     subject_id = db.Column(db.Integer, db.ForeignKey('subjects.id', ondelete='SET NULL'), nullable=True, index=True)
     teacher_id = db.Column(db.Integer, db.ForeignKey('teachers.id', ondelete='SET NULL'), nullable=True, index=True)
+    semester = db.Column(db.String(32), nullable=True, index=True) # e.g. "4th Semester" or "4th"
+    section = db.Column(db.String(32), nullable=True) # e.g. "A", "B"
     date = db.Column(db.Date, default=date.today, nullable=False, index=True)
     time_in = db.Column(db.Time, nullable=True)
     time_out = db.Column(db.Time, nullable=True)
@@ -66,6 +68,8 @@ class Attendance(db.Model):
             'subject_name': self.subject.subject_name if self.subject else None,
             'teacher_id': self.teacher_id,
             'teacher_name': t_name,
+            'semester': self.semester or (self.subject.semester if self.subject else None),
+            'section': self.section or (self.student.section if self.student else None),
             'student': {
                 'id': self.student.id if self.student else None,
                 'student_id': s_id,

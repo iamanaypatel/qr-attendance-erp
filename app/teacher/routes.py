@@ -25,17 +25,18 @@ def dashboard():
     today_records = query.order_by(Attendance.time_in.desc().nullslast()).all()
     today_scan_count = len(today_records)
 
-    assigned_subjects = []
+    assigned_assignments = []
     if teacher:
-        assigned_subjects = teacher.assigned_subjects.filter_by(is_active=True).order_by(Subject.subject_code).all()
+        assigned_assignments = teacher.get_active_assignments()
     elif current_user.is_admin:
-        assigned_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+        from app.models.subject_assignment import TeacherSubjectAssignment
+        assigned_assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
 
     return render_template(
         'teacher/dashboard.html',
         today_records=today_records,
         today_scan_count=today_scan_count,
-        assigned_subjects=assigned_subjects,
+        assigned_assignments=assigned_assignments,
         now=datetime.now()
     )
 
@@ -44,21 +45,31 @@ def dashboard():
 @role_required('teacher', 'admin')
 def subjects():
     teacher = current_user.teacher_profile
+    from app.models.subject_assignment import TeacherSubjectAssignment
 
     if teacher:
-        my_subjects = teacher.assigned_subjects.filter_by(is_active=True).order_by(Subject.subject_code).all()
+        active_assignments = teacher.get_active_assignments()
     elif current_user.is_admin:
-        my_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+        active_assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
     else:
-        my_subjects = []
+        active_assignments = []
 
-    # Get summary stats for each subject
+    # Get summary stats for each assignment (subject + semester)
     subject_stats = []
-    for s in my_subjects:
-        total_sessions = Attendance.query.filter_by(subject_id=s.id).count()
-        today_sessions = Attendance.query.filter_by(subject_id=s.id, date=date.today()).count()
+    for asgn in active_assignments:
+        s = asgn.subject
+        if not s or not s.is_active:
+            continue
+        query = Attendance.query.filter_by(subject_id=s.id)
+        if asgn.semester:
+            query = query.filter(Attendance.semester.ilike(asgn.semester.strip()))
+        total_sessions = query.count()
+        today_sessions = query.filter(Attendance.date == date.today()).count()
         subject_stats.append({
+            'assignment': asgn,
             'subject': s,
+            'semester': asgn.semester,
+            'teacher': asgn.teacher,
             'total_sessions': total_sessions,
             'today_sessions': today_sessions
         })
@@ -75,10 +86,11 @@ def subjects():
 def subject_attendance(subject_id):
     subject = Subject.query.get_or_404(subject_id)
     teacher = current_user.teacher_profile
+    semester = request.args.get('semester', '').strip()
 
-    # SECURITY CHECK: Verify teacher is authorized for this subject
+    # SECURITY CHECK: Verify teacher is authorized for this subject and semester
     if not current_user.is_admin:
-        if not teacher or not teacher.is_assigned_to_subject(subject_id):
+        if not teacher or not teacher.is_assigned_to_subject(subject_id, semester=semester if semester else None):
             flash(f"Security Alert: You are not authorized to access attendance for '{subject.subject_name}'.", "danger")
             return redirect(url_for('teacher.subjects'))
 
@@ -89,6 +101,8 @@ def subject_attendance(subject_id):
     page = request.args.get('page', 1, type=int)
 
     query = Attendance.query.join(Student).filter(Attendance.subject_id == subject_id)
+    if semester:
+        query = query.filter(Attendance.semester.ilike(semester))
 
     filter_date = None
     if filter_date_str:

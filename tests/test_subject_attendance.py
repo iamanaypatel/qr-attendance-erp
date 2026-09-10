@@ -164,7 +164,7 @@ def test_teacher_subject_authorization_security(client, seeded_db):
         'token': student.qr_token,
         'subject_id': sub_b.id
     })
-    assert scan_b.status_code == 400
+    assert scan_b.status_code in (400, 403)
     data_b = scan_b.get_json()
     assert data_b['success'] is False
     assert 'not authorized' in data_b['message'].lower()

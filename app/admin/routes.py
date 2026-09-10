@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from flask import render_template, redirect, url_for, flash, request, send_file, current_app
 from flask_login import login_required, current_user
 from app.admin import admin_bp
-from app.admin.forms import StudentForm, TeacherForm, DepartmentForm, HolidayForm, AcademicSessionForm, SystemSettingsForm, SubjectForm, SubjectAssignTeachersForm
+from app.admin.forms import StudentForm, TeacherForm, DepartmentForm, HolidayForm, AcademicSessionForm, SystemSettingsForm, SubjectForm, SubjectAssignTeachersForm, TeacherSubjectAssignmentForm
 from sqlalchemy import func
 from app.extensions import db
 from app.models.user import User
@@ -18,6 +18,7 @@ from app.models.session import AcademicSession
 from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
 from app.models.subject import Subject, teacher_subjects
+from app.models.subject_assignment import TeacherSubjectAssignment
 from app.utils.decorators import role_required
 from app.utils.qr_generator import generate_qr_bytes, generate_qr_data_uri
 from app.utils.id_card import generate_student_id_card_pdf
@@ -1155,3 +1156,263 @@ def subject_delete(id):
         flash(f"Subject '{name}' ({code}) has been permanently deleted.", 'success')
 
     return redirect(url_for('admin.subjects'))
+
+# ============================================================================
+# Teacher -> Subject -> Semester Assignment Routes
+# ============================================================================
+@admin_bp.route('/subject-assignments', methods=['GET'])
+@login_required
+@role_required('admin')
+def subject_assignments():
+    search = request.args.get('q', '').strip()
+    teacher_id = request.args.get('teacher_id', type=int)
+    subject_id = request.args.get('subject_id', type=int)
+    semester = request.args.get('semester', '').strip()
+    status = request.args.get('status', '').strip()
+
+    query = TeacherSubjectAssignment.query.join(Subject).join(Teacher)
+
+    if search:
+        query = query.filter(
+            (Subject.subject_code.ilike(f"%{search}%")) |
+            (Subject.subject_name.ilike(f"%{search}%")) |
+            (Teacher.full_name.ilike(f"%{search}%")) |
+            (Teacher.employee_id.ilike(f"%{search}%")) |
+            (TeacherSubjectAssignment.semester.ilike(f"%{search}%"))
+        )
+    if teacher_id:
+        query = query.filter(TeacherSubjectAssignment.teacher_id == teacher_id)
+    if subject_id:
+        query = query.filter(TeacherSubjectAssignment.subject_id == subject_id)
+    if semester:
+        query = query.filter(TeacherSubjectAssignment.semester == semester)
+    if status == 'active':
+        query = query.filter(TeacherSubjectAssignment.is_active == True)
+    elif status == 'inactive':
+        query = query.filter(TeacherSubjectAssignment.is_active == False)
+
+    assignments = query.order_by(Subject.subject_code.asc(), TeacherSubjectAssignment.semester.asc()).all()
+
+    all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    all_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+
+    # Precompute attendance count for each assignment
+    enriched = []
+    for a in assignments:
+        count = Attendance.query.filter_by(
+            subject_id=a.subject_id,
+            teacher_id=a.teacher_id
+        ).count()
+        enriched.append({
+            'assignment': a,
+            'attendance_count': count
+        })
+
+    return render_template(
+        'admin/subject_assignments/index.html',
+        assignments=enriched,
+        teachers=all_teachers,
+        subjects=all_subjects,
+        search=search,
+        selected_teacher_id=teacher_id,
+        selected_subject_id=subject_id,
+        selected_semester=semester,
+        selected_status=status
+    )
+
+@admin_bp.route('/subject-assignments/create', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def subject_assignment_create():
+    form = TeacherSubjectAssignmentForm()
+
+    all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    all_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+    all_departments = Department.query.order_by(Department.name).all()
+
+    form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in all_teachers]
+    form.subject_id.choices = [(s.id, f"{s.subject_code} — {s.subject_name} ({s.semester or 'General'})") for s in all_subjects]
+    form.department_id.choices = [(0, '-- Auto from Subject --')] + [(d.id, f"{d.name} ({d.code})") for d in all_departments]
+
+    if form.validate_on_submit():
+        t_id = form.teacher_id.data
+        s_id = form.subject_id.data
+        sem = form.semester.data.strip()
+        sec = form.section.data.strip().upper() if form.section.data else None
+        dept_id = form.department_id.data if form.department_id.data != 0 else None
+        course = form.course.data.strip() if form.course.data else None
+
+        # Rule 19: Prevent accidental duplicate active assignment
+        existing = TeacherSubjectAssignment.query.filter_by(
+            teacher_id=t_id,
+            subject_id=s_id,
+            semester=sem,
+            section=sec,
+            is_active=True
+        ).first()
+
+        if existing:
+            flash(f"An active assignment already exists for this Teacher, Subject, Semester ({sem}), and Section ({sec or 'All'}).", "danger")
+            return render_template('admin/subject_assignments/form.html', form=form, title='Assign Subject to Teacher', is_edit=False)
+
+        subject = Subject.query.get(s_id)
+        teacher = Teacher.query.get(t_id)
+
+        if not dept_id and subject and subject.department_id:
+            dept_id = subject.department_id
+        if not course and subject and subject.course:
+            course = subject.course
+
+        new_assignment = TeacherSubjectAssignment(
+            teacher_id=t_id,
+            subject_id=s_id,
+            semester=sem,
+            department_id=dept_id,
+            course=course,
+            section=sec,
+            is_active=form.is_active.data
+        )
+        db.session.add(new_assignment)
+
+        # Synchronize with secondary association table for legacy support
+        if subject and teacher and teacher not in subject.teachers:
+            subject.teachers.append(teacher)
+
+        db.session.commit()
+
+        AuditLog.log(
+            'SUBJECT_ASSIGNMENT_CREATE',
+            f"Assigned {subject.subject_code} to {teacher.full_name} for {sem}",
+            user_id=current_user.id
+        )
+        flash(f"Successfully assigned {subject.subject_name} ({subject.subject_code}) to {teacher.full_name} for {sem}.", "success")
+        return redirect(url_for('admin.subject_assignments'))
+
+    return render_template('admin/subject_assignments/form.html', form=form, title='Assign Subject to Teacher', is_edit=False)
+
+@admin_bp.route('/subject-assignments/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def subject_assignment_edit(id):
+    assignment = TeacherSubjectAssignment.query.get_or_404(id)
+    form = TeacherSubjectAssignmentForm(obj=assignment)
+
+    all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    all_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+    all_departments = Department.query.order_by(Department.name).all()
+
+    form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in all_teachers]
+    form.subject_id.choices = [(s.id, f"{s.subject_code} — {s.subject_name}") for s in all_subjects]
+    form.department_id.choices = [(0, '-- Auto from Subject --')] + [(d.id, f"{d.name} ({d.code})") for d in all_departments]
+
+    if form.validate_on_submit():
+        t_id = form.teacher_id.data
+        s_id = form.subject_id.data
+        sem = form.semester.data.strip()
+        sec = form.section.data.strip().upper() if form.section.data else None
+
+        # Check collision with other assignments
+        duplicate = TeacherSubjectAssignment.query.filter(
+            TeacherSubjectAssignment.id != id,
+            TeacherSubjectAssignment.teacher_id == t_id,
+            TeacherSubjectAssignment.subject_id == s_id,
+            TeacherSubjectAssignment.semester == sem,
+            TeacherSubjectAssignment.section == sec,
+            TeacherSubjectAssignment.is_active == True
+        ).first()
+
+        if duplicate:
+            flash(f"Another active assignment already exists for this Teacher, Subject, Semester ({sem}), and Section.", "danger")
+            return render_template('admin/subject_assignments/form.html', form=form, title='Edit Subject Assignment', is_edit=True, assignment=assignment)
+
+        assignment.teacher_id = t_id
+        assignment.subject_id = s_id
+        assignment.semester = sem
+        assignment.section = sec
+        assignment.department_id = form.department_id.data if form.department_id.data != 0 else None
+        assignment.course = form.course.data.strip() if form.course.data else None
+        assignment.is_active = form.is_active.data
+        assignment.updated_at = datetime.utcnow()
+
+        # Synchronize secondary association table
+        subject = Subject.query.get(s_id)
+        teacher = Teacher.query.get(t_id)
+        if subject and teacher and teacher not in subject.teachers:
+            subject.teachers.append(teacher)
+
+        db.session.commit()
+
+        AuditLog.log(
+            'SUBJECT_ASSIGNMENT_UPDATE',
+            f"Updated assignment ID {id}: {subject.subject_code} to {teacher.full_name} ({sem})",
+            user_id=current_user.id
+        )
+        flash("Subject assignment updated successfully.", "success")
+        return redirect(url_for('admin.subject_assignments'))
+
+    if request.method == 'GET':
+        form.department_id.data = assignment.department_id or 0
+
+    return render_template('admin/subject_assignments/form.html', form=form, title='Edit Subject Assignment', is_edit=True, assignment=assignment)
+
+@admin_bp.route('/subject-assignments/<int:id>/toggle-status', methods=['POST'])
+@login_required
+@role_required('admin')
+def subject_assignment_toggle_status(id):
+    assignment = TeacherSubjectAssignment.query.get_or_404(id)
+    assignment.is_active = not assignment.is_active
+    assignment.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    status_str = "activated" if assignment.is_active else "deactivated"
+    AuditLog.log(
+        'SUBJECT_ASSIGNMENT_TOGGLE',
+        f"Assignment {assignment.subject.subject_code} for {assignment.teacher.full_name} {status_str}",
+        user_id=current_user.id
+    )
+    flash(f"Assignment for {assignment.subject.subject_name} ({assignment.semester}) has been {status_str}.", "info")
+    return redirect(url_for('admin.subject_assignments'))
+
+@admin_bp.route('/subject-assignments/<int:id>/delete', methods=['POST'])
+@login_required
+@role_required('admin')
+def subject_assignment_delete(id):
+    assignment = TeacherSubjectAssignment.query.get_or_404(id)
+    sub_code = assignment.subject.subject_code if assignment.subject else "Subject"
+    t_name = assignment.teacher.full_name if assignment.teacher else "Teacher"
+    sem = assignment.semester
+
+    # Safe deletion: check if historical attendance records exist
+    att_count = Attendance.query.filter_by(
+        subject_id=assignment.subject_id,
+        teacher_id=assignment.teacher_id
+    ).count()
+
+    if att_count > 0:
+        # Soft-delete / deactivate to preserve historical attendance
+        assignment.is_active = False
+        assignment.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        AuditLog.log(
+            'SUBJECT_ASSIGNMENT_SOFT_DELETE',
+            f"Deactivated assignment for {sub_code} - {t_name} ({att_count} attendance records preserved)",
+            user_id=current_user.id
+        )
+        flash(
+            f"Assignment for '{sub_code}' ({t_name}, {sem}) has {att_count} historical attendance records. "
+            f"To preserve student academic history, the assignment has been deactivated instead of deleted.",
+            "warning"
+        )
+    else:
+        db.session.delete(assignment)
+        db.session.commit()
+        AuditLog.log(
+            'SUBJECT_ASSIGNMENT_DELETE',
+            f"Deleted unused assignment for {sub_code} - {t_name} ({sem})",
+            user_id=current_user.id
+        )
+        flash(f"Assignment for '{sub_code}' ({t_name}, {sem}) has been permanently deleted.", "success")
+
+    return redirect(url_for('admin.subject_assignments'))
+

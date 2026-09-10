@@ -138,13 +138,16 @@ def scan_attendance():
 
     token = None
     subject_id = None
+    semester = None
     if request.is_json:
         data = request.get_json() or {}
         token = data.get('token')
         subject_id = data.get('subject_id')
+        semester = data.get('semester')
     else:
         token = request.form.get('token')
         subject_id = request.form.get('subject_id')
+        semester = request.form.get('semester')
 
     if not token:
         return jsonify({
@@ -158,11 +161,16 @@ def scan_attendance():
         except (ValueError, TypeError):
             subject_id = None
 
-    result = process_qr_attendance(token, marker_user=current_user, subject_id=subject_id)
-    status_code = 200 if result.get('success') else 400
-    if result.get('action') in ('ALREADY_COMPLETED', 'COOLDOWN'):
+    result = process_qr_attendance(token, marker_user=current_user, subject_id=subject_id, semester=semester)
+    if result.get('success'):
+        status_code = 200
+    elif result.get('error_code') in ('UNAUTHORIZED_SUBJECT', 'UNAUTHORIZED_TEACHER'):
+        status_code = 403
+    elif result.get('action') in ('ALREADY_COMPLETED', 'COOLDOWN'):
         # Informative status, not a server error
         status_code = 200
+    else:
+        status_code = 400
 
     return jsonify(result), status_code
 
@@ -332,23 +340,81 @@ def list_subjects():
 def teacher_subjects():
     """
     GET /api/teacher/subjects
-    Returns subjects assigned to the authenticated teacher.
+    Returns subjects assigned to the authenticated teacher with semester, teacher name, and class context.
     """
     from app.models.subject import Subject
+    from app.models.subject_assignment import TeacherSubjectAssignment
+
+    subject_list = []
     if current_user.is_teacher:
         teacher = current_user.teacher_profile
         if not teacher:
             return jsonify({'success': False, 'message': 'Teacher profile not linked.'}), 404
-        subjects = teacher.assigned_subjects.filter_by(is_active=True).order_by(Subject.subject_code).all()
+        
+        assignments = teacher.get_active_assignments()
+        for asgn in assignments:
+            s = asgn.subject
+            if not s or not s.is_active:
+                continue
+            subject_list.append({
+                'id': s.id,
+                'assignment_id': asgn.id,
+                'subject_id': s.id,
+                'name': s.subject_name,
+                'subject_name': s.subject_name,
+                'code': s.subject_code,
+                'subject_code': s.subject_code,
+                'teacher_name': teacher.full_name,
+                'semester': asgn.semester or (s.semester or ''),
+                'department': asgn.department.name if asgn.department else (s.department.name if s.department else ''),
+                'course': asgn.course or (s.course or ''),
+                'section': asgn.section or ''
+            })
     elif current_user.is_admin:
-        subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+        assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
+        if assignments:
+            for asgn in assignments:
+                s = asgn.subject
+                if not s or not s.is_active:
+                    continue
+                subject_list.append({
+                    'id': s.id,
+                    'assignment_id': asgn.id,
+                    'subject_id': s.id,
+                    'name': s.subject_name,
+                    'subject_name': s.subject_name,
+                    'code': s.subject_code,
+                    'subject_code': s.subject_code,
+                    'teacher_name': asgn.teacher.full_name if asgn.teacher else 'Admin',
+                    'semester': asgn.semester or (s.semester or ''),
+                    'department': asgn.department.name if asgn.department else (s.department.name if s.department else ''),
+                    'course': asgn.course or (s.course or ''),
+                    'section': asgn.section or ''
+                })
+        else:
+            subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+            for s in subjects:
+                subject_list.append({
+                    'id': s.id,
+                    'assignment_id': None,
+                    'subject_id': s.id,
+                    'name': s.subject_name,
+                    'subject_name': s.subject_name,
+                    'code': s.subject_code,
+                    'subject_code': s.subject_code,
+                    'teacher_name': 'Administrator',
+                    'semester': s.semester or '',
+                    'department': s.department.name if s.department else '',
+                    'course': s.course or '',
+                    'section': ''
+                })
     else:
         return jsonify({'success': False, 'message': 'Unauthorized: Only faculty can access assigned subjects.'}), 403
 
     return jsonify({
         'success': True,
-        'count': len(subjects),
-        'subjects': [s.to_dict() for s in subjects]
+        'count': len(subject_list),
+        'subjects': subject_list
     })
 
 @api_bp.route('/student/attendance')

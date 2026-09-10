@@ -8,13 +8,13 @@ from app.models.attendance import Attendance
 from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
 
-def process_qr_attendance(token: str, marker_user, subject_id: int = None) -> dict:
+def process_qr_attendance(token: str, marker_user, subject_id: int = None, semester: str = None) -> dict:
     """
     Core business logic for QR code attendance verification and state machine:
     1. Validate token -> Student
-    2. Validate subject and verify teacher authorization if subject_id is provided
-    3. Check today's attendance record for this specific student + subject
-    4. First scan -> Record Time In (linked with subject_id and teacher_id)
+    2. Validate subject and verify teacher assignment authorization for subject + semester
+    3. Check today's attendance record for this specific student + subject + semester
+    4. First scan -> Record Time In (linked with subject_id, teacher_id, and semester)
     5. Second scan -> Record Time Out
     6. Subsequent scan -> Informative duplicate warning with timestamps
     """
@@ -73,26 +73,39 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None) -> di
         if not teacher_obj and hasattr(marker_user, 'id'):
             teacher_obj = Teacher.query.filter_by(user_id=marker_user.id).first()
 
-        # If subject is specified, verify teacher assignment
+        # If subject is specified, verify teacher assignment (and semester if given)
         if subject_id is not None:
-            if not teacher_obj or not teacher_obj.is_assigned_to_subject(subject_id):
+            if not teacher_obj or not teacher_obj.is_assigned_to_subject(subject_id, semester=semester):
+                sem_str = f" in {semester}" if semester else ""
                 return {
                     'success': False,
-                    'message': f"Access Denied: You are not authorized to take attendance for {subject.subject_name} ({subject.subject_code})."
+                    'error_code': 'UNAUTHORIZED_SUBJECT',
+                    'message': f"Access Denied: You are not authorized to take attendance for {subject.subject_name} ({subject.subject_code}){sem_str}."
                 }
+            
+            # If semester not explicitly passed, try resolving from teacher's active assignment
+            if not semester and teacher_obj:
+                assignment = teacher_obj.subject_assignments.filter_by(subject_id=subject_id, is_active=True).first()
+                if assignment and assignment.semester:
+                    semester = assignment.semester
     elif is_admin:
-        # Admin can take attendance for any subject; resolve teacher profile if admin happens to be linked to one
         teacher_obj = getattr(marker_user, 'teacher_profile', None)
+
+    # Fallback semester if not resolved from assignment
+    if not semester and subject:
+        semester = subject.semester
 
     teacher_id = teacher_obj.id if teacher_obj else None
 
     today = date.today()
     now_time = datetime.now().time()
 
-    # Look up existing record for today scoped to (student_id, date, subject_id)
+    # Look up existing record for today scoped to (student_id, date, subject_id, semester)
     query = Attendance.query.filter(Attendance.student_id == student.id, Attendance.date == today)
     if subject_id is not None:
         query = query.filter(Attendance.subject_id == subject_id)
+        if semester:
+            query = query.filter(Attendance.semester == semester)
     else:
         query = query.filter(Attendance.subject_id.is_(None))
 
@@ -105,6 +118,8 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None) -> di
             student_id=student.id,
             subject_id=subject_id,
             teacher_id=teacher_id,
+            semester=semester,
+            section=student.section if student else None,
             date=today,
             time_in=now_time,
             time_out=None,
@@ -129,7 +144,8 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None) -> di
             'subject': {
                 'id': subject.id,
                 'code': subject.subject_code,
-                'name': subject.subject_name
+                'name': subject.subject_name,
+                'semester': semester or (subject.semester if subject else None)
             } if subject else None,
             'teacher': {
                 'id': teacher_obj.id,
@@ -141,7 +157,8 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None) -> di
                 'time_out': None,
                 'status': 'Present',
                 'method': 'QR',
-                'subject_name': subject.subject_name if subject else None
+                'subject_name': subject.subject_name if subject else None,
+                'semester': semester
             }
         }
 
@@ -198,7 +215,8 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None) -> di
                 'time_out': now_time.strftime('%I:%M %p'),
                 'status': record.status,
                 'method': record.method,
-                'subject_name': subject.subject_name if subject else None
+                'subject_name': subject.subject_name if subject else None,
+                'semester': record.semester
             }
         }
 
@@ -211,13 +229,15 @@ def process_qr_attendance(token: str, marker_user, subject_id: int = None) -> di
         'subject': {
             'id': subject.id,
             'code': subject.subject_code,
-            'name': subject.subject_name
+            'name': subject.subject_name,
+            'semester': record.semester or (subject.semester if subject else None)
         } if subject else None,
         'attendance': {
             'date': today.strftime('%Y-%m-%d'),
             'time_in': record.time_in.strftime('%I:%M %p') if record.time_in else '-',
             'time_out': record.time_out.strftime('%I:%M %p') if record.time_out else '-',
             'status': record.status,
-            'subject_name': subject.subject_name if subject else None
+            'subject_name': subject.subject_name if subject else None,
+            'semester': record.semester
         }
     }

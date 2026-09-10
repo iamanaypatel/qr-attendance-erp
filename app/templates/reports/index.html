@@ -86,13 +86,22 @@
         </select>
       </div>
 
-      <div class="col-md-6">
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold text-muted">SEMESTER</label>
+        <select name="semester" class="form-select">
+          <option value="">All Semesters</option>
+          {% for sem in semesters %}
+            <option value="{{ sem }}" {% if args.get('semester') == sem %}selected{% endif %}>{{ sem }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-3">
         <label class="form-label small fw-semibold text-muted">SEARCH STUDENT</label>
         <div class="input-group">
           <span class="input-group-text bg-transparent border-end-0 text-muted">
             <i class="bi bi-search"></i>
           </span>
-          <input type="text" name="student" value="{{ args.get('student', '') }}" class="form-control border-start-0 ps-0" placeholder="Student name, student ID, or roll number...">
+          <input type="text" name="student" value="{{ args.get('student', '') }}" class="form-control border-start-0 ps-0" placeholder="Student name, ID, roll...">
         </div>
       </div>
       <div class="col-md-3">
@@ -159,6 +168,7 @@
             <th>Student</th>
             <th>Dept</th>
             <th>Subject</th>
+            <th>Semester</th>
             <th>Date</th>
             <th>Time In</th>
             <th>Time Out</th>
@@ -184,6 +194,7 @@
                     <span class="text-muted small font-mono">General</span>
                   {% endif %}
                 </td>
+                <td><span class="badge badge-soft-info">{{ r.semester or (r.student.semester or '-') }}</span></td>
                 <td class="fw-semibold">{{ r.date.strftime('%d %b %Y') }}</td>
                 <td>{{ r.time_in.strftime('%I:%M %p') if r.time_in else '-' }}</td>
                 <td>{{ r.time_out.strftime('%I:%M %p') if r.time_out else '-' }}</td>
@@ -204,7 +215,7 @@
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="8" class="text-center py-5 text-muted">
+              <td colspan="10" class="text-center py-5 text-muted">
                 <i class="bi bi-search fs-1 d-block mb-2"></i>
                 <h5>No attendance records match your criteria</h5>
                 <p class="small">Try adjusting or clearing your date and department filters.</p>

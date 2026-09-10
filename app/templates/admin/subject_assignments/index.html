@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Subject Assignments — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Teacher Subject Assignments</h2>
+      <p class="text-muted mb-0">Assign academic subjects to faculty members by semester, department, and section for authorized attendance taking.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin.subject_assignment_create') }}" class="btn btn-primary-glow">
+        <i class="bi bi-person-plus-fill me-1"></i> Assign Subject
+      </a>
+      <a href="{{ url_for('admin.subjects') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-journal-bookmark me-1"></i> All Subjects
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <div class="glass-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('admin.subject_assignments') }}" class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0 text-muted">
+            <i class="bi bi-search"></i>
+          </span>
+          <input type="text" name="q" value="{{ search }}" class="form-control border-start-0 ps-0" placeholder="Search teacher, subject, semester...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select name="teacher_id" class="form-select">
+          <option value="">All Faculty Members</option>
+          {% for t in teachers %}
+            <option value="{{ t.id }}" {% if selected_teacher_id == t.id %}selected{% endif %}>{{ t.full_name }} ({{ t.employee_id }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="subject_id" class="form-select">
+          <option value="">All Subjects</option>
+          {% for s in subjects %}
+            <option value="{{ s.id }}" {% if selected_subject_id == s.id %}selected{% endif %}>[{{ s.subject_code }}] {{ s.subject_name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="semester" class="form-select">
+          <option value="">All Semesters</option>
+          {% for sem in ['1st Semester', '2nd Semester', '3rd Semester', '4th Semester', '5th Semester', '6th Semester', '7th Semester', '8th Semester'] %}
+            <option value="{{ sem }}" {% if selected_semester == sem %}selected{% endif %}>{{ sem }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <select name="status" class="form-select">
+          <option value="">Status</option>
+          <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="col-md-1 d-flex gap-1">
+        <button type="submit" class="btn btn-primary w-100" title="Filter"><i class="bi bi-funnel-fill"></i></button>
+        {% if search or selected_teacher_id or selected_subject_id or selected_semester or selected_status %}
+          <a href="{{ url_for('admin.subject_assignments') }}" class="btn btn-outline-secondary" title="Reset Filters"><i class="bi bi-arrow-counterclockwise"></i></a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Assignments Table -->
+  <div class="glass-card p-4">
+    <div class="table-responsive">
+      <table class="table table-glass align-middle">
+        <thead>
+          <tr>
+            <th>Subject</th>
+            <th>Assigned Teacher</th>
+            <th>Semester</th>
+            <th>Department / Course</th>
+            <th>Section</th>
+            <th class="text-center">Recorded Attendance</th>
+            <th>Status</th>
+            <th class="text-end">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if assignments %}
+            {% for item in assignments %}
+              {% set a = item.assignment %}
+              <tr>
+                <td>
+                  <div class="fw-bold text-dark">{{ a.subject.subject_name }}</div>
+                  <span class="badge bg-light text-dark font-mono border px-2 py-0 fs-8">{{ a.subject.subject_code }}</span>
+                </td>
+                <td>
+                  <div class="d-flex align-items-center gap-2">
+                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center fw-bold" style="width: 32px; height: 32px; font-size: 13px;">
+                      {{ a.teacher.full_name[:1].upper() }}
+                    </div>
+                    <div>
+                      <div class="fw-semibold">{{ a.teacher.full_name }}</div>
+                      <small class="text-muted">{{ a.teacher.employee_id }} • {{ a.teacher.designation }}</small>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <span class="badge badge-soft-primary px-2 py-1 fs-7 fw-bold">{{ a.semester }}</span>
+                </td>
+                <td>
+                  {% if a.department %}
+                    <span class="badge badge-soft-info">{{ a.department.code }}</span>
+                    <small class="text-muted d-block">{{ a.course or a.department.name }}</small>
+                  {% elif a.course %}
+                    <span class="text-muted small">{{ a.course }}</span>
+                  {% else %}
+                    <span class="text-muted small">-</span>
+                  {% endif %}
+                </td>
+                <td>
+                  {% if a.section %}
+                    <span class="badge bg-secondary">Section {{ a.section }}</span>
+                  {% else %}
+                    <span class="text-muted small">All Sections</span>
+                  {% endif %}
+                </td>
+                <td class="text-center">
+                  <span class="badge badge-soft-success font-mono px-2 py-1 fs-7">{{ item.attendance_count }} Records</span>
+                </td>
+                <td>
+                  {% if a.is_active %}
+                    <span class="badge badge-soft-success"><i class="bi bi-check-circle me-1"></i>Active</span>
+                  {% else %}
+                    <span class="badge badge-soft-danger"><i class="bi bi-pause-circle me-1"></i>Inactive</span>
+                  {% endif %}
+                </td>
+                <td class="text-end">
+                  <div class="d-inline-flex gap-1">
+                    <a href="{{ url_for('admin.subject_assignment_edit', id=a.id) }}" class="btn btn-sm btn-outline-primary" title="Edit Assignment">
+                      <i class="bi bi-pencil"></i>
+                    </a>
+                    
+                    <form method="POST" action="{{ url_for('admin.subject_assignment_toggle_status', id=a.id) }}" class="d-inline">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button type="submit" class="btn btn-sm {% if a.is_active %}btn-outline-warning{% else %}btn-outline-success{% endif %}" title="{% if a.is_active %}Deactivate{% else %}Activate{% endif %}">
+                        <i class="bi {% if a.is_active %}bi-pause-fill{% else %}bi-play-fill{% endif %}"></i>
+                      </button>
+                    </form>
+
+                    <form method="POST" action="{{ url_for('admin.subject_assignment_delete', id=a.id) }}" class="d-inline" onsubmit="return confirm('Are you sure you want to remove or deactivate this assignment? Historical attendance records will remain safely preserved.');">
+                      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                      <button type="submit" class="btn btn-sm btn-outline-danger" title="Delete / Deactivate">
+                        <i class="bi bi-trash"></i>
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="8" class="text-center py-5 text-muted">
+                <i class="bi bi-journal-x fs-1 d-block mb-2 opacity-50"></i>
+                <h6>No subject assignments found.</h6>
+                <p class="small text-muted mb-3">Assign faculty to subjects by semester so teachers can take authorized attendance.</p>
+                <a href="{{ url_for('admin.subject_assignment_create') }}" class="btn btn-primary-glow btn-sm">
+                  <i class="bi bi-plus-circle-fill me-1"></i> Assign First Subject
+                </a>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

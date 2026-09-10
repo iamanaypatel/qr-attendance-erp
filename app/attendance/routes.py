@@ -18,29 +18,112 @@ from app.attendance.services import process_qr_attendance
 def scanner():
     today = date.today()
     selected_subject_id = request.args.get('subject_id', type=int)
+    selected_semester = request.args.get('semester', '').strip()
+    selected_assignment_id = request.args.get('assignment_id', type=int)
 
     from app.models.subject import Subject
+    from app.models.subject_assignment import TeacherSubjectAssignment
+
+    assignments_data = []
+    selected_assignment = None
+
     if current_user.is_teacher and current_user.teacher_profile:
-        available_subjects = current_user.teacher_profile.assigned_subjects.filter_by(is_active=True).order_by(Subject.subject_name).all()
-        if selected_subject_id and not current_user.teacher_profile.is_assigned_to_subject(selected_subject_id):
-            flash("You are not assigned to take attendance for that subject. Please select from your assigned subjects.", "warning")
-            selected_subject_id = None
-        if not selected_subject_id and available_subjects:
-            selected_subject_id = available_subjects[0].id
+        assignments = current_user.teacher_profile.get_active_assignments()
+        assignment_count = len(assignments)
+
+        for asgn in assignments:
+            s = asgn.subject
+            if not s or not s.is_active:
+                continue
+            item = {
+                'id': asgn.id,
+                'subject_id': s.id,
+                'subject_name': s.subject_name,
+                'subject_code': s.subject_code,
+                'teacher_name': asgn.teacher.full_name if asgn.teacher else current_user.teacher_profile.full_name,
+                'semester': asgn.semester or (s.semester or ''),
+                'department': asgn.department.name if asgn.department else (s.department.name if s.department else 'General'),
+                'course': asgn.course or (s.course or 'General'),
+                'section': asgn.section or ''
+            }
+            assignments_data.append(item)
+
+        if assignment_count == 1:
+            # Rule 1: Auto-select the only assigned subject
+            selected_assignment = assignments_data[0]
+            selected_subject_id = selected_assignment['subject_id']
+            selected_semester = selected_assignment['semester']
+        elif assignment_count > 1:
+            # Rule 2: Select requested or default
+            if selected_assignment_id:
+                found = next((a for a in assignments_data if a['id'] == selected_assignment_id), None)
+                if found:
+                    selected_assignment = found
+            if not selected_assignment and selected_subject_id:
+                found = next((a for a in assignments_data if a['subject_id'] == selected_subject_id and (not selected_semester or a['semester'] == selected_semester)), None)
+                if found:
+                    selected_assignment = found
+            if not selected_assignment and assignments_data:
+                selected_assignment = assignments_data[0]
+
+            if selected_assignment:
+                selected_subject_id = selected_assignment['subject_id']
+                selected_semester = selected_assignment['semester']
     else:
-        available_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_name).all()
+        # Admin view
+        assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
+        assignment_count = len(assignments)
+        if assignments:
+            for asgn in assignments:
+                s = asgn.subject
+                if not s or not s.is_active:
+                    continue
+                assignments_data.append({
+                    'id': asgn.id,
+                    'subject_id': s.id,
+                    'subject_name': s.subject_name,
+                    'subject_code': s.subject_code,
+                    'teacher_name': asgn.teacher.full_name if asgn.teacher else 'Admin',
+                    'semester': asgn.semester or (s.semester or ''),
+                    'department': asgn.department.name if asgn.department else (s.department.name if s.department else 'General'),
+                    'course': asgn.course or (s.course or 'General'),
+                    'section': asgn.section or ''
+                })
+        else:
+            subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+            for s in subjects:
+                assignments_data.append({
+                    'id': s.id,
+                    'subject_id': s.id,
+                    'subject_name': s.subject_name,
+                    'subject_code': s.subject_code,
+                    'teacher_name': 'Administrator',
+                    'semester': s.semester or '',
+                    'department': s.department.name if s.department else 'General',
+                    'course': s.course or 'General',
+                    'section': ''
+                })
+        if assignments_data:
+            selected_assignment = assignments_data[0]
+            selected_subject_id = selected_assignment['subject_id']
+            selected_semester = selected_assignment['semester']
 
     recent_query = Attendance.query.filter_by(date=today)
     if selected_subject_id:
         recent_query = recent_query.filter_by(subject_id=selected_subject_id)
+        if selected_semester:
+            recent_query = recent_query.filter(Attendance.semester.ilike(selected_semester))
     recent_scans = recent_query.order_by(Attendance.updated_at.desc()).limit(10).all()
 
     return render_template(
         'attendance/scanner.html',
         recent_scans=recent_scans,
         today=today,
-        available_subjects=available_subjects,
-        selected_subject_id=selected_subject_id
+        assignments=assignments_data,
+        assignment_count=len(assignments_data) if (current_user.is_teacher and current_user.teacher_profile) else len(assignments_data),
+        selected_assignment=selected_assignment,
+        selected_subject_id=selected_subject_id,
+        selected_semester=selected_semester
     )
 
 @attendance_bp.route('/manual', methods=['GET', 'POST'])
@@ -62,6 +145,7 @@ def manual():
         time_out_str = request.form.get('time_out', '').strip()
         remarks = request.form.get('remarks', '').strip()
         subject_id_str = request.form.get('subject_id', '').strip()
+        semester = request.form.get('semester', '').strip()
 
         subject_id = None
         if subject_id_str:
@@ -70,11 +154,21 @@ def manual():
             except (ValueError, TypeError):
                 subject_id = None
 
-        # Verify teacher authorization for subject
+        # Verify teacher authorization for subject (and semester if provided)
         if subject_id and current_user.is_teacher:
-            if not current_user.teacher_profile or not current_user.teacher_profile.is_assigned_to_subject(subject_id):
+            if not current_user.teacher_profile or not current_user.teacher_profile.is_assigned_to_subject(subject_id, semester=semester if semester else None):
                 flash("Unauthorized: You are not assigned to take attendance for this subject.", "danger")
                 return redirect(url_for('attendance.manual'))
+
+        if subject_id and not semester:
+            if current_user.is_teacher and current_user.teacher_profile:
+                asgn = current_user.teacher_profile.subject_assignments.filter_by(subject_id=subject_id, is_active=True).first()
+                if asgn and asgn.semester:
+                    semester = asgn.semester
+            if not semester:
+                sub_obj = Subject.query.get(subject_id)
+                if sub_obj and sub_obj.semester:
+                    semester = sub_obj.semester
 
         student = Student.query.filter(
             (Student.student_id == student_id_str) | (Student.id == student_id_str)
@@ -103,10 +197,12 @@ def manual():
             except ValueError:
                 pass
 
-        # Check existing record for that student + date + subject
+        # Check existing record for that student + date + subject + semester
         query = Attendance.query.filter(Attendance.student_id == student.id, Attendance.date == att_date)
         if subject_id:
             query = query.filter(Attendance.subject_id == subject_id)
+            if semester:
+                query = query.filter(Attendance.semester == semester)
         else:
             query = query.filter(Attendance.subject_id.is_(None))
         record = query.first()
@@ -120,6 +216,8 @@ def manual():
             record.time_out = time_out
             record.remarks = remarks
             record.marked_by = current_user.id
+            if semester:
+                record.semester = semester
             if teacher_id:
                 record.teacher_id = teacher_id
             record.method = method_name
@@ -131,6 +229,7 @@ def manual():
                 student_id=student.id,
                 subject_id=subject_id,
                 teacher_id=teacher_id,
+                semester=semester,
                 date=att_date,
                 time_in=time_in or datetime.now().time(),
                 time_out=time_out,

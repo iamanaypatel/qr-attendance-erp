@@ -25,8 +25,17 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
   List<Map<String, dynamic>> _subjects = [];
   int? _selectedSubjectId;
+  String? _selectedSemester;
+  String? _selectedTeacherName;
+  String? _selectedSubjectCode;
+  String? _selectedSubjectName;
+  String? _selectedDept;
+  String? _selectedCourse;
+  String? _selectedSection;
   String? _selectedSubjectLabel;
+  int _selectedSubjectIndex = 0;
   bool _loadingSubjects = true;
+  bool _isScanningActive = false;
 
   @override
   void initState() {
@@ -48,11 +57,25 @@ class _ScannerScreenState extends State<ScannerScreen> {
         _subjects = list.map((e) => Map<String, dynamic>.from(e)).toList();
         _loadingSubjects = false;
         if (_subjects.isNotEmpty) {
-          _selectedSubjectId = _subjects.first['id'] as int?;
-          _selectedSubjectLabel = "${_subjects.first['subject_code']} - ${_subjects.first['subject_name']}";
+          _selectSubjectAtIndex(0);
         }
       });
     }
+  }
+
+  void _selectSubjectAtIndex(int index) {
+    if (index < 0 || index >= _subjects.length) return;
+    final item = _subjects[index];
+    _selectedSubjectIndex = index;
+    _selectedSubjectId = item['subject_id'] ?? item['id'] as int?;
+    _selectedSemester = item['semester'] as String?;
+    _selectedTeacherName = item['teacher_name'] as String?;
+    _selectedSubjectCode = item['code'] ?? item['subject_code'] as String?;
+    _selectedSubjectName = item['name'] ?? item['subject_name'] as String?;
+    _selectedDept = item['department'] as String?;
+    _selectedCourse = item['course'] as String?;
+    _selectedSection = item['section'] as String?;
+    _selectedSubjectLabel = "${_selectedSubjectCode ?? ''} - ${_selectedSubjectName ?? ''}";
   }
 
   @override
@@ -62,7 +85,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
   }
 
   void _onDetect(BarcodeCapture capture) {
-    if (_isProcessing) return;
+    if (_isProcessing || !_isScanningActive) return;
 
     final List<Barcode> barcodes = capture.barcodes;
     if (barcodes.isEmpty) return;
@@ -90,7 +113,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     HapticFeedback.mediumImpact();
 
-    final result = await ApiService().scanAttendance(token, subjectId: _selectedSubjectId);
+    final result = await ApiService().scanAttendance(
+      token,
+      subjectId: _selectedSubjectId,
+      semester: _selectedSemester,
+    );
 
     if (!mounted) return;
 
@@ -110,6 +137,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
           'action': result['action'] ?? 'TIME_IN',
           'time': attendance['time_in'] ?? attendance['time_out'] ?? 'Just now',
           'subject': _selectedSubjectLabel ?? 'General',
+          'semester': _selectedSemester ?? '',
           'success': true,
         });
       });
@@ -406,124 +434,310 @@ class _ScannerScreenState extends State<ScannerScreen> {
           ),
         ],
       ),
-      body: Column(
-        children: [
-          // Subject Selector Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.surface,
-              border: Border(
-                bottom: BorderSide(color: Colors.grey.withValues(alpha: 0.2)),
-              ),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.book_outlined, size: 20, color: Color(0xFF2563EB)),
-                const SizedBox(width: 8),
-                const Text(
-                  "Subject:",
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _loadingSubjects
-                      ? const Align(
-                          alignment: Alignment.centerLeft,
-                          child: SizedBox(
-                            height: 16,
-                            width: 16,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          ),
-                        )
-                      : DropdownButtonHideUnderline(
-                          child: DropdownButton<int?>(
-                            value: _selectedSubjectId,
-                            isExpanded: true,
-                            hint: const Text("General (No Subject)", style: TextStyle(fontSize: 13)),
-                            items: [
-                              const DropdownMenuItem<int?>(
-                                value: null,
-                                child: Text("General / No Subject", style: TextStyle(fontSize: 13)),
+      body: _loadingSubjects
+          ? const Center(child: CircularProgressIndicator())
+          : _subjects.isEmpty
+              ? Center(
+                  child: Container(
+                    margin: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).colorScheme.surface,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.amber.shade300, width: 1.5),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.warning_amber_rounded, size: 54, color: Colors.amber.shade700),
+                        const SizedBox(height: 16),
+                        const Text(
+                          "No Subject Assigned",
+                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                        const SizedBox(height: 8),
+                        const Text(
+                          "No subject has been assigned to your account.\nPlease contact the administrator.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              : Column(
+                  children: [
+                    // SUBJECT SELECTION / DETAILS HEADER
+                    if (_subjects.length == 1)
+                      // RULE 1: Exactly 1 assigned subject -> Hide dropdown, display assignment card directly
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 10, 16, 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2563EB),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _selectedSubjectCode ?? 'SUBJECT',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.withValues(alpha: 0.1),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Text(
+                                    _selectedSemester ?? 'General Sem',
+                                    style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _selectedSubjectName ?? '',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Teacher: ${_selectedTeacherName ?? (ApiService().currentUser?['full_name'] ?? 'Teacher')}",
+                              style: TextStyle(fontSize: 12, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                            ),
+                            if (_selectedDept != null || _selectedCourse != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                "${_selectedDept ?? ''} ${_selectedCourse != null ? '• $_selectedCourse' : ''} ${_selectedSection != null && _selectedSection!.isNotEmpty ? '• Sec $_selectedSection' : ''}",
+                                style: const TextStyle(fontSize: 11, color: Colors.grey),
                               ),
-                              ..._subjects.map((sub) => DropdownMenuItem<int?>(
-                                    value: sub['id'] as int?,
-                                    child: Text(
-                                      "${sub['subject_code']} - ${sub['subject_name']}",
-                                      style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  )),
                             ],
-                            onChanged: (val) {
-                              setState(() {
-                                _selectedSubjectId = val;
-                                if (val != null) {
-                                  final found = _subjects.firstWhere((s) => s['id'] == val, orElse: () => {});
-                                  _selectedSubjectLabel = "${found['subject_code']} - ${found['subject_name']}";
-                                } else {
-                                  _selectedSubjectLabel = null;
-                                }
-                              });
-                            },
+                          ],
+                        ),
+                      )
+                    else
+                      // RULE 2: Multiple assigned subjects -> Show selector with lock during active session
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.surface,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.withValues(alpha: 0.25)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                const Text(
+                                  "Select Subject",
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Colors.grey),
+                                ),
+                                if (_isScanningActive)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: Colors.amber.withValues(alpha: 0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: Colors.amber.shade600, width: 0.8),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.lock, size: 12, color: Colors.amber.shade900),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          "Session Locked",
+                                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.amber.shade900),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            if (_isScanningActive)
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withValues(alpha: 0.08),
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  "${_selectedSubjectCode ?? ''} - ${_selectedSubjectName ?? ''} (${_selectedSemester ?? ''})",
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                                ),
+                              )
+                            else
+                              DropdownButtonHideUnderline(
+                                child: DropdownButton<int>(
+                                  value: _selectedSubjectIndex,
+                                  isExpanded: true,
+                                  items: _subjects.asMap().entries.map((entry) {
+                                    final idx = entry.key;
+                                    final sub = entry.value;
+                                    final code = sub['code'] ?? sub['subject_code'] ?? '';
+                                    final name = sub['name'] ?? sub['subject_name'] ?? '';
+                                    final sem = sub['semester'] ?? '';
+                                    return DropdownMenuItem<int>(
+                                      value: idx,
+                                      child: Text(
+                                        "[$code] $name — $sem",
+                                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    );
+                                  }).toList(),
+                                  onChanged: (idx) {
+                                    if (idx != null) {
+                                      setState(() {
+                                        _selectSubjectAtIndex(idx);
+                                      });
+                                    }
+                                  },
+                                ),
+                              ),
+                            const Divider(height: 10),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Text(
+                                  "Teacher: ${_selectedTeacherName ?? (ApiService().currentUser?['full_name'] ?? 'Teacher')}",
+                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade700, fontWeight: FontWeight.w500),
+                                ),
+                                Text(
+                                  "Sem: ${_selectedSemester ?? '-'}",
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFF2563EB)),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // START / STOP ATTENDANCE ACTION BUTTON
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      child: SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _isScanningActive = !_isScanningActive;
+                            });
+                          },
+                          icon: Icon(_isScanningActive ? Icons.stop_circle : Icons.play_circle_fill, size: 20),
+                          label: Text(
+                            _isScanningActive ? "Stop Attendance (Finish Session)" : "Start Attendance",
+                            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: _isScanningActive ? Colors.red.shade600 : const Color(0xFF2563EB),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                           ),
                         ),
-                ),
-              ],
-            ),
-          ),
-
-          // Scanner Viewport Box
-          Expanded(
-            flex: 5,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                MobileScanner(
-                  controller: _scannerController,
-                  onDetect: _onDetect,
-                ),
-
-                // Viewport Scan Frame
-                Container(
-                  width: 250,
-                  height: 250,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: _isProcessing ? Colors.amber : Colors.blueAccent,
-                      width: 3,
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                ),
 
-                if (_isProcessing)
-                  Container(
-                    color: Colors.black45,
-                    child: const Center(
-                      child: CircularProgressIndicator(color: Colors.white),
-                    ),
-                  ),
+                    // Scanner Viewport Box
+                    Expanded(
+                      flex: 5,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          MobileScanner(
+                            controller: _scannerController,
+                            onDetect: _onDetect,
+                          ),
 
-                Positioned(
-                  bottom: 16,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                    decoration: BoxDecoration(
-                      color: Colors.black54,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: const Text(
-                      "Center student QR code in frame",
-                      style: TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                          // Viewport Scan Frame
+                          Container(
+                            width: 240,
+                            height: 240,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: _isProcessing
+                                    ? Colors.amber
+                                    : (_isScanningActive ? Colors.blueAccent : Colors.grey.shade600),
+                                width: 3,
+                              ),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                          ),
 
-          // Session Feed List
+                          if (!_isScanningActive)
+                            Container(
+                              color: Colors.black.withValues(alpha: 0.75),
+                              child: Center(
+                                child: Padding(
+                                  padding: const EdgeInsets.all(20),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.qr_code_scanner, size: 44, color: Colors.white.withValues(alpha: 0.8)),
+                                      const SizedBox(height: 10),
+                                      const Text(
+                                        "Attendance Session Inactive",
+                                        style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      const Text(
+                                        "Tap [ Start Attendance ] to lock subject and scan student QR codes",
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(color: Colors.white70, fontSize: 12),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ),
+
+                          if (_isProcessing)
+                            Container(
+                              color: Colors.black45,
+                              child: const Center(
+                                child: CircularProgressIndicator(color: Colors.white),
+                              ),
+                            ),
+
+                          if (_isScanningActive)
+                            Positioned(
+                              bottom: 12,
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: Colors.black54,
+                                  borderRadius: BorderRadius.circular(20),
+                                ),
+                                child: const Text(
+                                  "Center student QR code in frame",
+                                  style: TextStyle(color: Colors.white, fontSize: 12),
+                                ),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // Session Feed List
           Expanded(
             flex: 4,
             child: Container(

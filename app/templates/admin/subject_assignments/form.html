@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex align-items-center mb-4 gap-3">
+    <a href="{{ url_for('admin.subject_assignments') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h2 class="fw-bold brand-font mb-1">{{ title }}</h2>
+      <p class="text-muted mb-0">Authorize faculty members to conduct attendance for specific subjects and semesters.</p>
+    </div>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="glass-card p-4">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+
+          <!-- Teacher Selection -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="teacher_id">
+              <i class="bi bi-person-badge text-primary me-1"></i>Faculty Member <span class="text-danger">*</span>
+            </label>
+            {{ form.teacher_id(class="form-select fw-semibold" + (" is-invalid" if form.teacher_id.errors else "")) }}
+            {% if form.teacher_id.errors %}
+              <div class="invalid-feedback">{{ form.teacher_id.errors[0] }}</div>
+            {% endif %}
+            <div class="form-text small">Select the teacher who will be authorized to take attendance for this subject session.</div>
+          </div>
+
+          <!-- Subject Selection -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="subject_id">
+              <i class="bi bi-book text-primary me-1"></i>Academic Subject <span class="text-danger">*</span>
+            </label>
+            {{ form.subject_id(class="form-select fw-semibold" + (" is-invalid" if form.subject_id.errors else "")) }}
+            {% if form.subject_id.errors %}
+              <div class="invalid-feedback">{{ form.subject_id.errors[0] }}</div>
+            {% endif %}
+          </div>
+
+          <div class="row g-3">
+            <!-- Semester -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="semester">
+                <i class="bi bi-calendar-event text-primary me-1"></i>Semester <span class="text-danger">*</span>
+              </label>
+              {{ form.semester(class="form-select fw-semibold" + (" is-invalid" if form.semester.errors else "")) }}
+              {% if form.semester.errors %}
+                <div class="invalid-feedback">{{ form.semester.errors[0] }}</div>
+              {% endif %}
+              <div class="form-text small">Subject assignment is semester-scoped.</div>
+            </div>
+
+            <!-- Section -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="section">
+                <i class="bi bi-diagram-3 text-primary me-1"></i>Section (Optional)
+              </label>
+              {{ form.section(class="form-control" + (" is-invalid" if form.section.errors else ""), placeholder="e.g. A, B, or leave blank for All") }}
+              {% if form.section.errors %}
+                <div class="invalid-feedback">{{ form.section.errors[0] }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <!-- Department (Optional) -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="department_id">
+                <i class="bi bi-buildings text-primary me-1"></i>Department (Optional)
+              </label>
+              {{ form.department_id(class="form-select" + (" is-invalid" if form.department_id.errors else "")) }}
+              {% if form.department_id.errors %}
+                <div class="invalid-feedback">{{ form.department_id.errors[0] }}</div>
+              {% endif %}
+            </div>
+
+            <!-- Course (Optional) -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="course">
+                <i class="bi bi-mortarboard text-primary me-1"></i>Course / Program (Optional)
+              </label>
+              {{ form.course(class="form-control" + (" is-invalid" if form.course.errors else ""), placeholder="e.g. B.Tech Computer Science") }}
+              {% if form.course.errors %}
+                <div class="invalid-feedback">{{ form.course.errors[0] }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <!-- Active status -->
+          <div class="mb-4 form-check form-switch p-0 ps-5">
+            {{ form.is_active(class="form-check-input ms-n5") }}
+            <label class="form-check-label fw-semibold" for="is_active">
+              Active Assignment
+            </label>
+            <div class="form-text small">When active, the faculty member can take and view attendance for this subject in the specified semester.</div>
+          </div>
+
+          <div class="d-flex justify-content-between pt-3 border-top">
+            <a href="{{ url_for('admin.subject_assignments') }}" class="btn btn-outline-secondary">
+              Cancel
+            </a>
+            <button type="submit" class="btn btn-primary-glow">
+              <i class="bi bi-check-circle-fill me-1"></i> Save Assignment
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

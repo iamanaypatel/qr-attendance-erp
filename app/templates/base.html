@@ -90,9 +90,15 @@
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.subjects') }}" class="sidebar-link {% if 'admin.subject' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('admin.subjects') }}" class="sidebar-link {% if request.endpoint == 'admin.subjects' or 'admin.subject_' in request.endpoint and 'assignment' not in request.endpoint %}active{% endif %}">
                 <i class="bi bi-journal-bookmark-fill"></i>
                 <span>Subjects</span>
+              </a>
+            </li>
+            <li>
+              <a href="{{ url_for('admin.subject_assignments') }}" class="sidebar-link {% if 'subject_assignment' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-diagram-3-fill"></i>
+                <span>Subject Assignments</span>
               </a>
             </li>
             <li>

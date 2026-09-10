@@ -65,7 +65,11 @@ def build_filtered_query(args):
             filter_desc.append(f"Teacher: {t.full_name}")
 
     if semester:
-        query = query.filter(Student.semester == semester)
+        query = query.filter(
+            (Attendance.semester == semester) | 
+            (Attendance.semester.ilike(f"%{semester}%")) | 
+            (Student.semester == semester)
+        )
         filter_desc.append(f"Sem: {semester}")
 
     if student_query:
@@ -101,6 +105,10 @@ def index():
     from app.models.teacher import Teacher
     subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
     teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    semesters = [
+        '1st Semester', '2nd Semester', '3rd Semester', '4th Semester',
+        '5th Semester', '6th Semester', '7th Semester', '8th Semester'
+    ]
 
     # Precalculate summary stats on filtered dataset
     all_filtered = query.all()
@@ -123,6 +131,7 @@ def index():
         departments=departments,
         subjects=subjects,
         teachers=teachers,
+        semesters=semesters,
         stats=stats,
         filter_summary=filter_desc,
         args=request.args

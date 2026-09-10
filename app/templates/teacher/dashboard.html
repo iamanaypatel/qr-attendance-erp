@@ -92,24 +92,38 @@
         View All Subjects <i class="bi bi-arrow-right ms-1"></i>
       </a>
     </div>
-    {% if assigned_subjects %}
+    {% if assigned_assignments %}
       <div class="row g-3">
-        {% for s in assigned_subjects %}
+        {% for asgn in assigned_assignments %}
+          {% set s = asgn.subject %}
           <div class="col-md-6 col-lg-4">
             <div class="glass-card p-3 h-100 d-flex flex-column justify-content-between">
               <div>
                 <div class="d-flex justify-content-between align-items-start mb-2">
                   <span class="badge bg-primary text-white font-mono fs-7">{{ s.subject_code }}</span>
-                  <span class="badge badge-soft-info">{{ s.semester or 'All' }} Sem</span>
+                  <span class="badge badge-soft-info">{{ asgn.semester or (s.semester or 'All Sem') }}</span>
                 </div>
                 <h6 class="fw-bold text-dark mb-1">{{ s.subject_name }}</h6>
-                <small class="text-muted d-block mb-3">{{ s.department.code if s.department else 'General' }}</small>
+                <div class="small text-muted mb-2">
+                  <i class="bi bi-person-badge text-primary me-1"></i>{{ asgn.teacher.full_name if asgn.teacher else current_user.get_display_name() }}
+                </div>
+                <div class="d-flex gap-2 extra-small text-muted mb-3">
+                  <span><i class="bi bi-building me-1"></i>{{ asgn.department.code if asgn.department else (s.department.code if s.department else 'General') }}</span>
+                  {% if asgn.course or s.course %}
+                    <span>&bull;</span>
+                    <span><i class="bi bi-mortarboard me-1"></i>{{ asgn.course or s.course }}</span>
+                  {% endif %}
+                  {% if asgn.section %}
+                    <span>&bull;</span>
+                    <span>Sec: {{ asgn.section }}</span>
+                  {% endif %}
+                </div>
               </div>
               <div class="d-flex gap-2 mt-auto">
-                <a href="{{ url_for('attendance.scanner', subject_id=s.id) }}" class="btn btn-sm btn-primary-glow flex-grow-1">
-                  <i class="bi bi-qr-code-scan me-1"></i> Attendance
+                <a href="{{ url_for('attendance.scanner', subject_id=s.id, semester=asgn.semester) }}" class="btn btn-sm btn-primary-glow flex-grow-1">
+                  <i class="bi bi-qr-code-scan me-1"></i> Take Attendance
                 </a>
-                <a href="{{ url_for('teacher.subject_attendance', subject_id=s.id) }}" class="btn btn-sm btn-outline-secondary" title="View Logs">
+                <a href="{{ url_for('teacher.subject_attendance', subject_id=s.id, semester=asgn.semester) }}" class="btn btn-sm btn-outline-secondary" title="View Logs">
                   <i class="bi bi-clock-history"></i>
                 </a>
               </div>
@@ -119,7 +133,7 @@
       </div>
     {% else %}
       <div class="glass-card p-3 text-muted small">
-        <i class="bi bi-info-circle me-1"></i> No subjects assigned yet. Contact administrator to assign subjects to your profile.
+        <i class="bi bi-info-circle me-1"></i> No subject has been assigned to your account. Please contact the administrator.
       </div>
     {% endif %}
   </div>

@@ -8,6 +8,7 @@ from app.models.session import AcademicSession
 from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
 from app.models.subject import Subject, teacher_subjects
+from app.models.subject_assignment import TeacherSubjectAssignment
 
 __all__ = [
     'User',
@@ -22,4 +23,5 @@ __all__ = [
     'AuditLog',
     'Subject',
     'teacher_subjects',
+    'TeacherSubjectAssignment',
 ]

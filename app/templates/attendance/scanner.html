@@ -51,28 +51,96 @@
           </span>
         </div>
 
-        <!-- Subject Selection -->
-        <div class="mb-3 p-3 rounded-3 bg-body-tertiary border">
-          <label class="form-label small fw-bold text-muted mb-1" for="subjectSelect">
-            <i class="bi bi-journal-bookmark-fill text-primary me-1"></i>ACTIVE ATTENDANCE SUBJECT
-          </label>
-          <select id="subjectSelect" class="form-select fw-semibold">
-            {% if current_user.is_admin %}
-              <option value="">-- General Campus Attendance (No Subject) --</option>
-            {% endif %}
-            {% for sub in available_subjects %}
-              <option value="{{ sub.id }}" {% if selected_subject_id == sub.id %}selected{% endif %}>
-                [{{ sub.subject_code }}] {{ sub.subject_name }} {% if sub.semester %}({{ sub.semester }} Sem){% endif %}
-              </option>
-            {% endfor %}
-            {% if not available_subjects and current_user.is_teacher %}
-              <option value="" disabled selected>No subjects assigned — Contact Administrator</option>
-            {% endif %}
-          </select>
-          <div class="form-text extra-small mt-1 text-muted">
-            <i class="bi bi-info-circle me-1"></i>Scans will be credited towards the selected subject.
+        <!-- Subject Selection / Assignment Details Card -->
+        {% if current_user.is_teacher and assignment_count == 0 %}
+          <div class="alert alert-warning d-flex align-items-center mb-3">
+            <i class="bi bi-exclamation-triangle-fill fs-3 me-3 text-warning"></i>
+            <div>
+              <div class="fw-bold">No Subject Assigned</div>
+              <div class="small">No subject has been assigned to your account. Please contact the administrator.</div>
+            </div>
           </div>
-        </div>
+        {% elif current_user.is_teacher and assignment_count == 1 %}
+          <!-- RULE 1: Exactly One Assigned Subject -> No dropdown, display details directly -->
+          <div class="p-3 rounded-3 bg-body-tertiary border mb-3 shadow-xs">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="badge bg-primary text-white font-mono fs-7">{{ selected_assignment.subject_code }}</span>
+              <span class="badge badge-soft-primary fw-semibold">{{ selected_assignment.semester }}</span>
+            </div>
+            <h5 class="fw-bold text-dark mb-1">{{ selected_assignment.subject_name }}</h5>
+            <div class="small text-muted mb-2">
+              <i class="bi bi-person-badge text-primary me-1"></i>Teacher: <strong>{{ selected_assignment.teacher_name }}</strong>
+            </div>
+            <div class="d-flex gap-2 extra-small text-muted">
+              <span><i class="bi bi-building me-1"></i>{{ selected_assignment.department }}</span>
+              {% if selected_assignment.course %}
+                <span>&bull;</span>
+                <span><i class="bi bi-mortarboard me-1"></i>{{ selected_assignment.course }}</span>
+              {% endif %}
+              {% if selected_assignment.section %}
+                <span>&bull;</span>
+                <span>Sec: {{ selected_assignment.section }}</span>
+              {% endif %}
+            </div>
+          </div>
+          <input type="hidden" id="activeSubjectId" value="{{ selected_assignment.subject_id }}">
+          <input type="hidden" id="activeSemester" value="{{ selected_assignment.semester }}">
+        {% else %}
+          <!-- RULE 2 / Multiple Subjects / Admin -> Subject Selector with Assignment Details Card -->
+          <div class="mb-3 p-3 rounded-3 bg-body-tertiary border">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <label class="form-label small fw-bold text-muted mb-0" for="assignmentSelect">
+                <i class="bi bi-journal-bookmark-fill text-primary me-1"></i>SELECT SUBJECT
+              </label>
+              <span id="sessionLockBadge" class="badge badge-soft-warning font-mono" style="display: none;">
+                <i class="bi bi-lock-fill me-1"></i>Active Session Locked
+              </span>
+            </div>
+
+            <select id="assignmentSelect" class="form-select fw-semibold mb-2">
+              {% if current_user.is_admin %}
+                <option value="" data-subject-id="" data-semester="" data-name="General Campus Attendance" data-code="GENERAL" data-teacher="Administrator" data-dept="General" data-course="Campus Wide">
+                  -- General Campus Attendance (No Subject) --
+                </option>
+              {% endif %}
+              {% for asgn in assignments %}
+                <option value="{{ asgn.id }}"
+                        data-subject-id="{{ asgn.subject_id }}"
+                        data-semester="{{ asgn.semester }}"
+                        data-name="{{ asgn.subject_name }}"
+                        data-code="{{ asgn.subject_code }}"
+                        data-teacher="{{ asgn.teacher_name }}"
+                        data-dept="{{ asgn.department }}"
+                        data-course="{{ asgn.course }}"
+                        data-section="{{ asgn.section }}"
+                        {% if selected_assignment and selected_assignment.id == asgn.id %}selected{% endif %}>
+                  [{{ asgn.subject_code }}] {{ asgn.subject_name }} — {{ asgn.semester }}
+                </option>
+              {% endfor %}
+            </select>
+
+            <!-- Assignment Details Preview Card -->
+            <div id="assignmentDetailsCard" class="p-2.5 rounded-2 border small" style="background-color: var(--card-bg, #fff) !important;">
+              <div class="d-flex justify-content-between align-items-center mb-1">
+                <span id="dispSubjectCode" class="badge bg-primary text-white font-mono">{{ selected_assignment.subject_code if selected_assignment else 'GENERAL' }}</span>
+                <span id="dispSemester" class="badge badge-soft-info fw-semibold">{{ selected_assignment.semester if selected_assignment else 'Campus' }}</span>
+              </div>
+              <div id="dispSubjectName" class="fw-bold text-dark mb-1">{{ selected_assignment.subject_name if selected_assignment else 'General Campus Attendance' }}</div>
+              <div class="text-muted extra-small">
+                <i class="bi bi-person-badge text-primary me-1"></i>Teacher: <span id="dispTeacherName" class="fw-semibold">{{ selected_assignment.teacher_name if selected_assignment else (current_user.teacher_profile.full_name if current_user.teacher_profile else 'Administrator') }}</span>
+              </div>
+              <div class="text-muted extra-small mt-0.5" id="dispMetaRow">
+                <span id="dispDept"><i class="bi bi-building me-1"></i>{{ selected_assignment.department if selected_assignment else 'General' }}</span>
+                <span id="dispCourseSep">&bull;</span>
+                <span id="dispCourse">{{ selected_assignment.course if selected_assignment else 'Campus Wide' }}</span>
+              </div>
+            </div>
+
+            <div class="form-text extra-small mt-1 text-muted" id="subjectHelperText">
+              <i class="bi bi-info-circle me-1"></i>Attendance will be locked to the chosen subject for this scan session.
+            </div>
+          </div>
+        {% endif %}
 
         <!-- Camera Viewport Box with Laser Line -->
         <div class="scanner-viewport-box mb-3 position-relative">
@@ -83,11 +151,11 @@
         <!-- Controls -->
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div class="d-flex gap-2 flex-grow-1">
-            <button class="btn btn-primary-glow" id="startScanBtn">
-              <i class="bi bi-play-circle-fill me-1"></i> Start Camera
+            <button class="btn btn-primary-glow" id="startScanBtn" {% if current_user.is_teacher and assignment_count == 0 %}disabled title="No subject assigned to your account"{% endif %}>
+              <i class="bi bi-play-circle-fill me-1"></i> Start Attendance
             </button>
             <button class="btn btn-outline-danger" id="stopScanBtn" disabled>
-              <i class="bi bi-stop-circle-fill me-1"></i> Stop Camera
+              <i class="bi bi-stop-circle-fill me-1"></i> Stop Attendance
             </button>
           </div>
           <select id="cameraSelect" class="form-select w-auto" style="min-width: 140px;">
@@ -263,6 +331,17 @@
       laser.style.display = 'block';
       statusBadge.className = 'badge bg-success';
       statusBadge.textContent = 'Active & Scanning';
+
+      // Rule 12: Lock subject during active session
+      if (assignmentSelect) {
+        assignmentSelect.disabled = true;
+      }
+      if (sessionLockBadge) {
+        sessionLockBadge.style.display = 'inline-flex';
+      }
+      if (subjectHelper) {
+        subjectHelper.innerHTML = '<span class="text-warning"><i class="bi bi-lock-fill me-1"></i>Subject locked for active session. Stop attendance to switch subject.</span>';
+      }
     } catch (err) {
       console.error("Camera start error:", err);
       showToast("Camera access failed or permission denied: " + err, "danger", "Camera Error");
@@ -281,6 +360,17 @@
       laser.style.display = 'none';
       statusBadge.className = 'badge bg-secondary';
       statusBadge.textContent = 'Stopped';
+
+      // Unlock subject selector
+      if (assignmentSelect) {
+        assignmentSelect.disabled = false;
+      }
+      if (sessionLockBadge) {
+        sessionLockBadge.style.display = 'none';
+      }
+      if (subjectHelper) {
+        subjectHelper.innerHTML = '<i class="bi bi-info-circle me-1"></i>Attendance will be locked to the chosen subject for this scan session.';
+      }
     } catch (err) {
       console.error("Stop scanner error:", err);
     }
@@ -295,6 +385,64 @@
       await startScanner();
     }
   });
+
+  const assignmentSelect = document.getElementById('assignmentSelect');
+  const sessionLockBadge = document.getElementById('sessionLockBadge');
+  const subjectHelper = document.getElementById('subjectHelperText');
+
+  function updateAssignmentPreview() {
+    if (!assignmentSelect) return;
+    const opt = assignmentSelect.selectedOptions[0];
+    if (!opt) return;
+
+    const code = opt.getAttribute('data-code') || 'GENERAL';
+    const name = opt.getAttribute('data-name') || 'General Campus Attendance';
+    const sem = opt.getAttribute('data-semester') || 'Campus';
+    const teacher = opt.getAttribute('data-teacher') || '-';
+    const dept = opt.getAttribute('data-dept') || 'General';
+    const course = opt.getAttribute('data-course') || '';
+    const sec = opt.getAttribute('data-section') || '';
+
+    const codeEl = document.getElementById('dispSubjectCode');
+    const nameEl = document.getElementById('dispSubjectName');
+    const semEl = document.getElementById('dispSemester');
+    const teacherEl = document.getElementById('dispTeacherName');
+    const deptEl = document.getElementById('dispDept');
+    const courseEl = document.getElementById('dispCourse');
+
+    if (codeEl) codeEl.textContent = code;
+    if (nameEl) nameEl.textContent = name;
+    if (semEl) semEl.textContent = sem;
+    if (teacherEl) teacherEl.textContent = teacher;
+    if (deptEl) deptEl.innerHTML = `<i class="bi bi-building me-1"></i>${dept}`;
+    if (courseEl) courseEl.textContent = course + (sec ? ` (Sec ${sec})` : '');
+  }
+
+  if (assignmentSelect) {
+    assignmentSelect.addEventListener('change', updateAssignmentPreview);
+  }
+
+  function getActiveSubjectContext() {
+    const fixedSub = document.getElementById('activeSubjectId');
+    const fixedSem = document.getElementById('activeSemester');
+    if (fixedSub && fixedSub.value) {
+      return {
+        subject_id: parseInt(fixedSub.value),
+        semester: fixedSem ? fixedSem.value : null
+      };
+    }
+
+    if (assignmentSelect && assignmentSelect.selectedOptions.length > 0) {
+      const opt = assignmentSelect.selectedOptions[0];
+      const sId = opt.getAttribute('data-subject-id');
+      const sem = opt.getAttribute('data-semester');
+      return {
+        subject_id: sId ? parseInt(sId) : null,
+        semester: sem || null
+      };
+    }
+    return { subject_id: null, semester: null };
+  }
 
   function onScanFailure(error) {
     // Continuous frame scanning without QR detected — ignore
@@ -314,10 +462,13 @@
 
   async function processScanPayload(token) {
     try {
-      const subjectVal = document.getElementById('subjectSelect')?.value;
+      const ctx = getActiveSubjectContext();
       const payload = { token: token };
-      if (subjectVal) {
-        payload.subject_id = parseInt(subjectVal);
+      if (ctx.subject_id) {
+        payload.subject_id = ctx.subject_id;
+      }
+      if (ctx.semester) {
+        payload.semester = ctx.semester;
       }
 
       const response = await fetch('/api/attendance/scan', {
@@ -452,9 +603,12 @@
           form.append('student_id', student.student_id);
           form.append('status', 'Present');
           form.append('csrf_token', '{{ csrf_token() }}');
-          const subjectVal = document.getElementById('subjectSelect')?.value;
-          if (subjectVal) {
-            form.append('subject_id', subjectVal);
+          const ctx = getActiveSubjectContext();
+          if (ctx.subject_id) {
+            form.append('subject_id', ctx.subject_id);
+          }
+          if (ctx.semester) {
+            form.append('semester', ctx.semester);
           }
           
           const postResp = await fetch("{{ url_for('attendance.manual') }}", {

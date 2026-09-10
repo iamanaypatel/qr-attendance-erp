@@ -170,11 +170,14 @@ class ApiService {
     await prefs.remove('saved_accounts');
   }
 
-  Future<Map<String, dynamic>> scanAttendance(String token, {int? subjectId}) async {
+  Future<Map<String, dynamic>> scanAttendance(String token, {int? subjectId, String? semester}) async {
     try {
       final bodyMap = <String, dynamic>{'token': token.trim()};
       if (subjectId != null) {
         bodyMap['subject_id'] = subjectId;
+      }
+      if (semester != null && semester.isNotEmpty) {
+        bodyMap['semester'] = semester;
       }
 
       final response = await http

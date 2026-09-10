@@ -54,7 +54,7 @@ def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swa
 
     # Table Headers at Row 6
     headers = [
-        "S.No", "Student ID", "Student Name", "Department",
+        "S.No", "Student ID", "Student Name", "Department", "Subject", "Semester",
         "Date", "Time In", "Time Out", "Status", "Method", "Marked By"
     ]
     header_row = 6
@@ -71,16 +71,20 @@ def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swa
     for idx, r in enumerate(records, 1):
         s = r.student
         dept_code = s.department.code if (s and s.department) else "N/A"
+        sub_name = f"[{r.subject.subject_code}] {r.subject.subject_name}" if r.subject else "General"
+        sem_name = r.semester or (s.semester if s else "-")
         date_str = r.date.strftime('%Y-%m-%d') if r.date else ""
         in_str = r.time_in.strftime('%I:%M %p') if r.time_in else "-"
         out_str = r.time_out.strftime('%I:%M %p') if r.time_out else "-"
-        marker_name = r.marker.username if r.marker else "System"
+        marker_name = r.teacher.full_name if r.teacher else (r.marker.username if r.marker else "System")
 
         row_data = [
             idx,
             s.student_id if s else "N/A",
             s.full_name if s else "N/A",
             dept_code,
+            sub_name,
+            sem_name,
             date_str,
             in_str,
             out_str,
@@ -96,12 +100,12 @@ def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swa
             cell.border = thin_border
 
             # Specific column alignments & fills
-            if col_idx in (1, 2, 5, 6, 7, 9):
+            if col_idx in (1, 2, 6, 7, 8, 9, 11):
                 cell.alignment = Alignment(horizontal="center")
             else:
                 cell.alignment = Alignment(horizontal="left")
 
-            if col_idx == 8: # Status column
+            if col_idx == 10: # Status column
                 if r.status == 'Present':
                     cell.fill = present_fill
                     cell.font = Font(name="Calibri", size=10, bold=True, color="15803D")
