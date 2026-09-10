@@ -533,4 +533,90 @@ def test_second_subject_no_response_bug_prevention(client, seeded_db):
     assert 'not authorized' in d_unauth['message'].lower()
 
 
+def test_no_302_redirect_on_subject_switching_and_bearer_token(client, seeded_db):
+    """
+    CRITICAL TEST — Verify that switching subjects never returns HTTP 302 redirect.
+    Verifies:
+    1. /api/auth/login returns valid auth token.
+    2. Subject 1 scan succeeds with HTTP 200 (No 302 redirect, Location is None).
+    3. Subject 2 scan succeeds with HTTP 200 (No 302 redirect, Location is None).
+    4. Bearer token works independently of cookies with HTTP 200.
+    5. Trailing slash /api/attendance/scan/ does not return 302.
+    6. Unauthenticated requests return JSON 401 (never HTML 302).
+    """
+    from app.models.subject import Subject
+    from app.models.teacher import Teacher
+    from app.models.student import Student
+    from app.models.department import Department
+    from app.models.attendance import Attendance
+    from app.utils.timezone import get_current_ist_date
+
+    cse = Department.query.filter_by(code='CSE').first()
+    teacher = Teacher.query.filter_by(employee_id='TCH101').first()
+
+    sub1 = Subject(subject_code='TST301', subject_name='Test Subject A', department_id=cse.id, semester='4th', is_active=True)
+    sub2 = Subject(subject_code='TST302', subject_name='Test Subject B', department_id=cse.id, semester='4th', is_active=True)
+    seeded_db.session.add_all([sub1, sub2])
+    seeded_db.session.commit()
+
+    sub1.teachers.append(teacher)
+    sub2.teachers.append(teacher)
+    seeded_db.session.commit()
+
+    student = Student.query.filter_by(student_id='STU2026001').first()
+
+    # Step 1: Login via API
+    login_resp = client.post('/api/auth/login', json={'identity': 'teacher', 'password': 'Teacher@1234'})
+    assert login_resp.status_code == 200
+    login_data = login_resp.get_json()
+    assert login_data['success'] is True
+    assert 'token' in login_data
+    token = login_data['token']
+    assert token is not None and len(token) > 20
+
+    # Step 2: Subject 1 Attendance Scan
+    r1 = client.post('/api/attendance/scan', json={'token': student.qr_token, 'subject_id': sub1.id, 'semester': '4th'})
+    assert r1.status_code == 200, f"Expected 200, got {r1.status_code}. Location: {r1.headers.get('Location')}"
+    assert 'Location' not in r1.headers
+    d1 = r1.get_json()
+    assert d1['success'] is True
+    assert d1['action'] == 'TIME_IN'
+
+    # Step 3: Switch to Subject 2 Attendance Scan
+    r2 = client.post('/api/attendance/scan', json={'token': student.qr_token, 'subject_id': sub2.id, 'semester': '4th'})
+    assert r2.status_code == 200, f"Expected 200, got {r2.status_code}. Location: {r2.headers.get('Location')}"
+    assert 'Location' not in r2.headers
+    d2 = r2.get_json()
+    assert d2['success'] is True
+    assert d2['action'] == 'TIME_IN'
+
+    # Step 4: Use a fresh client with ONLY Authorization: Bearer <token> (No cookies)
+    bearer_client = client.application.test_client()
+    r_bearer = bearer_client.post(
+        '/api/attendance/scan',
+        json={'token': student.qr_token, 'subject_id': sub1.id, 'semester': '4th'},
+        headers={'Authorization': f'Bearer {token}'}
+    )
+    assert r_bearer.status_code == 200, f"Bearer auth failed with {r_bearer.status_code}"
+    assert 'Location' not in r_bearer.headers
+
+    # Step 5: Test trailing slash request
+    r_slash = bearer_client.post(
+        '/api/attendance/scan/',
+        json={'token': student.qr_token, 'subject_id': sub2.id, 'semester': '4th'},
+        headers={'Authorization': f'Bearer {token}'}
+    )
+    assert r_slash.status_code in (200, 400), f"Trailing slash failed with {r_slash.status_code}"
+    assert r_slash.status_code != 302
+
+    # Step 6: Test unauthenticated request without token or cookies returns JSON 401 (not 302)
+    client.post('/api/auth/logout')
+    r_unauth = client.post('/api/attendance/scan', json={'token': student.qr_token, 'subject_id': sub1.id})
+    assert r_unauth.status_code == 401
+    assert 'Location' not in r_unauth.headers
+    d_unauth = r_unauth.get_json()
+    assert d_unauth['success'] is False
+    assert d_unauth['action'] == 'UNAUTHORIZED'
+
+
 

@@ -28,6 +28,28 @@ class User(UserMixin, db.Model):
             return False
         return check_password_hash(self.password_hash, password)
 
+    def generate_auth_token(self, expires_in=86400 * 30) -> str:
+        from itsdangerous import URLSafeTimedSerializer
+        from flask import current_app
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        return s.dumps({'user_id': self.id})
+
+    @classmethod
+    def verify_auth_token(cls, token: str, max_age=86400 * 30):
+        if not token:
+            return None
+        from itsdangerous import URLSafeTimedSerializer
+        from flask import current_app
+        s = URLSafeTimedSerializer(current_app.config['SECRET_KEY'])
+        try:
+            data = s.loads(token, max_age=max_age)
+            user_id = data.get('user_id')
+            if user_id:
+                return cls.query.get(int(user_id))
+        except Exception:
+            return None
+        return None
+
     def has_role(self, *roles: str) -> bool:
         return self.role in roles
 
@@ -78,4 +100,28 @@ class User(UserMixin, db.Model):
 
 @login_manager.user_loader
 def load_user(user_id):
-    return User.query.get(int(user_id))
+    try:
+        return User.query.get(int(user_id))
+    except (ValueError, TypeError):
+        return None
+
+@login_manager.request_loader
+def load_user_from_request(request):
+    """
+    Authenticate API requests via Authorization: Bearer <token> or X-API-Token header.
+    This guarantees mobile APK API requests never lose authentication or return 302 redirects.
+    """
+    auth_header = request.headers.get('Authorization')
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1].strip()
+        user = User.verify_auth_token(token)
+        if user and user.is_active:
+            return user
+
+    api_token = request.headers.get('X-API-Token')
+    if api_token:
+        user = User.verify_auth_token(api_token.strip())
+        if user and user.is_active:
+            return user
+
+    return None

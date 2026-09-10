@@ -10,6 +10,8 @@ class ApiService {
 
   String _baseUrl = "https://qr-attendance-erp.onrender.com";
   String? _sessionCookie;
+  String? _authToken;
+  final Map<String, String> _cookies = {};
   Map<String, dynamic>? _currentUser;
 
   String get baseUrl => _baseUrl;
@@ -30,7 +32,21 @@ class ApiService {
       _baseUrl = saved;
     }
 
+    _authToken = prefs.getString('auth_token');
     _sessionCookie = prefs.getString('session_cookie');
+
+    final jarString = prefs.getString('cookie_jar');
+    if (jarString != null) {
+      try {
+        final decoded = jsonDecode(jarString) as Map<String, dynamic>;
+        _cookies.clear();
+        decoded.forEach((k, v) => _cookies[k] = v.toString());
+      } catch (_) {}
+    }
+    if (_cookies.isEmpty && _sessionCookie != null && _sessionCookie!.isNotEmpty) {
+      _parseCookieString(_sessionCookie!);
+    }
+
     final userJson = prefs.getString('current_user');
     if (userJson != null) {
       try {
@@ -61,7 +77,13 @@ class ApiService {
       headers['Content-Type'] = 'application/json';
       headers['Accept'] = 'application/json';
     }
-    if (_sessionCookie != null && _sessionCookie!.isNotEmpty) {
+    if (_authToken != null && _authToken!.isNotEmpty) {
+      headers['Authorization'] = 'Bearer $_authToken';
+      headers['X-API-Token'] = _authToken!;
+    }
+    if (_cookies.isNotEmpty) {
+      headers['Cookie'] = _cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+    } else if (_sessionCookie != null && _sessionCookie!.isNotEmpty) {
       headers['Cookie'] = _sessionCookie!;
     }
     return headers;
@@ -69,11 +91,32 @@ class ApiService {
 
   void _updateCookie(http.Response response) async {
     final rawCookie = response.headers['set-cookie'];
-    if (rawCookie != null) {
-      final parts = rawCookie.split(';');
-      _sessionCookie = parts[0];
+    if (rawCookie != null && rawCookie.isNotEmpty) {
+      _parseCookieString(rawCookie);
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('session_cookie', _sessionCookie!);
+      await prefs.setString('cookie_jar', jsonEncode(_cookies));
+      if (_cookies.isNotEmpty) {
+        _sessionCookie = _cookies.entries.map((e) => '${e.key}=${e.value}').join('; ');
+        await prefs.setString('session_cookie', _sessionCookie!);
+      }
+    }
+  }
+
+  void _parseCookieString(String rawCookie) {
+    // In HTTP, multiple Set-Cookie entries may be comma-separated
+    final cookieParts = rawCookie.split(RegExp(r',(?=\s*[a-zA-Z0-9_\-]+=)'));
+    for (final part in cookieParts) {
+      final subParts = part.trim().split(';');
+      if (subParts.isNotEmpty) {
+        final kv = subParts[0].trim().split('=');
+        if (kv.length >= 2) {
+          final key = kv[0].trim();
+          final val = kv.sublist(1).join('=').trim();
+          if (key.isNotEmpty && val.isNotEmpty && val.toLowerCase() != 'deleted') {
+            _cookies[key] = val;
+          }
+        }
+      }
     }
   }
 
@@ -121,8 +164,14 @@ class ApiService {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
           _currentUser = data['user'];
+          if (data['token'] != null && data['token'].toString().isNotEmpty) {
+            _authToken = data['token'].toString();
+          }
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('current_user', jsonEncode(_currentUser));
+          if (_authToken != null) {
+            await prefs.setString('auth_token', _authToken!);
+          }
 
           return {
             'success': true,
@@ -161,9 +210,13 @@ class ApiService {
     } catch (_) {}
 
     _sessionCookie = null;
+    _authToken = null;
+    _cookies.clear();
     _currentUser = null;
 
     final prefs = await SharedPreferences.getInstance();
+    await prefs.remove('auth_token');
+    await prefs.remove('cookie_jar');
     await prefs.remove('session_cookie');
     await prefs.remove('current_user');
     await prefs.remove('saved_accounts_v2');
@@ -198,11 +251,52 @@ class ApiService {
         "POST /api/attendance/scan Status=${response.statusCode}",
       );
 
+      // Explicitly check for HTTP 301/302/303/307/308 redirects and capture Location
+      if (response.statusCode == 301 ||
+          response.statusCode == 302 ||
+          response.statusCode == 303 ||
+          response.statusCode == 307 ||
+          response.statusCode == 308) {
+        final location = response.headers['location'] ?? 'Unknown';
+        debugPrint("ATTENDANCE_API_LOG: 302 REDIRECT DETECTED -> Location=$location");
+        return {
+          'success': false,
+          'action': 'UNAUTHORIZED',
+          'message': 'Authentication session expired or redirected to $location. Please log in again.',
+        };
+      }
+
       if (response.statusCode == 401) {
         return {
           'success': false,
           'action': 'UNAUTHORIZED',
           'message': 'Session expired. Please log in again to mark attendance.',
+        };
+      }
+
+      if (response.statusCode == 403) {
+        String msg = 'Teacher is not assigned to this subject.';
+        try {
+          final errBody = jsonDecode(response.body);
+          if (errBody['message'] != null) msg = errBody['message'].toString();
+        } catch (_) {}
+        return {
+          'success': false,
+          'action': 'UNAUTHORIZED_SUBJECT',
+          'message': msg,
+        };
+      }
+
+      if (response.statusCode == 409) {
+        String msg = 'Attendance already marked for this subject today.';
+        try {
+          final errBody = jsonDecode(response.body);
+          if (errBody['message'] != null) msg = errBody['message'].toString();
+        } catch (_) {}
+        return {
+          'success': false,
+          'action': 'ALREADY_COMPLETED',
+          'message': msg,
         };
       }
 

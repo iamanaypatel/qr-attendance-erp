@@ -81,10 +81,13 @@ def api_login():
             user_payload['student'] = None
             user_payload['student_unlinked'] = True
 
+    token = user.generate_auth_token()
+
     return jsonify({
         'success': True,
         'message': f'Welcome back, {user.get_display_name()}!',
-        'user': user_payload
+        'user': user_payload,
+        'token': token
     }), 200
 
 @api_bp.route('/student/me')
@@ -124,7 +127,7 @@ def api_logout():
         'message': 'Logged out successfully.'
     })
 
-@api_bp.route('/attendance/scan', methods=['POST'])
+@api_bp.route('/attendance/scan', methods=['POST'], strict_slashes=False)
 @login_required
 def scan_attendance():
     """
@@ -162,8 +165,9 @@ def scan_attendance():
         except (ValueError, TypeError):
             subject_id = None
 
+    teacher_id = current_user.teacher_profile.id if getattr(current_user, 'teacher_profile', None) else current_user.id
     current_app.logger.info(
-        f"API_SCAN_REQUEST: MarkerUser={current_user.id} ({current_user.username}) "
+        f"API_SCAN_REQUEST: MarkerUser={current_user.id} Teacher={teacher_id} "
         f"SubjectId={subject_id} Semester={semester} TokenPrefix={token[:6] if token else ''}"
     )
 
@@ -181,13 +185,58 @@ def scan_attendance():
     else:
         status_code = 400
 
+    student_id = result.get('student', {}).get('student_id') if result.get('student') else '-'
     current_app.logger.info(
-        f"API_SCAN_RESPONSE: Status={status_code} Success={result.get('success')} "
-        f"Action={result.get('action')} StudentId={result.get('student', {}).get('student_id')} "
-        f"SubjectId={result.get('subject_id')}"
+        f"API_SCAN_RESPONSE: Status={status_code} Teacher={teacher_id} "
+        f"Subject={subject_id} Student={student_id} Action={result.get('action')} Success={result.get('success')}"
     )
 
     return jsonify(result), status_code
+
+@api_bp.before_request
+def authenticate_api_request():
+    """
+    If an Authorization Bearer token or X-API-Token is provided in the headers,
+    authenticate the user for this API request, regardless of cookie state.
+    This guarantees that mobile API calls never fail auth or return 302 due to
+    stale, truncated, or missing cookies.
+    """
+    auth_header = request.headers.get('Authorization')
+    token = None
+    if auth_header and auth_header.startswith('Bearer '):
+        token = auth_header.split(' ', 1)[1].strip()
+    elif request.headers.get('X-API-Token'):
+        token = request.headers.get('X-API-Token').strip()
+
+    if token:
+        user = User.verify_auth_token(token)
+        if user and user.is_active:
+            login_user(user, remember=False)
+
+@api_bp.after_request
+def intercept_api_redirects(response):
+    """
+    Ensure no API endpoint under /api/ ever returns an HTTP 302 or other redirect.
+    If an unhandled redirect occurs, convert it to an appropriate JSON response.
+    """
+    if response.status_code in (301, 302, 303, 307, 308):
+        location = response.headers.get('Location', '')
+        current_app.logger.warning(
+            f"API_REDIRECT_INTERCEPTED: Path={request.path} Method={request.method} Status={response.status_code} Location={location}"
+        )
+        if 'login' in location.lower():
+            return jsonify({
+                'success': False,
+                'action': 'UNAUTHORIZED',
+                'message': 'Authentication session expired or invalid. Please log in again.'
+            }), 401
+        return jsonify({
+            'success': False,
+            'action': 'REDIRECT_BLOCKED',
+            'location': location,
+            'message': f'Redirect blocked for API request: {location}'
+        }), 400
+    return response
 
 @api_bp.route('/attendance/today')
 @login_required

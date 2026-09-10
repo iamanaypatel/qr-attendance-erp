@@ -11,6 +11,8 @@ def role_required(*allowed_roles):
         @wraps(f)
         def decorated_function(*args, **kwargs):
             if not current_user.is_authenticated:
+                if request.is_json or request.path.startswith('/api/'):
+                    return {'success': False, 'action': 'UNAUTHORIZED', 'message': 'Authentication required. Please log in.'}, 401
                 flash('Please log in to access this page.', 'warning')
                 return redirect(url_for('auth.login', next=request.url))
 
