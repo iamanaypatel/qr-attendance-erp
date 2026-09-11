@@ -245,6 +245,9 @@ def _auto_bootstrap_database(app):
                                     marked_by INTEGER,
                                     method VARCHAR(20) NOT NULL DEFAULT 'QR',
                                     remarks VARCHAR(255),
+                                    attendance_type VARCHAR(20) DEFAULT 'SUBJECT' NOT NULL,
+                                    classification_reason VARCHAR(255),
+                                    classified_at DATETIME,
                                     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                                     CONSTRAINT uq_student_date_subject_attendance UNIQUE (student_id, date, subject_id),
@@ -255,8 +258,8 @@ def _auto_bootstrap_database(app):
                                 )
                                 """)
                                 cur.execute("""
-                                INSERT INTO attendances_migrated (id, student_id, subject_id, teacher_id, semester, section, date, time_in, time_out, status, marked_by, method, remarks, created_at, updated_at)
-                                SELECT id, student_id, subject_id, teacher_id, semester, section, date, time_in, time_out, status, marked_by, method, remarks, created_at, updated_at
+                                INSERT INTO attendances_migrated (id, student_id, subject_id, teacher_id, semester, section, date, time_in, time_out, status, marked_by, method, remarks, attendance_type, classification_reason, classified_at, created_at, updated_at)
+                                SELECT id, student_id, subject_id, teacher_id, semester, section, date, time_in, time_out, status, marked_by, method, remarks, COALESCE(attendance_type, 'SUBJECT'), classification_reason, classified_at, created_at, updated_at
                                 FROM attendances
                                 """)
                                 cur.execute("DROP TABLE attendances")

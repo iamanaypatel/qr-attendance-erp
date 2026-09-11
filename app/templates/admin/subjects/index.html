@@ -96,12 +96,13 @@
                   {% if faculty_list %}
                     <div class="d-flex flex-column gap-1">
                       {% for f in faculty_list %}
-                        <div class="d-inline-flex align-items-center">
+                        <div class="d-inline-flex align-items-center flex-wrap gap-1">
                           <span class="badge badge-soft-primary px-2 py-1 fs-7 fw-semibold" title="{{ f.email or '' }}">
                             <i class="bi bi-person-fill me-1"></i>{{ f.name }}
                           </span>
                           {% if faculty_list|length > 1 and f.semester and f.semester != 'Not Set' %}
-                            <span class="badge badge-soft-secondary ms-1 fs-8" style="font-size: 0.7rem;">{{ f.semester }}</span>
+                            <span class="text-muted small">&rarr;</span>
+                            <span class="badge badge-soft-secondary px-1.5 py-0.5" style="font-size: 0.72rem;">{{ f.semester }}</span>
                           {% endif %}
                         </div>
                       {% endfor %}

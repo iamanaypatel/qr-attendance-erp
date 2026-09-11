@@ -107,7 +107,7 @@
                   </div>
                 </td>
                 <td>
-                  <span class="badge badge-soft-primary px-2 py-1 fs-7 fw-bold">{{ a.semester }}</span>
+                  <span class="badge badge-soft-primary px-2 py-1 fs-7 fw-bold">{{ a.display_semester or a.semester }}</span>
                 </td>
                 <td>
                   {% if a.department %}

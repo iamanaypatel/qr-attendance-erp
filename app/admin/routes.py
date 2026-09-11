@@ -2,7 +2,7 @@ import os
 import uuid
 from datetime import datetime, date, timedelta
 from werkzeug.utils import secure_filename
-from flask import render_template, redirect, url_for, flash, request, send_file, current_app
+from flask import render_template, redirect, url_for, flash, request, send_file, current_app, jsonify
 from flask_login import login_required, current_user
 from app.admin import admin_bp
 from app.admin.forms import StudentForm, TeacherForm, DepartmentForm, HolidayForm, AcademicSessionForm, SystemSettingsForm, SubjectForm, SubjectAssignTeachersForm, TeacherSubjectAssignmentForm, ClassCoordinatorForm
@@ -987,6 +987,126 @@ def settings():
 
 
 # ============================================================================
+# Academic Session Management Endpoints
+# ============================================================================
+@admin_bp.route('/sessions/create', methods=['POST'])
+@login_required
+@role_required('admin')
+def session_create():
+    name = request.form.get('name', '').strip()
+    start_date_str = request.form.get('start_date', '').strip()
+    end_date_str = request.form.get('end_date', '').strip()
+    is_active = bool(request.form.get('is_active'))
+
+    if not name:
+        flash("Session Name is required (e.g. '2026-27' or '2026-2027').", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    # Prevent duplicate session names
+    existing = AcademicSession.query.filter(func.lower(AcademicSession.name) == name.lower()).first()
+    if existing:
+        flash(f"An academic session with the name '{name}' already exists.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    if not start_date_str or not end_date_str:
+        flash("Both Start Date and End Date are required.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash("Invalid date format. Please use YYYY-MM-DD.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    if start_date > end_date:
+        flash("Start Date cannot be after End Date.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    # Enforce single active academic session rule:
+    # If this session is marked active, safely deactivate other sessions without changing historical attendance
+    if is_active:
+        AcademicSession.query.update({'is_active': False})
+
+    new_session = AcademicSession(
+        name=name,
+        start_date=start_date,
+        end_date=end_date,
+        is_active=is_active
+    )
+    db.session.add(new_session)
+    db.session.commit()
+
+    status_str = "Active" if is_active else "Inactive"
+    AuditLog.log('ACADEMIC_SESSION_CREATE', f"Created academic session '{name}' ({status_str})", user_id=current_user.id)
+    flash(f"Academic session '{name}' ({status_str}) created successfully.", 'success')
+    return redirect(url_for('admin.settings'))
+
+
+@admin_bp.route('/sessions/<int:id>/edit', methods=['POST'])
+@login_required
+@role_required('admin')
+def session_edit(id):
+    session_obj = AcademicSession.query.get_or_404(id)
+    name = request.form.get('name', '').strip()
+    start_date_str = request.form.get('start_date', '').strip()
+    end_date_str = request.form.get('end_date', '').strip()
+    is_active = bool(request.form.get('is_active'))
+
+    if not name:
+        flash("Session Name is required.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    # Prevent duplicate name excluding current session
+    existing = AcademicSession.query.filter(
+        func.lower(AcademicSession.name) == name.lower(),
+        AcademicSession.id != id
+    ).first()
+    if existing:
+        flash(f"Another academic session with the name '{name}' already exists.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    if not start_date_str or not end_date_str:
+        flash("Both Start Date and End Date are required.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    try:
+        start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
+        end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
+    except ValueError:
+        flash("Invalid date format. Please use YYYY-MM-DD.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    if start_date > end_date:
+        flash("Start Date cannot be after End Date.", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    # If marked active, safely deactivate others
+    if is_active:
+        AcademicSession.query.filter(AcademicSession.id != id).update({'is_active': False})
+
+    old_name = session_obj.name
+    session_obj.name = name
+    session_obj.start_date = start_date
+    session_obj.end_date = end_date
+    session_obj.is_active = is_active
+    db.session.commit()
+
+    status_str = "Active" if is_active else "Inactive"
+    AuditLog.log('ACADEMIC_SESSION_UPDATE', f"Updated academic session '{old_name}' -> '{name}' ({status_str})", user_id=current_user.id)
+    flash(f"Academic session '{name}' ({status_str}) updated successfully.", 'success')
+    return redirect(url_for('admin.settings'))
+
+
+@admin_bp.route('/sessions/<int:id>/json', methods=['GET'])
+@login_required
+@role_required('admin')
+def session_json(id):
+    session_obj = AcademicSession.query.get_or_404(id)
+    return jsonify(session_obj.to_dict())
+
+
+# ============================================================================
 # Subjects Management
 # ============================================================================
 @admin_bp.route('/subjects')
@@ -1026,7 +1146,8 @@ def subjects():
     from sqlalchemy.orm import selectinload
     subjects_list = query.options(
         selectinload(Subject.teachers),
-        selectinload(Subject.department)
+        selectinload(Subject.department),
+        selectinload(Subject.academic_session)
     ).order_by(Subject.is_active.desc(), Subject.subject_code.asc()).all()
     departments = Department.query.order_by(Department.name).all()
 
@@ -1059,6 +1180,10 @@ def subject_create():
             return render_template('admin/subjects/form.html', form=form, title='Add New Subject', is_edit=False)
 
         dept_val = form.department_id.data if form.department_id.data != 0 else None
+        from app.models.subject import format_semester_name
+        semester_val = format_semester_name(form.semester.data) if form.semester.data else None
+        if semester_val == 'Not Set':
+            semester_val = None
 
         new_subject = Subject(
             subject_code=code,
@@ -1066,7 +1191,7 @@ def subject_create():
             description=form.description.data.strip() if form.description.data else None,
             department_id=dept_val,
             course=form.course.data.strip() if form.course.data else None,
-            semester=form.semester.data if form.semester.data else None,
+            semester=semester_val,
             is_active=form.is_active.data
         )
         db.session.add(new_subject)
@@ -1097,12 +1222,17 @@ def subject_edit(id):
             flash(f"Another subject with code '{code}' already exists ({existing.subject_name}).", 'danger')
             return render_template('admin/subjects/form.html', form=form, title=f'Edit {subject.subject_code}', is_edit=True, subject=subject)
 
+        from app.models.subject import format_semester_name
+        semester_val = format_semester_name(form.semester.data) if form.semester.data else None
+        if semester_val == 'Not Set':
+            semester_val = None
+
         subject.subject_code = code
         subject.subject_name = name
         subject.description = form.description.data.strip() if form.description.data else None
         subject.department_id = form.department_id.data if form.department_id.data != 0 else None
         subject.course = form.course.data.strip() if form.course.data else None
-        subject.semester = form.semester.data if form.semester.data else None
+        subject.semester = semester_val
         subject.is_active = form.is_active.data
         subject.updated_at = datetime.utcnow()
 
@@ -1113,6 +1243,9 @@ def subject_edit(id):
 
     if request.method == 'GET':
         form.department_id.data = subject.department_id or 0
+        if subject.semester:
+            from app.models.subject import format_semester_name
+            form.semester.data = format_semester_name(subject.semester)
 
     return render_template('admin/subjects/form.html', form=form, title=f'Edit {subject.subject_code}', is_edit=True, subject=subject)
 
@@ -1131,7 +1264,14 @@ def subject_assign_teachers(id):
         subject.teachers = [t for t in all_teachers if t.id in selected_ids]
 
         # Synchronize formal TeacherSubjectAssignment records
-        sem = subject.semester or '4th Semester'
+        from app.models.subject import format_semester_name
+        sem = format_semester_name(subject.semester) if subject.semester else '4th Semester'
+        if sem == 'Not Set':
+            sem = '4th Semester'
+
+        active_sess = AcademicSession.query.filter_by(is_active=True).first()
+        sess_id = active_sess.id if active_sess else None
+
         # Deactivate assignments for teachers no longer selected
         for asgn in TeacherSubjectAssignment.query.filter_by(subject_id=subject.id, is_active=True).all():
             if asgn.teacher_id not in selected_ids:
@@ -1144,8 +1284,18 @@ def subject_assign_teachers(id):
                 subject_id=subject.id,
                 semester=sem
             ).first()
+            if not asgn and subject.semester:
+                asgn = TeacherSubjectAssignment.query.filter_by(
+                    teacher_id=t_id,
+                    subject_id=subject.id,
+                    semester=subject.semester
+                ).first()
+
             if asgn:
                 asgn.is_active = True
+                asgn.semester = sem
+                if sess_id and not asgn.session_id:
+                    asgn.session_id = sess_id
             else:
                 new_asgn = TeacherSubjectAssignment(
                     teacher_id=t_id,
@@ -1153,6 +1303,7 @@ def subject_assign_teachers(id):
                     semester=sem,
                     department_id=subject.department_id,
                     course=subject.course,
+                    session_id=sess_id,
                     is_active=True
                 )
                 db.session.add(new_asgn)
@@ -1301,18 +1452,26 @@ def subject_assignment_create():
     all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
     all_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
     all_departments = Department.query.order_by(Department.name).all()
+    all_sessions = AcademicSession.query.order_by(AcademicSession.is_active.desc(), AcademicSession.name.asc()).all()
 
     form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in all_teachers]
-    form.subject_id.choices = [(s.id, f"{s.subject_code} — {s.subject_name} ({s.semester or 'General'})") for s in all_subjects]
+    form.subject_id.choices = [(s.id, f"{s.subject_code} — {s.subject_name} ({s.primary_semester})") for s in all_subjects]
     form.department_id.choices = [(0, '-- Auto from Subject --')] + [(d.id, f"{d.name} ({d.code})") for d in all_departments]
+    form.session_id.choices = [(0, '-- Current Active Session --')] + [(ses.id, f"{ses.name} ({'Active' if ses.is_active else 'Inactive'})") for ses in all_sessions]
 
     if form.validate_on_submit():
         t_id = form.teacher_id.data
         s_id = form.subject_id.data
-        sem = form.semester.data.strip()
+        from app.models.subject import format_semester_name
+        sem = format_semester_name(form.semester.data.strip())
         sec = form.section.data.strip().upper() if form.section.data else None
         dept_id = form.department_id.data if form.department_id.data != 0 else None
         course = form.course.data.strip() if form.course.data else None
+        session_id = form.session_id.data if (form.session_id.data and form.session_id.data != 0) else None
+
+        if not session_id:
+            active_sess = AcademicSession.query.filter_by(is_active=True).first()
+            session_id = active_sess.id if active_sess else None
 
         # Rule 19: Prevent accidental duplicate active assignment
         existing = TeacherSubjectAssignment.query.filter_by(
@@ -1342,6 +1501,7 @@ def subject_assignment_create():
             department_id=dept_id,
             course=course,
             section=sec,
+            session_id=session_id,
             is_active=form.is_active.data
         )
         db.session.add(new_assignment)
@@ -1372,16 +1532,24 @@ def subject_assignment_edit(id):
     all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
     all_subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
     all_departments = Department.query.order_by(Department.name).all()
+    all_sessions = AcademicSession.query.order_by(AcademicSession.is_active.desc(), AcademicSession.name.asc()).all()
 
     form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in all_teachers]
     form.subject_id.choices = [(s.id, f"{s.subject_code} — {s.subject_name}") for s in all_subjects]
     form.department_id.choices = [(0, '-- Auto from Subject --')] + [(d.id, f"{d.name} ({d.code})") for d in all_departments]
+    form.session_id.choices = [(0, '-- Current Active Session --')] + [(ses.id, f"{ses.name} ({'Active' if ses.is_active else 'Inactive'})") for ses in all_sessions]
 
     if form.validate_on_submit():
         t_id = form.teacher_id.data
         s_id = form.subject_id.data
-        sem = form.semester.data.strip()
+        from app.models.subject import format_semester_name
+        sem = format_semester_name(form.semester.data.strip())
         sec = form.section.data.strip().upper() if form.section.data else None
+        session_id = form.session_id.data if (form.session_id.data and form.session_id.data != 0) else None
+
+        if not session_id:
+            active_sess = AcademicSession.query.filter_by(is_active=True).first()
+            session_id = active_sess.id if active_sess else None
 
         # Check collision with other assignments
         duplicate = TeacherSubjectAssignment.query.filter(
@@ -1397,26 +1565,35 @@ def subject_assignment_edit(id):
             flash(f"Another active assignment already exists for this Teacher, Subject, Semester ({sem}), and Section.", "danger")
             return render_template('admin/subject_assignments/form.html', form=form, title='Edit Subject Assignment', is_edit=True, assignment=assignment)
 
+        old_sub_id = assignment.subject_id
         assignment.teacher_id = t_id
         assignment.subject_id = s_id
         assignment.semester = sem
         assignment.section = sec
         assignment.department_id = form.department_id.data if form.department_id.data != 0 else None
         assignment.course = form.course.data.strip() if form.course.data else None
+        assignment.session_id = session_id
         assignment.is_active = form.is_active.data
         assignment.updated_at = datetime.utcnow()
 
-        # Synchronize secondary association table
-        subject = Subject.query.get(s_id)
-        teacher = Teacher.query.get(t_id)
-        if subject and teacher and teacher not in subject.teachers:
-            subject.teachers.append(teacher)
+        # Synchronize secondary association table cleanly so no old teacher persists
+        for sid in set([old_sub_id, s_id]):
+            sub_record = Subject.query.get(sid)
+            if sub_record:
+                active_t_ids = {
+                    a.teacher_id for a in TeacherSubjectAssignment.query.filter_by(
+                        subject_id=sub_record.id, is_active=True
+                    ).all()
+                }
+                sub_record.teachers = Teacher.query.filter(Teacher.id.in_(active_t_ids)).all() if active_t_ids else []
 
         db.session.commit()
 
+        subject = Subject.query.get(s_id)
+        teacher = Teacher.query.get(t_id)
         AuditLog.log(
             'SUBJECT_ASSIGNMENT_UPDATE',
-            f"Updated assignment ID {id}: {subject.subject_code} to {teacher.full_name} ({sem})",
+            f"Updated assignment ID {id}: {subject.subject_code if subject else s_id} to {teacher.full_name if teacher else t_id} ({sem})",
             user_id=current_user.id
         )
         flash("Subject assignment updated successfully.", "success")
@@ -1424,6 +1601,8 @@ def subject_assignment_edit(id):
 
     if request.method == 'GET':
         form.department_id.data = assignment.department_id or 0
+        form.session_id.data = assignment.session_id or 0
+        form.semester.data = assignment.display_semester
 
     return render_template('admin/subject_assignments/form.html', form=form, title='Edit Subject Assignment', is_edit=True, assignment=assignment)
 
@@ -1434,6 +1613,16 @@ def subject_assignment_toggle_status(id):
     assignment = TeacherSubjectAssignment.query.get_or_404(id)
     assignment.is_active = not assignment.is_active
     assignment.updated_at = datetime.utcnow()
+
+    # Synchronize secondary association table
+    if assignment.subject:
+        active_t_ids = {
+            a.teacher_id for a in TeacherSubjectAssignment.query.filter_by(
+                subject_id=assignment.subject.id, is_active=True
+            ).all()
+        }
+        assignment.subject.teachers = Teacher.query.filter(Teacher.id.in_(active_t_ids)).all() if active_t_ids else []
+
     db.session.commit()
 
     status_str = "activated" if assignment.is_active else "deactivated"
@@ -1453,6 +1642,7 @@ def subject_assignment_delete(id):
     sub_code = assignment.subject.subject_code if assignment.subject else "Subject"
     t_name = assignment.teacher.full_name if assignment.teacher else "Teacher"
     sem = assignment.semester
+    sub_id = assignment.subject_id
 
     # Safe deletion: check if historical attendance records exist
     att_count = Attendance.query.filter_by(
@@ -1464,6 +1654,16 @@ def subject_assignment_delete(id):
         # Soft-delete / deactivate to preserve historical attendance
         assignment.is_active = False
         assignment.updated_at = datetime.utcnow()
+        # Synchronize secondary association table
+        sub_record = Subject.query.get(sub_id)
+        if sub_record:
+            active_t_ids = {
+                a.teacher_id for a in TeacherSubjectAssignment.query.filter_by(
+                    subject_id=sub_record.id, is_active=True
+                ).all()
+            }
+            sub_record.teachers = Teacher.query.filter(Teacher.id.in_(active_t_ids)).all() if active_t_ids else []
+
         db.session.commit()
 
         AuditLog.log(
@@ -1479,6 +1679,18 @@ def subject_assignment_delete(id):
     else:
         db.session.delete(assignment)
         db.session.commit()
+
+        # Synchronize secondary association table
+        sub_record = Subject.query.get(sub_id)
+        if sub_record:
+            active_t_ids = {
+                a.teacher_id for a in TeacherSubjectAssignment.query.filter_by(
+                    subject_id=sub_record.id, is_active=True
+                ).all()
+            }
+            sub_record.teachers = Teacher.query.filter(Teacher.id.in_(active_t_ids)).all() if active_t_ids else []
+            db.session.commit()
+
         AuditLog.log(
             'SUBJECT_ASSIGNMENT_DELETE',
             f"Deleted unused assignment for {sub_code} - {t_name} ({sem})",

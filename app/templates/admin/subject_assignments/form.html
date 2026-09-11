@@ -92,6 +92,20 @@
             </div>
           </div>
 
+          <!-- Academic Session (Optional) -->
+          {% if form.session_id %}
+            <div class="mb-3">
+              <label class="form-label fw-semibold" for="session_id">
+                <i class="bi bi-calendar-event text-primary me-1"></i>Academic Session (Optional)
+              </label>
+              {{ form.session_id(class="form-select" + (" is-invalid" if form.session_id.errors else "")) }}
+              {% if form.session_id.errors %}
+                <div class="invalid-feedback">{{ form.session_id.errors[0] }}</div>
+              {% endif %}
+              <div class="form-text small">Select the academic term for this assignment, or leave as default for the current active session.</div>
+            </div>
+          {% endif %}
+
           <!-- Active status -->
           <div class="mb-4 form-check form-switch p-0 ps-5">
             {{ form.is_active(class="form-check-input ms-n5") }}

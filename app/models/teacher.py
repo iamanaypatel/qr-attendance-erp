@@ -16,6 +16,11 @@ class Teacher(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
 
+    @property
+    def name(self) -> str:
+        """Alias for full_name."""
+        return self.full_name
+
     def is_assigned_to_subject(self, subject_id: int, semester: str = None) -> bool:
         """Check if teacher is actively assigned to the given subject_id (and optionally semester)."""
         if not subject_id:

@@ -26,21 +26,37 @@ class TeacherSubjectAssignment(db.Model):
         db.Index('idx_teacher_subject_sem_sec', 'teacher_id', 'subject_id', 'semester', 'section'),
     )
 
+    @property
+    def display_semester(self):
+        """Returns normalized, formatted semester string, e.g. '4th Semester'."""
+        from app.models.subject import format_semester_name
+        return format_semester_name(self.semester)
+
+    @property
+    def faculty(self):
+        """Alias for teacher."""
+        return self.teacher
+
     def to_dict(self):
         dept_name = self.department.name if self.department else (self.subject.department.name if (self.subject and self.subject.department) else None)
         course_name = self.course or (self.subject.course if self.subject else None)
+        teacher_name = self.teacher.full_name if self.teacher else 'Unknown'
         return {
             'id': self.id,
             'assignment_id': self.id,
             'teacher_id': self.teacher_id,
-            'teacher_name': self.teacher.full_name if self.teacher else 'Unknown',
+            'teacher_name': teacher_name,
+            'faculty_name': teacher_name,
             'employee_id': self.teacher.employee_id if self.teacher else None,
             'subject_id': self.subject_id,
             'subject_code': self.subject.subject_code if self.subject else None,
             'subject_name': self.subject.subject_name if self.subject else None,
             'code': self.subject.subject_code if self.subject else None,
             'name': self.subject.subject_name if self.subject else None,
-            'semester': self.semester,
+            'semester': self.display_semester,
+            'raw_semester': self.semester,
+            'session_id': self.session_id,
+            'session_name': self.academic_session.name if self.academic_session else None,
             'department_id': self.department_id,
             'department': dept_name,
             'department_name': dept_name,

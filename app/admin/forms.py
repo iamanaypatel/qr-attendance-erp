@@ -78,6 +78,10 @@ class SubjectForm(FlaskForm):
     course = StringField('Course / Degree (e.g. B.Tech Computer Science)', validators=[Optional(), Length(max=100)])
     semester = SelectField('Semester', choices=[
         ('', '-- All / Not Specified --'),
+        ('1st Semester', '1st Semester'), ('2nd Semester', '2nd Semester'),
+        ('3rd Semester', '3rd Semester'), ('4th Semester', '4th Semester'),
+        ('5th Semester', '5th Semester'), ('6th Semester', '6th Semester'),
+        ('7th Semester', '7th Semester'), ('8th Semester', '8th Semester'),
         ('1st', '1st Semester'), ('2nd', '2nd Semester'),
         ('3rd', '3rd Semester'), ('4th', '4th Semester'),
         ('5th', '5th Semester'), ('6th', '6th Semester'),
@@ -107,11 +111,16 @@ class TeacherSubjectAssignmentForm(FlaskForm):
         ('5th Semester', '5th Semester'),
         ('6th Semester', '6th Semester'),
         ('7th Semester', '7th Semester'),
-        ('8th Semester', '8th Semester')
+        ('8th Semester', '8th Semester'),
+        ('1st', '1st Semester'), ('2nd', '2nd Semester'),
+        ('3rd', '3rd Semester'), ('4th', '4th Semester'),
+        ('5th', '5th Semester'), ('6th', '6th Semester'),
+        ('7th', '7th Semester'), ('8th', '8th Semester')
     ], validators=[DataRequired(message="Please select a semester.")])
     department_id = SelectField('Department (Optional)', coerce=int, validators=[Optional()])
     course = StringField('Course / Program (e.g. B.Tech)', validators=[Optional(), Length(max=100)])
     section = StringField('Section (e.g. A, B)', validators=[Optional(), Length(max=32)])
+    session_id = SelectField('Academic Session (Optional)', coerce=int, validators=[Optional()])
     is_active = BooleanField('Active Assignment', default=True)
     submit = SubmitField('Save Subject Assignment')
 

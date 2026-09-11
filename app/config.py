@@ -6,7 +6,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / '.env')
 
 def fix_database_url(url: str) -> str:
-    if not url:
+    if not url or url == "sqlite:///qr_attendance.db":
         return f"sqlite:///{BASE_DIR / 'instance' / 'qr_attendance.db'}"
     if url.startswith("postgres://"):
         return url.replace("postgres://", "postgresql://", 1)
