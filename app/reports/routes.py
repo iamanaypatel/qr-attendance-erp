@@ -22,11 +22,25 @@ def build_filtered_query(args):
     subject_id = args.get('subject', type=int)
     teacher_id = args.get('teacher', type=int)
     semester = args.get('semester', '').strip()
+    section = args.get('section', '').strip()
     student_query = args.get('student', '').strip()
     status = args.get('status', '').strip()
     method = args.get('method', '').strip()
+    att_type = args.get('type', '').strip().upper()
 
     filter_desc = []
+
+    if att_type in ('GENERAL', 'SUBJECT'):
+        if att_type == 'GENERAL':
+            query = query.filter(
+                (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+            )
+            filter_desc.append("Type: General Attendance")
+        else:
+            query = query.filter(
+                (Attendance.attendance_type == 'SUBJECT') & (Attendance.subject_id.isnot(None))
+            )
+            filter_desc.append("Type: Subject Attendance")
 
     if from_date_str:
         try:
@@ -71,6 +85,10 @@ def build_filtered_query(args):
             (Student.semester == semester)
         )
         filter_desc.append(f"Sem: {semester}")
+
+    if section:
+        query = query.filter(Student.section.ilike(f"%{section}%"))
+        filter_desc.append(f"Section: {section}")
 
     if student_query:
         query = query.filter(

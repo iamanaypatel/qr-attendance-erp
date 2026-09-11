@@ -120,11 +120,12 @@ def _auto_bootstrap_database(app):
             from app.models.session import AcademicSession
             from app.models.subject import Subject, teacher_subjects
             from app.models.subject_assignment import TeacherSubjectAssignment
+            from app.models.class_coordinator import ClassCoordinator
             from sqlalchemy import inspect, text
 
             db.create_all()
 
-            # Ensure attendances table has subject_id, teacher_id, semester, section columns
+            # Ensure attendances table has subject_id, teacher_id, semester, section, attendance_type columns
             # AND enforce composite uniqueness on (student_id, date, subject_id)
             try:
                 inspector = inspect(db.engine)
@@ -151,6 +152,19 @@ def _auto_bootstrap_database(app):
                     if 'section' not in cols:
                         try:
                             db.session.execute(text("ALTER TABLE attendances ADD COLUMN section VARCHAR(32)"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+                    if 'attendance_type' not in cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN attendance_type VARCHAR(20) DEFAULT 'SUBJECT' NOT NULL"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+                        # Backfill legacy attendance records safely
+                        try:
+                            db.session.execute(text("UPDATE attendances SET attendance_type = 'GENERAL' WHERE subject_id IS NULL"))
+                            db.session.execute(text("UPDATE attendances SET attendance_type = 'SUBJECT' WHERE subject_id IS NOT NULL"))
                             db.session.commit()
                         except Exception as e:
                             db.session.rollback()

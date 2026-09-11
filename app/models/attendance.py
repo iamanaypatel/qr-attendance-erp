@@ -14,6 +14,7 @@ class Attendance(db.Model):
     time_in = db.Column(db.Time, nullable=True)
     time_out = db.Column(db.Time, nullable=True)
     status = db.Column(db.String(20), default='Present', nullable=False) # 'Present', 'Absent', 'Late', 'Half Day'
+    attendance_type = db.Column(db.String(20), default='SUBJECT', nullable=False, index=True) # 'GENERAL' or 'SUBJECT'
     marked_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     method = db.Column(db.String(20), default='QR', nullable=False) # 'QR', 'Manual', 'Admin'
     remarks = db.Column(db.String(255), nullable=True)
@@ -25,10 +26,14 @@ class Attendance(db.Model):
     subject = db.relationship('Subject', foreign_keys=[subject_id], backref=db.backref('attendances', lazy='dynamic'))
     teacher = db.relationship('Teacher', foreign_keys=[teacher_id], backref=db.backref('attendances_marked', lazy='dynamic'))
 
-    # Enforce database-level uniqueness: one record per student per subject per date
+    # Enforce database-level uniqueness & query performance:
+    # 1. Subject attendance uniqueness per (student_id, date, subject_id)
+    # 2. General attendance index per (student_id, date, attendance_type)
     __table_args__ = (
         db.UniqueConstraint('student_id', 'date', 'subject_id', name='uq_student_date_subject_attendance'),
         db.Index('idx_attendance_date_student_subject', 'date', 'student_id', 'subject_id'),
+        db.Index('idx_attendance_general_unique', 'student_id', 'date', 'attendance_type'),
+        db.Index('idx_attendance_type_date', 'attendance_type', 'date'),
     )
 
     def to_dict(self):
@@ -55,6 +60,7 @@ class Attendance(db.Model):
 
         return {
             'id': self.id,
+            'attendance_type': self.attendance_type or ('SUBJECT' if self.subject_id else 'GENERAL'),
             'student_id': s_id,
             'student_name': s_name,
             'full_name': s_name,

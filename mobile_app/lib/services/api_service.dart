@@ -223,14 +223,24 @@ class ApiService {
     await prefs.remove('saved_accounts');
   }
 
-  Future<Map<String, dynamic>> scanAttendance(String token, {int? subjectId, String? semester}) async {
+  Future<Map<String, dynamic>> scanAttendance(
+    String token, {
+    int? subjectId,
+    String? semester,
+    String attendanceType = 'SUBJECT',
+  }) async {
     final endpoint = '$_baseUrl/api/attendance/scan';
-    final bodyMap = <String, dynamic>{'token': token.trim()};
-    if (subjectId != null) {
-      bodyMap['subject_id'] = subjectId;
-    }
-    if (semester != null && semester.isNotEmpty) {
-      bodyMap['semester'] = semester;
+    final bodyMap = <String, dynamic>{
+      'token': token.trim(),
+      'attendance_type': attendanceType,
+    };
+    if (attendanceType == 'SUBJECT') {
+      if (subjectId != null) {
+        bodyMap['subject_id'] = subjectId;
+      }
+      if (semester != null && semester.isNotEmpty) {
+        bodyMap['semester'] = semester;
+      }
     }
 
     try {
@@ -362,6 +372,23 @@ class ApiService {
     } catch (e) {
       debugPrint("getTeacherSubjects error: $e");
       return [];
+    }
+  }
+
+  Future<Map<String, dynamic>> getTeacherSubjectsData() async {
+    try {
+      final response = await http
+          .get(Uri.parse('$_baseUrl/api/teacher/subjects'), headers: _headers())
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return Map<String, dynamic>.from(data);
+      }
+      return {'success': false, 'subjects': [], 'coordinator_assignments': []};
+    } catch (e) {
+      debugPrint("getTeacherSubjectsData error: $e");
+      return {'success': false, 'subjects': [], 'coordinator_assignments': []};
     }
   }
 

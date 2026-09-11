@@ -18,12 +18,20 @@ from app.attendance.services import process_qr_attendance
 @role_required('admin', 'teacher')
 def scanner():
     today = get_current_ist_date()
+    attendance_type = request.args.get('type', '').strip().upper()
     selected_subject_id = request.args.get('subject_id', type=int)
     selected_semester = request.args.get('semester', '').strip()
     selected_assignment_id = request.args.get('assignment_id', type=int)
 
     from app.models.subject import Subject
     from app.models.subject_assignment import TeacherSubjectAssignment
+    from app.models.class_coordinator import ClassCoordinator
+
+    coordinator_assignments = []
+    if current_user.is_teacher and current_user.teacher_profile:
+        coordinator_assignments = current_user.teacher_profile.get_active_coordinator_assignments()
+    elif current_user.is_admin:
+        coordinator_assignments = ClassCoordinator.query.filter_by(is_active=True).all()
 
     assignments_data = []
     selected_assignment = None
@@ -50,12 +58,10 @@ def scanner():
             assignments_data.append(item)
 
         if assignment_count == 1:
-            # Rule 1: Auto-select the only assigned subject
             selected_assignment = assignments_data[0]
             selected_subject_id = selected_assignment['subject_id']
             selected_semester = selected_assignment['semester']
         elif assignment_count > 1:
-            # Rule 2: Select requested or default
             if selected_assignment_id:
                 found = next((a for a in assignments_data if a['id'] == selected_assignment_id), None)
                 if found:
@@ -109,17 +115,36 @@ def scanner():
             selected_subject_id = selected_assignment['subject_id']
             selected_semester = selected_assignment['semester']
 
+    # Auto-resolve attendance_type if not explicitly passed
+    if not attendance_type:
+        if not assignments_data and coordinator_assignments:
+            attendance_type = 'GENERAL'
+        else:
+            attendance_type = 'SUBJECT'
+
+    selected_coordinator = coordinator_assignments[0] if coordinator_assignments else None
+
     recent_query = Attendance.query.filter_by(date=today)
-    if selected_subject_id:
-        recent_query = recent_query.filter_by(subject_id=selected_subject_id)
-        if selected_semester:
-            recent_query = recent_query.filter(Attendance.semester.ilike(selected_semester))
+    if attendance_type == 'GENERAL':
+        recent_query = recent_query.filter(
+            (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+        )
+        if current_user.is_teacher and current_user.teacher_profile:
+            recent_query = recent_query.filter_by(teacher_id=current_user.teacher_profile.id)
+    else:
+        if selected_subject_id:
+            recent_query = recent_query.filter_by(subject_id=selected_subject_id)
+            if selected_semester:
+                recent_query = recent_query.filter(Attendance.semester.ilike(selected_semester))
     recent_scans = recent_query.order_by(Attendance.updated_at.desc()).limit(10).all()
 
     return render_template(
         'attendance/scanner.html',
         recent_scans=recent_scans,
         today=today,
+        attendance_type=attendance_type,
+        coordinator_assignments=coordinator_assignments,
+        selected_coordinator=selected_coordinator,
         assignments=assignments_data,
         assignment_count=len(assignments_data) if (current_user.is_teacher and current_user.teacher_profile) else len(assignments_data),
         selected_assignment=selected_assignment,
@@ -198,14 +223,18 @@ def manual():
             except ValueError:
                 pass
 
-        # Check existing record for that student + date + subject + semester
+        attendance_type = request.form.get('attendance_type', '').strip().upper()
+        if not attendance_type:
+            attendance_type = 'SUBJECT' if subject_id else 'GENERAL'
+
+        # Check existing record for that student + date + context
         query = Attendance.query.filter(Attendance.student_id == student.id, Attendance.date == att_date)
-        if subject_id:
+        if attendance_type == 'GENERAL' or not subject_id:
+            query = query.filter((Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None)))
+        else:
             query = query.filter(Attendance.subject_id == subject_id)
             if semester:
                 query = query.filter(Attendance.semester == semester)
-        else:
-            query = query.filter(Attendance.subject_id.is_(None))
         record = query.first()
 
         method_name = 'Admin' if current_user.is_admin else 'Manual'
@@ -213,6 +242,7 @@ def manual():
 
         if record:
             record.status = status
+            record.attendance_type = attendance_type
             record.time_in = time_in
             record.time_out = time_out
             record.remarks = remarks
@@ -228,13 +258,14 @@ def manual():
         else:
             record = Attendance(
                 student_id=student.id,
-                subject_id=subject_id,
+                subject_id=subject_id if attendance_type == 'SUBJECT' else None,
                 teacher_id=teacher_id,
                 semester=semester,
                 date=att_date,
                 time_in=time_in or datetime.now().time(),
                 time_out=time_out,
                 status=status,
+                attendance_type=attendance_type,
                 remarks=remarks,
                 marked_by=current_user.id,
                 method=method_name

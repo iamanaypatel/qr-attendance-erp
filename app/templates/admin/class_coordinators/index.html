@@ -1,0 +1,212 @@
+{% extends "base.html" %}
+
+{% block title %}Class Coordinator Management — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <h2 class="fw-bold brand-font mb-1">Class Coordinator Management</h2>
+      <p class="text-muted mb-0">Assign faculty members as Class Coordinators for authorized daily General Attendance taking per class context.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <a href="{{ url_for('admin.class_coordinator_assign') }}" class="btn btn-primary-glow">
+        <i class="bi bi-person-badge-fill me-1"></i> Assign Coordinator
+      </a>
+      <a href="{{ url_for('admin.subject_assignments') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-journal-bookmark me-1"></i> Subject Assignments
+      </a>
+    </div>
+  </div>
+
+  <!-- Search & Filter Bar -->
+  <div class="glass-card p-3 mb-4">
+    <form method="GET" action="{{ url_for('admin.class_coordinators') }}" class="row g-2 align-items-center">
+      <div class="col-md-3">
+        <div class="input-group">
+          <span class="input-group-text bg-transparent border-end-0 text-muted">
+            <i class="bi bi-search"></i>
+          </span>
+          <input type="text" name="q" value="{{ search }}" class="form-control border-start-0 ps-0" placeholder="Search teacher, class, semester...">
+        </div>
+      </div>
+      <div class="col-md-3">
+        <select name="teacher_id" class="form-select">
+          <option value="">All Faculty Members</option>
+          {% for t in teachers %}
+            <option value="{{ t.id }}" {% if selected_teacher_id == t.id %}selected{% endif %}>{{ t.full_name }} ({{ t.employee_id }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="department_id" class="form-select">
+          <option value="">All Departments</option>
+          {% for d in departments %}
+            <option value="{{ d.id }}" {% if selected_department_id == d.id %}selected{% endif %}>{{ d.name }} ({{ d.code }})</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-2">
+        <select name="semester" class="form-select">
+          <option value="">All Semesters</option>
+          {% for sem in ['1st Semester', '2nd Semester', '3rd Semester', '4th Semester', '5th Semester', '6th Semester', '7th Semester', '8th Semester'] %}
+            <option value="{{ sem }}" {% if selected_semester == sem %}selected{% endif %}>{{ sem }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="col-md-1">
+        <select name="status" class="form-select">
+          <option value="">Status</option>
+          <option value="active" {% if selected_status == 'active' %}selected{% endif %}>Active</option>
+          <option value="inactive" {% if selected_status == 'inactive' %}selected{% endif %}>Inactive</option>
+        </select>
+      </div>
+      <div class="col-md-1 d-flex gap-1">
+        <button type="submit" class="btn btn-primary w-100" title="Apply Filter">
+          <i class="bi bi-funnel-fill"></i>
+        </button>
+        {% if search or selected_teacher_id or selected_department_id or selected_semester or selected_section or selected_status %}
+          <a href="{{ url_for('admin.class_coordinators') }}" class="btn btn-outline-secondary" title="Clear Filters">
+            <i class="bi bi-x-lg"></i>
+          </a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Assignments Table -->
+  <div class="glass-card overflow-hidden">
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0">
+        <thead class="table-light">
+          <tr>
+            <th class="ps-4">Class Context</th>
+            <th>Class Coordinator</th>
+            <th>Department & Session</th>
+            <th class="text-center">General Records</th>
+            <th class="text-center">Status</th>
+            <th class="text-end pe-4">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% if assignments %}
+            {% for item in assignments %}
+              {% set a = item.assignment %}
+              <tr>
+                <td class="ps-4">
+                  <div class="d-flex align-items-center">
+                    <div class="avatar-circle me-3 bg-primary-subtle text-primary fw-bold" style="width: 40px; height: 40px; border-radius: 8px; display: flex; align-items: center; justify-content: center;">
+                      <i class="bi bi-mortarboard-fill"></i>
+                    </div>
+                    <div>
+                      <span class="fw-bold text-dark d-block">{{ a.class_label }}</span>
+                      <small class="text-muted">{{ a.semester }}{% if a.section %} — Section {{ a.section }}{% endif %}</small>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div class="d-flex align-items-center">
+                    {% if a.teacher.photo %}
+                      <img src="{{ url_for('static', filename='uploads/photos/' + a.teacher.photo) }}" class="rounded-circle me-2" width="36" height="36" style="object-fit: cover;">
+                    {% else %}
+                      <div class="avatar-circle me-2 bg-secondary-subtle text-secondary fw-bold" style="width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px;">
+                        {{ a.teacher.full_name[:2].upper() if a.teacher else 'FC' }}
+                      </div>
+                    {% endif %}
+                    <div>
+                      <span class="fw-semibold text-dark d-block">{{ a.teacher.full_name if a.teacher else 'Unknown' }}</span>
+                      <small class="text-muted">{{ a.teacher.employee_id if a.teacher else '' }} • {{ a.teacher.designation or 'Faculty' }}</small>
+                    </div>
+                  </div>
+                </td>
+                <td>
+                  <div>
+                    <span class="badge bg-light text-dark border me-1">{{ a.department.code if a.department else 'General' }}</span>
+                    {% if a.academic_session %}
+                      <small class="text-muted d-block mt-1">{{ a.academic_session.name }}</small>
+                    {% endif %}
+                  </div>
+                </td>
+                <td class="text-center">
+                  <span class="badge bg-info-subtle text-info fw-semibold px-2 py-1">
+                    <i class="bi bi-qr-code-scan me-1"></i>{{ item.attendance_count }}
+                  </span>
+                </td>
+                <td class="text-center">
+                  <form method="POST" action="{{ url_for('admin.class_coordinator_toggle_status', id=a.id) }}" class="d-inline">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                    <button type="submit" class="btn btn-sm p-0 border-0 bg-transparent" title="Click to toggle status">
+                      {% if a.is_active %}
+                        <span class="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                          <i class="bi bi-check-circle-fill me-1"></i>Active Coordinator
+                        </span>
+                      {% else %}
+                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle px-2 py-1">
+                          <i class="bi bi-pause-circle-fill me-1"></i>Inactive
+                        </span>
+                      {% endif %}
+                    </button>
+                  </form>
+                </td>
+                <td class="text-end pe-4">
+                  <div class="btn-group btn-group-sm">
+                    <a href="{{ url_for('admin.class_coordinator_edit', id=a.id) }}" class="btn btn-outline-primary" title="Edit / Reassign">
+                      <i class="bi bi-pencil-fill"></i>
+                    </a>
+                    <button type="button" class="btn btn-outline-danger" data-bs-toggle="modal" data-bs-target="#deleteModal{{ a.id }}" title="Remove Coordinator">
+                      <i class="bi bi-trash3-fill"></i>
+                    </button>
+                  </div>
+
+                  <!-- Delete Confirmation Modal -->
+                  <div class="modal fade" id="deleteModal{{ a.id }}" tabindex="-1" aria-hidden="true">
+                    <div class="modal-dialog modal-dialog-centered">
+                      <div class="modal-content">
+                        <div class="modal-header border-0 pb-0">
+                          <h5 class="modal-title fw-bold text-danger">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>Remove Class Coordinator
+                          </h5>
+                          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body text-start py-3">
+                          <p class="mb-2">Are you sure you want to remove <strong>{{ a.teacher.full_name if a.teacher else 'Teacher' }}</strong> as Coordinator for <strong>{{ a.class_label }}</strong>?</p>
+                          {% if item.attendance_count > 0 %}
+                            <div class="alert alert-warning mb-0 small">
+                              <i class="bi bi-info-circle me-1"></i>
+                              This coordinator has <strong>{{ item.attendance_count }}</strong> historical general attendance records. Removing will deactivate the assignment to preserve student academic records.
+                            </div>
+                          {% else %}
+                            <p class="text-muted small mb-0">No attendance records exist for this assignment. It will be permanently removed.</p>
+                          {% endif %}
+                        </div>
+                        <div class="modal-footer border-0 pt-0">
+                          <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
+                          <form method="POST" action="{{ url_for('admin.class_coordinator_delete', id=a.id) }}" class="d-inline">
+                            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                            <button type="submit" class="btn btn-danger btn-sm">Confirm Remove</button>
+                          </form>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          {% else %}
+            <tr>
+              <td colspan="6" class="text-center py-5 text-muted">
+                <i class="bi bi-people display-4 d-block mb-2 text-muted opacity-50"></i>
+                <h5 class="fw-semibold">No Class Coordinator Assignments Found</h5>
+                <p class="small mb-3">Assign faculty members to their respective classes to enable one-touch daily General Attendance.</p>
+                <a href="{{ url_for('admin.class_coordinator_assign') }}" class="btn btn-primary-glow btn-sm">
+                  <i class="bi bi-person-badge-fill me-1"></i> Assign First Coordinator
+                </a>
+              </td>
+            </tr>
+          {% endif %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+{% endblock %}

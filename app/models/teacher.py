@@ -73,6 +73,66 @@ class Teacher(db.Model):
                 assignments = self.subject_assignments.filter_by(is_active=True).all()
         return assignments
 
+    def get_active_coordinator_assignments(self):
+        """Returns list of active ClassCoordinator assignments for this teacher."""
+        if hasattr(self, 'coordinator_assignments'):
+            return self.coordinator_assignments.filter_by(is_active=True).all()
+        from app.models.class_coordinator import ClassCoordinator
+        return ClassCoordinator.query.filter_by(teacher_id=self.id, is_active=True).all()
+
+    @property
+    def is_class_coordinator(self) -> bool:
+        """True if teacher has at least one active ClassCoordinator assignment."""
+        return len(self.get_active_coordinator_assignments()) > 0
+
+    def is_coordinator_for_student(self, student) -> bool:
+        """
+        Verify whether this teacher is an active Class Coordinator for the given student's class.
+        Matches department, semester, section, and course with flexible digit & string comparison.
+        """
+        if not student:
+            return False
+
+        assignments = self.get_active_coordinator_assignments()
+        if not assignments:
+            return False
+
+        import re
+        stu_sem = (student.semester or '').strip().lower()
+        stu_sem_digits = re.findall(r'\d+', stu_sem)
+        stu_sec = (student.section or '').strip().lower()
+        stu_course = (student.course or '').strip().lower()
+
+        for asgn in assignments:
+            # 1. Department check (if specified in assignment)
+            if asgn.department_id and student.department_id and asgn.department_id != student.department_id:
+                continue
+
+            # 2. Semester check
+            asgn_sem = (asgn.semester or '').strip().lower()
+            if asgn_sem:
+                asgn_digits = re.findall(r'\d+', asgn_sem)
+                if asgn_sem != stu_sem and asgn_sem not in stu_sem and stu_sem not in asgn_sem:
+                    if not (stu_sem_digits and asgn_digits and stu_sem_digits == asgn_digits):
+                        continue
+
+            # 3. Section check (if specified in assignment)
+            if asgn.section and asgn.section.strip():
+                asgn_sec = asgn.section.strip().lower()
+                if stu_sec and asgn_sec != stu_sec:
+                    continue
+
+            # 4. Course check (if specified in assignment)
+            if asgn.course and asgn.course.strip():
+                asgn_crs = asgn.course.strip().lower()
+                if stu_course and (asgn_crs != stu_course and asgn_crs not in stu_course and stu_course not in asgn_crs):
+                    continue
+
+            # All specified filters matched
+            return True
+
+        return False
+
     def to_dict(self):
         return {
             'id': self.id,

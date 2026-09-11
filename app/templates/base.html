@@ -104,6 +104,12 @@
               </a>
             </li>
             <li>
+              <a href="{{ url_for('admin.class_coordinators') }}" class="sidebar-link {% if 'class_coordinator' in request.endpoint %}active{% endif %}">
+                <i class="bi bi-person-workspace"></i>
+                <span>Class Coordinators</span>
+              </a>
+            </li>
+            <li>
               <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if request.endpoint == 'attendance.scanner' %}active{% endif %}">
                 <i class="bi bi-qr-code-scan"></i>
                 <span>Take Attendance</span>

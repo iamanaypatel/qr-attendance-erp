@@ -5,7 +5,7 @@ from werkzeug.utils import secure_filename
 from flask import render_template, redirect, url_for, flash, request, send_file, current_app
 from flask_login import login_required, current_user
 from app.admin import admin_bp
-from app.admin.forms import StudentForm, TeacherForm, DepartmentForm, HolidayForm, AcademicSessionForm, SystemSettingsForm, SubjectForm, SubjectAssignTeachersForm, TeacherSubjectAssignmentForm
+from app.admin.forms import StudentForm, TeacherForm, DepartmentForm, HolidayForm, AcademicSessionForm, SystemSettingsForm, SubjectForm, SubjectAssignTeachersForm, TeacherSubjectAssignmentForm, ClassCoordinatorForm
 from sqlalchemy import func
 from app.extensions import db
 from app.models.user import User
@@ -19,6 +19,7 @@ from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
 from app.models.subject import Subject, teacher_subjects
 from app.models.subject_assignment import TeacherSubjectAssignment
+from app.models.class_coordinator import ClassCoordinator
 from app.utils.decorators import role_required
 from app.utils.qr_generator import generate_qr_bytes, generate_qr_data_uri
 from app.utils.id_card import generate_student_id_card_pdf
@@ -1455,4 +1456,259 @@ def subject_assignment_delete(id):
         flash(f"Assignment for '{sub_code}' ({t_name}, {sem}) has been permanently deleted.", "success")
 
     return redirect(url_for('admin.subject_assignments'))
+
+
+# ============================================================================
+# Class Coordinator Management Routes
+# ============================================================================
+@admin_bp.route('/class-coordinators', methods=['GET'])
+@login_required
+@role_required('admin')
+def class_coordinators():
+    search = request.args.get('q', '').strip()
+    teacher_id = request.args.get('teacher_id', type=int)
+    department_id = request.args.get('department_id', type=int)
+    semester = request.args.get('semester', '').strip()
+    section = request.args.get('section', '').strip()
+    status = request.args.get('status', '').strip()
+
+    query = ClassCoordinator.query.join(Teacher)
+
+    if search:
+        query = query.filter(
+            (Teacher.full_name.ilike(f"%{search}%")) |
+            (Teacher.employee_id.ilike(f"%{search}%")) |
+            (ClassCoordinator.course.ilike(f"%{search}%")) |
+            (ClassCoordinator.semester.ilike(f"%{search}%")) |
+            (ClassCoordinator.section.ilike(f"%{search}%"))
+        )
+    if teacher_id:
+        query = query.filter(ClassCoordinator.teacher_id == teacher_id)
+    if department_id:
+        query = query.filter(ClassCoordinator.department_id == department_id)
+    if semester:
+        query = query.filter(ClassCoordinator.semester == semester)
+    if section:
+        query = query.filter(ClassCoordinator.section.ilike(f"%{section}%"))
+    if status == 'active':
+        query = query.filter(ClassCoordinator.is_active == True)
+    elif status == 'inactive':
+        query = query.filter(ClassCoordinator.is_active == False)
+
+    assignments = query.order_by(ClassCoordinator.department_id.asc(), ClassCoordinator.semester.asc(), ClassCoordinator.section.asc()).all()
+
+    all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    all_departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+
+    enriched = []
+    for a in assignments:
+        count = Attendance.query.filter_by(
+            teacher_id=a.teacher_id,
+            attendance_type='GENERAL'
+        ).count()
+        enriched.append({
+            'assignment': a,
+            'attendance_count': count
+        })
+
+    return render_template(
+        'admin/class_coordinators/index.html',
+        assignments=enriched,
+        teachers=all_teachers,
+        departments=all_departments,
+        search=search,
+        selected_teacher_id=teacher_id,
+        selected_department_id=department_id,
+        selected_semester=semester,
+        selected_section=section,
+        selected_status=status
+    )
+
+
+@admin_bp.route('/class-coordinators/assign', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def class_coordinator_assign():
+    form = ClassCoordinatorForm()
+
+    teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in teachers]
+
+    departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+    form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
+
+    sessions = AcademicSession.query.order_by(AcademicSession.is_current.desc(), AcademicSession.name.asc()).all()
+    form.session_id.choices = [(0, '-- None / All Sessions --')] + [(s.id, f"{s.name}{' (Current)' if s.is_current else ''}") for s in sessions]
+
+    if form.validate_on_submit():
+        dept_id = form.department_id.data if form.department_id.data != 0 else None
+        sess_id = form.session_id.data if form.session_id.data != 0 else None
+        course = form.course.data.strip() if form.course.data else None
+        section = form.section.data.strip().upper() if form.section.data else None
+        semester = form.semester.data.strip()
+        is_active = form.is_active.data
+
+        asgn = ClassCoordinator.assign_coordinator(
+            teacher_id=form.teacher_id.data,
+            semester=semester,
+            department_id=dept_id,
+            course=course,
+            section=section,
+            session_id=sess_id,
+            is_active=is_active
+        )
+
+        t = Teacher.query.get(form.teacher_id.data)
+        AuditLog.log(
+            'CLASS_COORDINATOR_ASSIGN',
+            f"Assigned {t.full_name if t else 'Teacher'} as Class Coordinator for {asgn.class_label}",
+            user_id=current_user.id
+        )
+        flash(f"Class Coordinator assigned successfully: {t.full_name if t else ''} for {asgn.class_label}.", "success")
+        return redirect(url_for('admin.class_coordinators'))
+
+    return render_template(
+        'admin/class_coordinators/form.html',
+        form=form,
+        title="Assign Class Coordinator"
+    )
+
+
+@admin_bp.route('/class-coordinators/<int:id>/edit', methods=['GET', 'POST'])
+@login_required
+@role_required('admin')
+def class_coordinator_edit(id):
+    coord = ClassCoordinator.query.get_or_404(id)
+    form = ClassCoordinatorForm(obj=coord)
+
+    teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in teachers]
+
+    departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+    form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
+
+    sessions = AcademicSession.query.order_by(AcademicSession.is_current.desc(), AcademicSession.name.asc()).all()
+    form.session_id.choices = [(0, '-- None / All Sessions --')] + [(s.id, f"{s.name}{' (Current)' if s.is_current else ''}") for s in sessions]
+
+    if request.method == 'GET':
+        form.department_id.data = coord.department_id or 0
+        form.session_id.data = coord.session_id or 0
+
+    if form.validate_on_submit():
+        dept_id = form.department_id.data if form.department_id.data != 0 else None
+        sess_id = form.session_id.data if form.session_id.data != 0 else None
+        course = form.course.data.strip() if form.course.data else None
+        section = form.section.data.strip().upper() if form.section.data else None
+        semester = form.semester.data.strip()
+        is_active = form.is_active.data
+
+        if is_active:
+            conflicts = ClassCoordinator.query.filter(
+                ClassCoordinator.id != coord.id,
+                ClassCoordinator.is_active == True,
+                ClassCoordinator.semester == semester,
+                ClassCoordinator.section == section,
+                ClassCoordinator.department_id == dept_id,
+                ClassCoordinator.course == course
+            ).all()
+            for c in conflicts:
+                c.is_active = False
+
+        coord.teacher_id = form.teacher_id.data
+        coord.department_id = dept_id
+        coord.course = course
+        coord.semester = semester
+        coord.section = section
+        coord.session_id = sess_id
+        coord.is_active = is_active
+        coord.updated_at = datetime.utcnow()
+        db.session.commit()
+
+        AuditLog.log(
+            'CLASS_COORDINATOR_EDIT',
+            f"Updated Class Coordinator assignment ID {coord.id} ({coord.class_label})",
+            user_id=current_user.id
+        )
+        flash(f"Class Coordinator assignment for {coord.class_label} updated successfully.", "success")
+        return redirect(url_for('admin.class_coordinators'))
+
+    return render_template(
+        'admin/class_coordinators/form.html',
+        form=form,
+        title=f"Edit Class Coordinator — {coord.class_label}",
+        coord=coord
+    )
+
+
+@admin_bp.route('/class-coordinators/<int:id>/toggle-status', methods=['POST'])
+@login_required
+@role_required('admin')
+def class_coordinator_toggle_status(id):
+    coord = ClassCoordinator.query.get_or_404(id)
+    if not coord.is_active:
+        conflicts = ClassCoordinator.query.filter(
+            ClassCoordinator.id != coord.id,
+            ClassCoordinator.is_active == True,
+            ClassCoordinator.semester == coord.semester,
+            ClassCoordinator.section == coord.section,
+            ClassCoordinator.department_id == coord.department_id,
+            ClassCoordinator.course == coord.course
+        ).all()
+        for c in conflicts:
+            c.is_active = False
+        coord.is_active = True
+    else:
+        coord.is_active = False
+
+    coord.updated_at = datetime.utcnow()
+    db.session.commit()
+
+    status_str = "activated" if coord.is_active else "deactivated"
+    AuditLog.log(
+        'CLASS_COORDINATOR_STATUS',
+        f"Class Coordinator {coord.class_label} for {coord.teacher.full_name if coord.teacher else 'Teacher'} {status_str}",
+        user_id=current_user.id
+    )
+    flash(f"Class Coordinator assignment for {coord.class_label} has been {status_str}.", "info")
+    return redirect(url_for('admin.class_coordinators'))
+
+
+@admin_bp.route('/class-coordinators/<int:id>/delete', methods=['POST'])
+@login_required
+@role_required('admin')
+def class_coordinator_delete(id):
+    coord = ClassCoordinator.query.get_or_404(id)
+    label = coord.class_label
+    t_name = coord.teacher.full_name if coord.teacher else "Teacher"
+
+    att_count = Attendance.query.filter_by(
+        teacher_id=coord.teacher_id,
+        attendance_type='GENERAL'
+    ).count()
+
+    if att_count > 0:
+        coord.is_active = False
+        coord.updated_at = datetime.utcnow()
+        db.session.commit()
+        AuditLog.log(
+            'CLASS_COORDINATOR_SOFT_DELETE',
+            f"Deactivated coordinator for {label} - {t_name} ({att_count} general attendance records preserved)",
+            user_id=current_user.id
+        )
+        flash(
+            f"Class Coordinator '{t_name}' ({label}) has {att_count} historical general attendance records. "
+            f"To preserve student attendance history, the assignment has been deactivated instead of deleted.",
+            "warning"
+        )
+    else:
+        db.session.delete(coord)
+        db.session.commit()
+        AuditLog.log(
+            'CLASS_COORDINATOR_DELETE',
+            f"Deleted unused coordinator assignment for {label} - {t_name}",
+            user_id=current_user.id
+        )
+        flash(f"Class Coordinator assignment for '{label}' has been permanently deleted.", "success")
+
+    return redirect(url_for('admin.class_coordinators'))
 

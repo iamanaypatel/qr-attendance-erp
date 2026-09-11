@@ -25,6 +25,8 @@ class _ScannerScreenState extends State<ScannerScreen> {
   final List<Map<String, dynamic>> _sessionScans = [];
 
   List<Map<String, dynamic>> _subjects = [];
+  List<Map<String, dynamic>> _coordinatorAssignments = [];
+  String _attendanceMode = 'SUBJECT'; // 'GENERAL' vs 'SUBJECT'
   int? _selectedSubjectId;
   String? _selectedSemester;
   String? _selectedTeacherName;
@@ -48,8 +50,13 @@ class _ScannerScreenState extends State<ScannerScreen> {
   Future<void> _fetchSubjects() async {
     final user = ApiService().currentUser;
     List<dynamic> list = [];
+    List<Map<String, dynamic>> coords = [];
+
     if (user != null && user['role'] == 'teacher') {
-      list = await ApiService().getTeacherSubjects();
+      final res = await ApiService().getTeacherSubjectsData();
+      list = res['subjects'] as List<dynamic>? ?? [];
+      final rawCoords = res['coordinator_assignments'] as List<dynamic>? ?? [];
+      coords = rawCoords.map((e) => Map<String, dynamic>.from(e)).toList();
     } else {
       list = await ApiService().getSubjects();
     }
@@ -57,7 +64,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
     if (mounted) {
       setState(() {
         _subjects = list.map((e) => Map<String, dynamic>.from(e)).toList();
+        _coordinatorAssignments = coords;
         _loadingSubjects = false;
+
+        // If teacher is assigned as coordinator and has no subjects, default to GENERAL
+        if (_subjects.isEmpty && _coordinatorAssignments.isNotEmpty) {
+          _attendanceMode = 'GENERAL';
+        } else {
+          _attendanceMode = 'SUBJECT';
+        }
+
         if (_subjects.isNotEmpty) {
           _selectSubjectAtIndex(0);
         }
@@ -88,6 +104,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     _selectedSection = item['section']?.toString();
     _selectedSubjectLabel = "${_selectedSubjectCode ?? ''} - ${_selectedSubjectName ?? ''}";
 
+    // When selecting a subject, ensure SUBJECT mode is active
+    _attendanceMode = 'SUBJECT';
+
     // Clear previous scan session token cache so switching subjects allows immediate scanning
     _lastScannedToken = null;
     _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
@@ -112,8 +131,11 @@ class _ScannerScreenState extends State<ScannerScreen> {
     if (rawValue == null || rawValue.isEmpty) return;
 
     final now = DateTime.now();
-    // Scope debounce key strictly by subject so switching subjects allows immediate scanning of the same student
-    final scanKey = "${_selectedSubjectId ?? 'gen'}_$rawValue";
+    // Scope debounce key strictly by mode + subject so switching modes or subjects allows immediate scanning of the same student
+    final scanKey = _attendanceMode == 'GENERAL'
+        ? "GENERAL_$rawValue"
+        : "${_selectedSubjectId ?? 'sub'}_$rawValue";
+
     if (scanKey == _lastScannedToken &&
         now.difference(_lastScannedTime).inMilliseconds < 2000) {
       return;
@@ -266,12 +288,15 @@ class _ScannerScreenState extends State<ScannerScreen> {
   Future<void> _processToken(String token) async {
     if (_isProcessing || _isSheetOpen) return;
 
-    // Immediately capture current selected subject context
-    final currentSubId = _selectedSubjectId;
-    final currentSubCode = _selectedSubjectCode;
-    final currentSubName = _selectedSubjectName;
-    final currentSem = _selectedSemester;
-    final currentLabel = _selectedSubjectLabel;
+    // Capture context based on active attendance mode (GENERAL vs SUBJECT)
+    final isGeneral = _attendanceMode == 'GENERAL';
+    final currentSubId = isGeneral ? null : _selectedSubjectId;
+    final currentSubCode = isGeneral ? 'GENERAL' : _selectedSubjectCode;
+    final currentSubName = isGeneral ? 'General Daily Attendance' : _selectedSubjectName;
+    final currentSem = isGeneral ? null : _selectedSemester;
+    final currentLabel = isGeneral
+        ? (_coordinatorAssignments.isNotEmpty ? _coordinatorAssignments[0]['class_label'] : 'General Attendance')
+        : _selectedSubjectLabel;
 
     setState(() {
       _isProcessing = true;
@@ -279,7 +304,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
     HapticFeedback.mediumImpact();
 
-    debugPrint("ATTENDANCE_SCAN_REQUEST: Teacher=${ApiService().currentUser?['id']} Subject=$currentSubId [$currentSubCode - $currentSubName] Sem=$currentSem Token=$token");
+    debugPrint("ATTENDANCE_SCAN_REQUEST: Mode=$_attendanceMode Teacher=${ApiService().currentUser?['id']} Subject=$currentSubId [$currentSubCode - $currentSubName] Sem=$currentSem Token=$token");
 
     Map<String, dynamic> result;
     try {
@@ -287,6 +312,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
         token,
         subjectId: currentSubId,
         semester: currentSem,
+        attendanceType: _attendanceMode,
       );
     } catch (e) {
       debugPrint("ATTENDANCE_SCAN_EXCEPTION: $e");
@@ -710,7 +736,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
       ),
       body: _loadingSubjects
           ? const Center(child: CircularProgressIndicator())
-          : _subjects.isEmpty
+          : (_subjects.isEmpty && _coordinatorAssignments.isEmpty)
               ? Center(
                   child: Container(
                     margin: const EdgeInsets.all(24),
@@ -726,12 +752,12 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         Icon(Icons.warning_amber_rounded, size: 54, color: Colors.amber.shade700),
                         const SizedBox(height: 16),
                         const Text(
-                          "No Subject Assigned",
+                          "No Subject or Class Assigned",
                           style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         const Text(
-                          "No subject has been assigned to your account.\nPlease contact the administrator.",
+                          "No academic subjects or class coordinator assignments have been linked to your account.\nPlease contact the administrator.",
                           textAlign: TextAlign.center,
                           style: TextStyle(fontSize: 14, color: Colors.grey),
                         ),
@@ -741,8 +767,188 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 )
               : Column(
                   children: [
+                    // ATTENDANCE MODE SWITCHER (General vs Subject)
+                    if (_coordinatorAssignments.isNotEmpty)
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        padding: const EdgeInsets.all(3),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  if (_attendanceMode != 'GENERAL') {
+                                    setState(() {
+                                      _attendanceMode = 'GENERAL';
+                                      _lastScannedToken = null;
+                                      _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text("Switched to General Attendance. Ready to scan."),
+                                        duration: Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: _attendanceMode == 'GENERAL' ? const Color(0xFF2563EB) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: _attendanceMode == 'GENERAL'
+                                        ? [
+                                            BoxShadow(
+                                              color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      "General Attendance",
+                                      style: TextStyle(
+                                        color: _attendanceMode == 'GENERAL' ? Colors.white : Colors.grey.shade700,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  if (_subjects.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text("No academic subjects assigned to your faculty profile."),
+                                        duration: Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (_attendanceMode != 'SUBJECT') {
+                                    setState(() {
+                                      _attendanceMode = 'SUBJECT';
+                                      _lastScannedToken = null;
+                                      _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("Switched to [${_selectedSubjectCode ?? ''}] ${_selectedSubjectName ?? ''}. Ready to scan."),
+                                        duration: const Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: _attendanceMode == 'SUBJECT' ? const Color(0xFF2563EB) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: _attendanceMode == 'SUBJECT'
+                                        ? [
+                                            BoxShadow(
+                                              color: const Color(0xFF2563EB).withValues(alpha: 0.3),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Center(
+                                    child: Text(
+                                      "Subject Attendance",
+                                      style: TextStyle(
+                                        color: _attendanceMode == 'SUBJECT' ? Colors.white : Colors.grey.shade700,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    // GENERAL ATTENDANCE CARD
+                    if (_attendanceMode == 'GENERAL')
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFEFF6FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF2563EB),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'GENERAL ATTENDANCE',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFF2563EB).withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(
+                                    _coordinatorAssignments.isNotEmpty
+                                        ? (_coordinatorAssignments[0]['semester'] ?? 'General')
+                                        : 'Daily',
+                                    style: const TextStyle(color: Color(0xFF2563EB), fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              _coordinatorAssignments.isNotEmpty
+                                  ? (_coordinatorAssignments[0]['class_label'] ?? 'Class Coordinator Attendance')
+                                  : 'General Daily Attendance',
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Color(0xFF1E3A8A)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "Coordinator: ${ApiService().currentUser?['full_name'] ?? 'Faculty'}",
+                              style: TextStyle(fontSize: 12, color: Colors.blue.shade900, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              "Student attendance counts once per day. Does not duplicate with subject attendances.",
+                              style: TextStyle(fontSize: 11, color: Colors.blue.shade700),
+                            ),
+                          ],
+                        ),
+                      )
                     // SUBJECT SELECTION / DETAILS HEADER
-                    if (_subjects.length == 1)
+                    else if (_subjects.length == 1)
                       // RULE 1: Exactly 1 assigned subject -> Hide dropdown, display assignment card directly
                       Container(
                         margin: const EdgeInsets.fromLTRB(16, 10, 16, 4),

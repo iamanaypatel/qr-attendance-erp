@@ -9,6 +9,7 @@ from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
 from app.models.subject import Subject, teacher_subjects
 from app.models.subject_assignment import TeacherSubjectAssignment
+from app.models.class_coordinator import ClassCoordinator
 
 __all__ = [
     'User',
@@ -24,4 +25,5 @@ __all__ = [
     'Subject',
     'teacher_subjects',
     'TeacherSubjectAssignment',
+    'ClassCoordinator',
 ]

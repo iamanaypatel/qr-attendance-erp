@@ -114,3 +114,23 @@ class TeacherSubjectAssignmentForm(FlaskForm):
     section = StringField('Section (e.g. A, B)', validators=[Optional(), Length(max=32)])
     is_active = BooleanField('Active Assignment', default=True)
     submit = SubmitField('Save Subject Assignment')
+
+
+class ClassCoordinatorForm(FlaskForm):
+    teacher_id = SelectField('Class Coordinator (Faculty)', coerce=int, validators=[DataRequired(message="Please select a faculty member.")])
+    department_id = SelectField('Department (Optional)', coerce=int, validators=[Optional()])
+    course = StringField('Course / Program (e.g. B.Tech, BCA, MCA)', validators=[Optional(), Length(max=100)])
+    semester = SelectField('Semester', choices=[
+        ('1st Semester', '1st Semester'),
+        ('2nd Semester', '2nd Semester'),
+        ('3rd Semester', '3rd Semester'),
+        ('4th Semester', '4th Semester'),
+        ('5th Semester', '5th Semester'),
+        ('6th Semester', '6th Semester'),
+        ('7th Semester', '7th Semester'),
+        ('8th Semester', '8th Semester')
+    ], validators=[DataRequired(message="Please select a semester.")])
+    section = StringField('Section (e.g. A, B)', validators=[Optional(), Length(max=32)])
+    session_id = SelectField('Academic Session (Optional)', coerce=int, validators=[Optional()])
+    is_active = BooleanField('Active Assignment', default=True)
+    submit = SubmitField('Save Class Coordinator')

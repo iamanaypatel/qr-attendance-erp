@@ -51,13 +51,61 @@
           </span>
         </div>
 
-        <!-- Subject Selection / Assignment Details Card -->
+        <!-- Attendance Mode Selector (General vs Subject) -->
+        {% if coordinator_assignments or current_user.is_admin %}
+          <div class="mb-3">
+            <div class="btn-group w-100 p-1 bg-body-tertiary rounded-3 border" role="group">
+              <button type="button" class="btn btn-sm {% if attendance_type == 'GENERAL' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %}" id="btnModeGeneral" onclick="switchScannerMode('GENERAL')">
+                <i class="bi bi-person-workspace me-1"></i>General Attendance
+              </button>
+              <button type="button" class="btn btn-sm {% if attendance_type != 'GENERAL' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %}" id="btnModeSubject" onclick="switchScannerMode('SUBJECT')">
+                <i class="bi bi-journal-bookmark-fill me-1"></i>Subject Attendance
+              </button>
+            </div>
+          </div>
+        {% endif %}
+
+        <!-- General Attendance Card (Class Coordinator) -->
+        <div id="generalAttendanceCard" style="display: {% if attendance_type == 'GENERAL' %}block{% else %}none{% endif %};" class="mb-3">
+          <div class="p-3 rounded-3 border bg-primary-subtle border-primary-subtle shadow-xs">
+            <div class="d-flex justify-content-between align-items-center mb-1">
+              <span class="badge bg-primary text-white font-mono fs-7">GENERAL ATTENDANCE</span>
+              <span class="badge bg-white text-primary border fw-semibold">Class Coordinator</span>
+            </div>
+            {% if selected_coordinator %}
+              <h5 class="fw-bold text-dark mb-1">{{ selected_coordinator.class_label }}</h5>
+              <div class="small text-muted mb-2">
+                <i class="bi bi-person-badge text-primary me-1"></i>Coordinator: <strong>{{ selected_coordinator.teacher.full_name if selected_coordinator.teacher else current_user.get_display_name() }}</strong>
+              </div>
+              <div class="d-flex gap-2 extra-small text-muted">
+                <span><i class="bi bi-building me-1"></i>{{ selected_coordinator.department.name if selected_coordinator.department else 'General' }}</span>
+                {% if selected_coordinator.semester %}
+                  <span>&bull;</span>
+                  <span>{{ selected_coordinator.semester }}</span>
+                {% endif %}
+                {% if selected_coordinator.section %}
+                  <span>&bull;</span>
+                  <span>Section: {{ selected_coordinator.section }}</span>
+                {% endif %}
+              </div>
+            {% else %}
+              <h5 class="fw-bold text-dark mb-1">General Daily Attendance</h5>
+              <div class="small text-muted">Daily general attendance for enrolled students.</div>
+            {% endif %}
+            <div class="alert alert-info py-1 px-2 mt-2 mb-0 extra-small">
+              <i class="bi bi-info-circle-fill me-1"></i>Each student will be counted <strong>once</strong> for today's general attendance.
+            </div>
+          </div>
+        </div>
+
+        <!-- Subject Attendance Container -->
+        <div id="subjectAttendanceContainer" style="display: {% if attendance_type != 'GENERAL' %}block{% else %}none{% endif %};">
         {% if current_user.is_teacher and assignment_count == 0 %}
           <div class="alert alert-warning d-flex align-items-center mb-3">
             <i class="bi bi-exclamation-triangle-fill fs-3 me-3 text-warning"></i>
             <div>
               <div class="fw-bold">No Subject Assigned</div>
-              <div class="small">No subject has been assigned to your account. Please contact the administrator.</div>
+              <div class="small">No subject has been assigned to your account. Switch to General Attendance if you are a Class Coordinator.</div>
             </div>
           </div>
         {% elif current_user.is_teacher and assignment_count == 1 %}
@@ -141,6 +189,7 @@
             </div>
           </div>
         {% endif %}
+        </div>
 
         <!-- Camera Viewport Box with Laser Line -->
         <div class="scanner-viewport-box mb-3 position-relative">
@@ -151,7 +200,7 @@
         <!-- Controls -->
         <div class="d-flex flex-wrap gap-2 justify-content-between align-items-center">
           <div class="d-flex gap-2 flex-grow-1">
-            <button class="btn btn-primary-glow" id="startScanBtn" {% if current_user.is_teacher and assignment_count == 0 %}disabled title="No subject assigned to your account"{% endif %}>
+            <button class="btn btn-primary-glow" id="startScanBtn" {% if current_user.is_teacher and assignment_count == 0 and not coordinator_assignments %}disabled title="No subject or class assigned to your account"{% endif %}>
               <i class="bi bi-play-circle-fill me-1"></i> Start Attendance
             </button>
             <button class="btn btn-outline-success" id="stopScanBtn" disabled>
@@ -384,6 +433,36 @@
     }
   });
 
+  let activeMode = '{{ attendance_type }}' || 'SUBJECT';
+
+  function switchScannerMode(mode) {
+    activeMode = mode;
+    lastScannedToken = null;
+    lastScannedTime = 0;
+    const btnGen = document.getElementById('btnModeGeneral');
+    const btnSub = document.getElementById('btnModeSubject');
+    const genCard = document.getElementById('generalAttendanceCard');
+    const subCard = document.getElementById('subjectAttendanceContainer');
+
+    if (mode === 'GENERAL') {
+      if (btnGen) btnGen.className = 'btn btn-sm btn-primary fw-bold shadow-xs';
+      if (btnSub) btnSub.className = 'btn btn-sm btn-ghost text-muted';
+      if (genCard) genCard.style.display = 'block';
+      if (subCard) subCard.style.display = 'none';
+      if (isScanning) {
+        showToast("Switched to General Attendance mode. Ready to scan.", "info", "Mode Changed");
+      }
+    } else {
+      if (btnGen) btnGen.className = 'btn btn-sm btn-ghost text-muted';
+      if (btnSub) btnSub.className = 'btn btn-sm btn-primary fw-bold shadow-xs';
+      if (genCard) genCard.style.display = 'none';
+      if (subCard) subCard.style.display = 'block';
+      if (isScanning) {
+        showToast("Switched to Subject Attendance mode. Ready to scan.", "info", "Mode Changed");
+      }
+    }
+  }
+
   const assignmentSelect = document.getElementById('assignmentSelect');
   const sessionLockBadge = document.getElementById('sessionLockBadge');
   const subjectHelper = document.getElementById('subjectHelperText');
@@ -427,10 +506,19 @@
   }
 
   function getActiveSubjectContext() {
+    if (activeMode === 'GENERAL') {
+      return {
+        attendance_type: 'GENERAL',
+        subject_id: null,
+        semester: null
+      };
+    }
+
     const fixedSub = document.getElementById('activeSubjectId');
     const fixedSem = document.getElementById('activeSemester');
     if (fixedSub && fixedSub.value) {
       return {
+        attendance_type: 'SUBJECT',
         subject_id: parseInt(fixedSub.value),
         semester: fixedSem ? fixedSem.value : null
       };
@@ -441,11 +529,12 @@
       const sId = opt.getAttribute('data-subject-id');
       const sem = opt.getAttribute('data-semester');
       return {
+        attendance_type: sId ? 'SUBJECT' : 'GENERAL',
         subject_id: sId ? parseInt(sId) : null,
         semester: sem || null
       };
     }
-    return { subject_id: null, semester: null };
+    return { attendance_type: 'SUBJECT', subject_id: null, semester: null };
   }
 
   function onScanFailure(error) {
@@ -455,7 +544,7 @@
   function onScanSuccess(decodedText, decodedResult) {
     const now = Date.now();
     const ctx = getActiveSubjectContext();
-    const scanKey = `${ctx.subject_id || 'gen'}_${decodedText}`;
+    const scanKey = `${ctx.attendance_type}_${ctx.subject_id || 'gen'}_${decodedText}`;
     // Debounce identical scans within 2 seconds for the SAME subject session
     if (scanKey === lastScannedToken && (now - lastScannedTime) < 2000) {
       return;
@@ -469,7 +558,10 @@
   async function processScanPayload(token) {
     try {
       const ctx = getActiveSubjectContext();
-      const payload = { token: token };
+      const payload = { 
+        token: token,
+        attendance_type: ctx.attendance_type
+      };
       if (ctx.subject_id) {
         payload.subject_id = ctx.subject_id;
       }

@@ -143,15 +143,18 @@ def scan_attendance():
     token = None
     subject_id = None
     semester = None
+    attendance_type = 'SUBJECT'
     if request.is_json:
         data = request.get_json() or {}
         token = data.get('token')
         subject_id = data.get('subject_id')
         semester = data.get('semester')
+        attendance_type = data.get('attendance_type') or ('GENERAL' if subject_id is None else 'SUBJECT')
     else:
         token = request.form.get('token')
         subject_id = request.form.get('subject_id')
         semester = request.form.get('semester')
+        attendance_type = request.form.get('attendance_type') or ('GENERAL' if subject_id is None else 'SUBJECT')
 
     if not token:
         return jsonify({
@@ -167,17 +170,23 @@ def scan_attendance():
 
     teacher_id = current_user.teacher_profile.id if getattr(current_user, 'teacher_profile', None) else current_user.id
     current_app.logger.info(
-        f"API_SCAN_REQUEST: MarkerUser={current_user.id} Teacher={teacher_id} "
+        f"API_SCAN_REQUEST: MarkerUser={current_user.id} Teacher={teacher_id} Type={attendance_type} "
         f"SubjectId={subject_id} Semester={semester} TokenPrefix={token[:6] if token else ''}"
     )
 
-    result = process_qr_attendance(token, marker_user=current_user, subject_id=subject_id, semester=semester)
+    result = process_qr_attendance(
+        token,
+        marker_user=current_user,
+        subject_id=subject_id,
+        semester=semester,
+        attendance_type=attendance_type
+    )
     if 'action' not in result:
         result['action'] = 'SUCCESS' if result.get('success') else (result.get('error_code') or 'SCAN_FAILED')
 
     if result.get('success'):
         status_code = 200
-    elif result.get('error_code') in ('UNAUTHORIZED_SUBJECT', 'UNAUTHORIZED_TEACHER'):
+    elif result.get('error_code') in ('UNAUTHORIZED_SUBJECT', 'UNAUTHORIZED_TEACHER', 'UNAUTHORIZED_COORDINATOR'):
         status_code = 403
     elif result.get('action') in ('ALREADY_COMPLETED', 'COOLDOWN'):
         # Informative status, not a server error
@@ -187,7 +196,7 @@ def scan_attendance():
 
     student_id = result.get('student', {}).get('student_id') if result.get('student') else '-'
     current_app.logger.info(
-        f"API_SCAN_RESPONSE: Status={status_code} Teacher={teacher_id} "
+        f"API_SCAN_RESPONSE: Status={status_code} Teacher={teacher_id} Type={result.get('attendance_type', attendance_type)} "
         f"Subject={subject_id} Student={student_id} Action={result.get('action')} Success={result.get('success')}"
     )
 
@@ -247,19 +256,25 @@ def today_attendance():
     """
     today = get_current_ist_date()
     dept_id = request.args.get('dept', type=int)
+    att_type = request.args.get('type', '').strip().upper()
+    subject_id = request.args.get('subject_id', type=int)
 
     query = Attendance.query.join(Student).filter(Attendance.date == today)
     if dept_id:
         query = query.filter(Student.department_id == dept_id)
+    if att_type:
+        query = query.filter(Attendance.attendance_type == att_type)
+    if subject_id:
+        query = query.filter(Attendance.subject_id == subject_id)
 
     records = query.order_by(Attendance.updated_at.desc()).limit(100).all()
 
-    # Build unique present entries scoped to (student_id, subject_id)
+    # Build unique present entries scoped by attendance context
     present_students = []
     seen_keys = set()
     for r in records:
         if r.student and r.status in ('Present', 'Late', 'Half Day'):
-            key = (r.student.id, r.subject_id)
+            key = r.student.id if (att_type == 'GENERAL' or r.attendance_type == 'GENERAL') else (r.student.id, r.subject_id)
             if key not in seen_keys:
                 seen_keys.add(key)
                 present_students.append({
@@ -269,6 +284,7 @@ def today_attendance():
                     'roll_number': r.student.roll_number,
                     'department': r.student.department.name if r.student.department else None,
                     'course': r.student.course,
+                    'attendance_type': r.attendance_type or ('SUBJECT' if r.subject_id else 'GENERAL'),
                     'subject_id': r.subject_id,
                     'subject_code': r.subject.subject_code if r.subject else None,
                     'subject_name': r.subject.subject_name if r.subject else None,
@@ -291,44 +307,76 @@ def dashboard_stats():
     """
     GET /api/dashboard/stats
     Returns realtime KPI counters and present students roster.
+    Counts UNIQUE students for General Attendance (never inflates across multiple subjects).
     """
     today = get_current_ist_date()
     total_students = Student.query.filter_by(is_active=True).count()
     total_teachers = Teacher.query.filter_by(is_active=True).count()
 
-    present_today = Attendance.query.filter(
+    # Check if any explicit General Attendance exists today
+    has_general_today = Attendance.query.filter(
         Attendance.date == today,
-        Attendance.status.in_(['Present', 'Late', 'Half Day'])
-    ).count()
+        Attendance.attendance_type == 'GENERAL'
+    ).first() is not None
+
+    if has_general_today:
+        present_today = db.session.query(func.count(func.distinct(Attendance.student_id))).filter(
+            Attendance.date == today,
+            Attendance.status.in_(['Present', 'Late', 'Half Day']),
+            Attendance.attendance_type == 'GENERAL'
+        ).scalar() or 0
+
+        present_records = (
+            Attendance.query
+            .join(Student)
+            .filter(
+                Attendance.date == today,
+                Attendance.status.in_(['Present', 'Late', 'Half Day']),
+                Attendance.attendance_type == 'GENERAL'
+            )
+            .order_by(Attendance.time_in.asc().nullslast())
+            .all()
+        )
+    else:
+        # If General Attendance has not yet been recorded today, strictly count UNIQUE students
+        present_today = db.session.query(func.count(func.distinct(Attendance.student_id))).filter(
+            Attendance.date == today,
+            Attendance.status.in_(['Present', 'Late', 'Half Day'])
+        ).scalar() or 0
+
+        present_records = (
+            Attendance.query
+            .join(Student)
+            .filter(
+                Attendance.date == today,
+                Attendance.status.in_(['Present', 'Late', 'Half Day'])
+            )
+            .order_by(Attendance.time_in.asc().nullslast())
+            .all()
+        )
 
     absent_today = max(0, total_students - present_today)
     rate = round((present_today / total_students * 100), 1) if total_students > 0 else 0.0
 
-    present_records = (
-        Attendance.query
-        .join(Student)
-        .filter(
-            Attendance.date == today,
-            Attendance.status.in_(['Present', 'Late', 'Half Day'])
-        )
-        .order_by(Attendance.time_in.asc().nullslast())
-        .all()
-    )
-    present_students = [
-        {
-            'student_id': r.student.student_id,
-            'full_name': r.student.full_name,
-            'roll_number': r.student.roll_number,
-            'department': r.student.department.name if r.student.department else None,
-            'course': r.student.course,
-            'subject_id': r.subject_id,
-            'subject_code': r.subject.subject_code if r.subject else None,
-            'subject_name': r.subject.subject_name if r.subject else None,
-            'semester': r.semester,
-            'time_in': r.time_in.strftime('%I:%M %p') if r.time_in else '-'
-        }
-        for r in present_records if r.student
-    ]
+    # Ensure deduplicated roster (1 student = 1 entry)
+    seen_students = set()
+    present_students = []
+    for r in present_records:
+        if r.student and r.student.id not in seen_students:
+            seen_students.add(r.student.id)
+            present_students.append({
+                'student_id': r.student.student_id,
+                'full_name': r.student.full_name,
+                'roll_number': r.student.roll_number,
+                'department': r.student.department.name if r.student.department else None,
+                'course': r.student.course,
+                'attendance_type': r.attendance_type or ('SUBJECT' if r.subject_id else 'GENERAL'),
+                'subject_id': r.subject_id,
+                'subject_code': r.subject.subject_code if r.subject else None,
+                'subject_name': r.subject.subject_name if r.subject else None,
+                'semester': r.semester,
+                'time_in': r.time_in.strftime('%I:%M %p') if r.time_in else '-'
+            })
 
     return jsonify({
         'success': True,
@@ -421,10 +469,17 @@ def teacher_subjects():
 
     today = get_current_ist_date()
     subject_list = []
+    coordinator_list = []
+    is_coordinator = False
+
     if current_user.is_teacher:
         teacher = current_user.teacher_profile
         if not teacher:
             return jsonify({'success': False, 'message': 'Teacher profile not linked.'}), 404
+
+        active_coords = teacher.get_active_coordinator_assignments()
+        is_coordinator = len(active_coords) > 0
+        coordinator_list = [c.to_dict() for c in active_coords]
         
         assignments = teacher.get_active_assignments()
         for asgn in assignments:
@@ -465,6 +520,11 @@ def teacher_subjects():
                 'scanned_today': today_sessions
             })
     elif current_user.is_admin:
+        from app.models.class_coordinator import ClassCoordinator
+        active_coords = ClassCoordinator.query.filter_by(is_active=True).all()
+        is_coordinator = True
+        coordinator_list = [c.to_dict() for c in active_coords]
+
         assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
         if assignments:
             for asgn in assignments:
@@ -538,7 +598,9 @@ def teacher_subjects():
     return jsonify({
         'success': True,
         'count': len(subject_list),
-        'subjects': subject_list
+        'subjects': subject_list,
+        'is_coordinator': is_coordinator,
+        'coordinator_assignments': coordinator_list
     })
 
 @api_bp.route('/student/attendance')
@@ -558,12 +620,22 @@ def student_attendance_summary():
     overall_stats = student.calculate_attendance_stats()
     subject_wise = student.get_subject_wise_attendance()
 
+    today = get_current_ist_date()
+    today_gen = Attendance.query.filter(
+        Attendance.student_id == student.id,
+        Attendance.date == today,
+        (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+    ).first()
+    today_general_status = today_gen.status if today_gen else None
+
     return jsonify({
         'success': True,
         'student_id': student.student_id,
         'student_name': student.full_name,
         'overall_stats': overall_stats,
         'subject_wise': subject_wise,
+        'today_general_status': today_general_status,
+        'general_attendance_today': today_general_status in ('Present', 'Late', 'Half Day') if today_general_status else False,
         # Normalized aliases for Flutter mobile client
         'overall': {
             'rate': overall_stats.get('percentage', 0.0),

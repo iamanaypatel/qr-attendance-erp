@@ -435,6 +435,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final totalClasses = overall['total'] ?? overall['total_classes'] ?? 0;
     final presentClasses = overall['present'] ?? overall['present_classes'] ?? 0;
     final absentClasses = overall['absent'] ?? overall['absent_classes'] ?? 0;
+    final todayGenStatus = summary['today_general_status']?.toString();
+    final isGenPresentToday = summary['general_attendance_today'] == true;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
     return SingleChildScrollView(
@@ -443,6 +445,89 @@ class _DashboardScreenState extends State<DashboardScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // GENERAL DAILY ATTENDANCE STATUS
+          Container(
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              color: isDark ? const Color(0xFF1E293B) : Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(
+                color: isGenPresentToday
+                    ? const Color(0xFF10B981).withValues(alpha: 0.5)
+                    : Colors.grey.withValues(alpha: 0.2),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: isDark ? 0.2 : 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isGenPresentToday
+                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                        : Colors.grey.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isGenPresentToday ? Icons.verified : Icons.schedule,
+                    color: isGenPresentToday ? const Color(0xFF10B981) : Colors.grey,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "GENERAL ATTENDANCE",
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.grey,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isGenPresentToday ? "Present Today ✅" : (todayGenStatus ?? "Not Marked Today"),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: isGenPresentToday ? const Color(0xFF10B981) : (isDark ? Colors.white70 : Colors.black87),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: isGenPresentToday
+                        ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                        : Colors.grey.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    isGenPresentToday ? "RECORDED" : "PENDING",
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: isGenPresentToday ? const Color(0xFF047857) : Colors.grey,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // Overall Attendance Card
           Container(
             padding: const EdgeInsets.all(18),

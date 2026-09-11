@@ -82,6 +82,57 @@
     </div>
   </div>
 
+  <!-- Class Coordinator Section -->
+  {% if coordinator_assignments %}
+    <div class="mb-4">
+      <div class="d-flex justify-content-between align-items-center mb-3">
+        <h5 class="fw-bold brand-font mb-0 text-primary">
+          <i class="bi bi-person-workspace text-primary me-2"></i>Class Coordinator
+        </h5>
+        <span class="badge bg-primary-subtle text-primary fw-semibold px-2 py-1">
+          Daily General Attendance
+        </span>
+      </div>
+      <div class="row g-3">
+        {% for coord in coordinator_assignments %}
+          <div class="col-md-6 col-lg-6">
+            <div class="glass-card p-3 border border-primary-subtle h-100 d-flex flex-column justify-content-between shadow-sm">
+              <div>
+                <div class="d-flex justify-content-between align-items-start mb-2">
+                  <span class="badge bg-primary text-white font-mono fs-7">GENERAL ATTENDANCE</span>
+                  <span class="badge badge-soft-info">{{ coord.semester }}</span>
+                </div>
+                <h5 class="fw-bold text-dark mb-1">{{ coord.class_label }}</h5>
+                <div class="d-flex gap-2 extra-small text-muted mb-3">
+                  <span><i class="bi bi-building me-1"></i>{{ coord.department.name if coord.department else 'General Department' }}</span>
+                  {% if coord.course %}
+                    <span>&bull;</span>
+                    <span><i class="bi bi-mortarboard me-1"></i>{{ coord.course }}</span>
+                  {% endif %}
+                  {% if coord.section %}
+                    <span>&bull;</span>
+                    <span>Section: {{ coord.section }}</span>
+                  {% endif %}
+                </div>
+                <p class="small text-muted mb-3">
+                  Take daily campus/class general attendance for this assigned batch. Attendance counts once per student per day.
+                </p>
+              </div>
+              <div class="d-flex gap-2 mt-auto">
+                <a href="{{ url_for('attendance.scanner', type='GENERAL') }}" class="btn btn-primary-glow flex-grow-1">
+                  <i class="bi bi-qr-code-scan me-1"></i> Start General Attendance
+                </a>
+                <a href="{{ url_for('reports.index', type='GENERAL') }}" class="btn btn-outline-secondary" title="Attendance History">
+                  <i class="bi bi-clock-history me-1"></i> History
+                </a>
+              </div>
+            </div>
+          </div>
+        {% endfor %}
+      </div>
+    </div>
+  {% endif %}
+
   <!-- My Subjects Section -->
   <div class="mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">

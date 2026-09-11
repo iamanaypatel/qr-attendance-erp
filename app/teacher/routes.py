@@ -27,17 +27,22 @@ def dashboard():
     today_scan_count = len(today_records)
 
     assigned_assignments = []
+    coordinator_assignments = []
     if teacher:
         assigned_assignments = teacher.get_active_assignments()
+        coordinator_assignments = teacher.get_active_coordinator_assignments()
     elif current_user.is_admin:
         from app.models.subject_assignment import TeacherSubjectAssignment
+        from app.models.class_coordinator import ClassCoordinator
         assigned_assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
+        coordinator_assignments = ClassCoordinator.query.filter_by(is_active=True).all()
 
     return render_template(
         'teacher/dashboard.html',
         today_records=today_records,
         today_scan_count=today_scan_count,
         assigned_assignments=assigned_assignments,
+        coordinator_assignments=coordinator_assignments,
         now=get_current_ist_datetime()
     )
 

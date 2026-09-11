@@ -36,18 +36,45 @@ class Student(db.Model):
         """Generate a cryptographically secure, URL-safe random token for QR code encoding."""
         return secrets.token_urlsafe(32)
 
-    def calculate_attendance_stats(self, start_date=None, end_date=None):
-        """Calculate total classes, present, absent, and attendance percentage safely."""
+    def calculate_attendance_stats(self, start_date=None, end_date=None, attendance_type=None):
+        """
+        Calculate overall daily (General) attendance stats, or stats for specified type.
+        Separates General Attendance from Subject-wise Attendance so a student's
+        overall percentage is NOT inflated simply because they attended 5 subjects in 1 day.
+        """
+        from app.models.attendance import Attendance
+
         query = self.attendances
+        if attendance_type:
+            query = query.filter(Attendance.attendance_type == attendance_type)
+        else:
+            # Check if explicit GENERAL records exist
+            has_general = self.attendances.filter(
+                (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+            ).first() is not None
+            if has_general:
+                query = query.filter(
+                    (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+                )
+
         if start_date:
-            query = query.filter(self.attendances.property.mapper.class_.date >= start_date)
+            query = query.filter(Attendance.date >= start_date)
         if end_date:
-            query = query.filter(self.attendances.property.mapper.class_.date <= end_date)
+            query = query.filter(Attendance.date <= end_date)
 
         records = query.all()
-        total_sessions = len(records)
-        present_count = sum(1 for a in records if a.status in ('Present', 'Late', 'Half Day'))
-        absent_count = sum(1 for a in records if a.status == 'Absent')
+        # Group by date to strictly guarantee ONE student session per date
+        records_by_date = {}
+        for a in records:
+            if a.date not in records_by_date:
+                records_by_date[a.date] = a
+            elif a.status in ('Present', 'Late', 'Half Day'):
+                records_by_date[a.date] = a
+
+        unique_records = list(records_by_date.values())
+        total_sessions = len(unique_records)
+        present_count = sum(1 for a in unique_records if a.status in ('Present', 'Late', 'Half Day'))
+        absent_count = sum(1 for a in unique_records if a.status == 'Absent')
 
         # Handle zero applicable sessions safely
         percentage = round((present_count / total_sessions * 100), 2) if total_sessions > 0 else 0.0

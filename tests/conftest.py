@@ -69,5 +69,15 @@ def seeded_db(app):
             qr_token=Student.generate_qr_token()
         )
         db.session.add(student)
+        from app.models.class_coordinator import ClassCoordinator
+        coord = ClassCoordinator(
+            teacher_id=teacher.id,
+            department_id=dept.id,
+            course='B.Tech CSE',
+            semester='4th',
+            section=None,
+            is_active=True
+        )
+        db.session.add(coord)
         db.session.commit()
         yield db

@@ -105,6 +105,18 @@
         </div>
       </div>
       <div class="col-md-3">
+        <label class="form-label small fw-semibold text-muted">ATTENDANCE TYPE</label>
+        <select name="type" class="form-select">
+          <option value="">All Attendance Types</option>
+          <option value="GENERAL" {% if args.get('type') == 'GENERAL' %}selected{% endif %}>General Daily Attendance</option>
+          <option value="SUBJECT" {% if args.get('type') == 'SUBJECT' %}selected{% endif %}>Subject-wise Attendance</option>
+        </select>
+      </div>
+      <div class="col-md-3">
+        <label class="form-label small fw-semibold text-muted">SECTION</label>
+        <input type="text" name="section" value="{{ args.get('section', '') }}" class="form-control" placeholder="e.g. A, B">
+      </div>
+      <div class="col-md-3">
         <label class="form-label small fw-semibold text-muted">METHOD</label>
         <select name="method" class="form-select">
           <option value="">All Methods</option>
@@ -187,11 +199,11 @@
                 </td>
                 <td><span class="badge bg-secondary">{{ r.student.department.code if r.student.department else 'GEN' }}</span></td>
                 <td>
-                  {% if r.subject %}
-                    <span class="badge badge-soft-primary">{{ r.subject.subject_code }}</span>
-                    <small class="text-muted d-block text-truncate" style="max-width: 140px;" title="{{ r.subject.subject_name }}">{{ r.subject.subject_name }}</small>
+                  {% if r.attendance_type == 'GENERAL' or not r.subject_id %}
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">General Daily</span>
                   {% else %}
-                    <span class="text-muted small font-mono">General</span>
+                    <span class="badge badge-soft-primary">{{ r.subject.subject_code if r.subject else 'SUB' }}</span>
+                    <small class="text-muted d-block text-truncate" style="max-width: 140px;" title="{{ r.subject.subject_name if r.subject else '' }}">{{ r.subject.subject_name if r.subject else '' }}</small>
                   {% endif %}
                 </td>
                 <td><span class="badge badge-soft-info">{{ r.semester or (r.student.semester or '-') }}</span></td>

@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+
+{% block title %}{{ title }} — {{ institution_name }}{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+  <div class="d-flex align-items-center mb-4 gap-3">
+    <a href="{{ url_for('admin.class_coordinators') }}" class="btn btn-outline-secondary btn-sm">
+      <i class="bi bi-arrow-left"></i>
+    </a>
+    <div>
+      <h2 class="fw-bold brand-font mb-1">{{ title }}</h2>
+      <p class="text-muted mb-0">Authorize a faculty member as the Class Coordinator for daily General Attendance taking.</p>
+    </div>
+  </div>
+
+  <div class="row justify-content-center">
+    <div class="col-lg-8">
+      <div class="glass-card p-4">
+        <form method="POST" novalidate>
+          {{ form.hidden_tag() }}
+
+          <!-- Teacher Selection -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="teacher_id">
+              <i class="bi bi-person-badge text-primary me-1"></i>Class Coordinator (Faculty) <span class="text-danger">*</span>
+            </label>
+            {{ form.teacher_id(class="form-select fw-semibold" + (" is-invalid" if form.teacher_id.errors else "")) }}
+            {% if form.teacher_id.errors %}
+              <div class="invalid-feedback">{{ form.teacher_id.errors[0] }}</div>
+            {% endif %}
+            <div class="form-text small">Select the teacher who will be authorized to take General Daily Attendance for this class.</div>
+          </div>
+
+          <div class="row g-3">
+            <!-- Department -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="department_id">
+                <i class="bi bi-building text-primary me-1"></i>Department (Optional)
+              </label>
+              {{ form.department_id(class="form-select" + (" is-invalid" if form.department_id.errors else "")) }}
+              {% if form.department_id.errors %}
+                <div class="invalid-feedback">{{ form.department_id.errors[0] }}</div>
+              {% endif %}
+            </div>
+
+            <!-- Course -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="course">
+                <i class="bi bi-award text-primary me-1"></i>Course / Program
+              </label>
+              {{ form.course(class="form-control" + (" is-invalid" if form.course.errors else ""), placeholder="e.g. B.Tech, BCA, MCA") }}
+              {% if form.course.errors %}
+                <div class="invalid-feedback">{{ form.course.errors[0] }}</div>
+              {% endif %}
+            </div>
+          </div>
+
+          <div class="row g-3">
+            <!-- Semester -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="semester">
+                <i class="bi bi-calendar-event text-primary me-1"></i>Semester <span class="text-danger">*</span>
+              </label>
+              {{ form.semester(class="form-select fw-semibold" + (" is-invalid" if form.semester.errors else "")) }}
+              {% if form.semester.errors %}
+                <div class="invalid-feedback">{{ form.semester.errors[0] }}</div>
+              {% endif %}
+              <div class="form-text small">Class coordinator is semester-scoped.</div>
+            </div>
+
+            <!-- Section -->
+            <div class="col-md-6 mb-3">
+              <label class="form-label fw-semibold" for="section">
+                <i class="bi bi-grid-3x3-gap text-primary me-1"></i>Section (e.g. A, B)
+              </label>
+              {{ form.section(class="form-control" + (" is-invalid" if form.section.errors else ""), placeholder="e.g. A, B, C") }}
+              {% if form.section.errors %}
+                <div class="invalid-feedback">{{ form.section.errors[0] }}</div>
+              {% endif %}
+              <div class="form-text small">Leave blank if valid for all sections of this semester.</div>
+            </div>
+          </div>
+
+          <!-- Academic Session -->
+          <div class="mb-3">
+            <label class="form-label fw-semibold" for="session_id">
+              <i class="bi bi-clock-history text-primary me-1"></i>Academic Session (Optional)
+            </label>
+            {{ form.session_id(class="form-select" + (" is-invalid" if form.session_id.errors else "")) }}
+            {% if form.session_id.errors %}
+              <div class="invalid-feedback">{{ form.session_id.errors[0] }}</div>
+            {% endif %}
+          </div>
+
+          <!-- Active Status -->
+          <div class="form-check form-switch mb-4">
+            {{ form.is_active(class="form-check-input", role="switch", id="is_active") }}
+            <label class="form-check-label fw-semibold" for="is_active">
+              Active Coordinator Assignment
+            </label>
+            <div class="form-text small text-muted">
+              Only active coordinators can take General Daily Attendance. Assigning an active coordinator will replace any previous active coordinator for this same class context.
+            </div>
+          </div>
+
+          <!-- Action Buttons -->
+          <div class="d-flex justify-content-between align-items-center pt-3 border-top">
+            <a href="{{ url_for('admin.class_coordinators') }}" class="btn btn-outline-secondary">
+              Cancel
+            </a>
+            {{ form.submit(class="btn btn-primary-glow px-4") }}
+          </div>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
