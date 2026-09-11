@@ -1151,6 +1151,21 @@ def subjects():
     ).order_by(Subject.is_active.desc(), Subject.subject_code.asc()).all()
     departments = Department.query.order_by(Department.name).all()
 
+    # Pre-calculate day-based total sessions in a single batch query for maximum performance
+    from sqlalchemy import func
+    from app.models.attendance import Attendance
+    sessions_map = dict(
+        db.session.query(
+            Attendance.subject_id,
+            func.count(func.distinct(Attendance.date))
+        ).filter(
+            Attendance.attendance_type == 'SUBJECT',
+            Attendance.subject_id.isnot(None)
+        ).group_by(Attendance.subject_id).all()
+    )
+    for s in subjects_list:
+        s._cached_total_sessions = sessions_map.get(s.id, 0)
+
     return render_template(
         'admin/subjects/index.html',
         subjects=subjects_list,

@@ -586,14 +586,19 @@ def teacher_subjects():
             if not s or not s.is_active:
                 continue
 
-            # Live attendance counters for this subject assignment
-            tot_q = Attendance.query.filter_by(subject_id=s.id)
+            # Live attendance counters for this subject assignment (strictly day-based conducted sessions)
+            from sqlalchemy import func
+            tot_q = Attendance.query.filter(
+                Attendance.subject_id == s.id,
+                Attendance.attendance_type == 'SUBJECT'
+            )
             if asgn.semester:
                 tot_q = tot_q.filter(
                     (Attendance.semester.ilike(asgn.semester.strip())) | (Attendance.semester.is_(None))
                 )
-            total_sessions = tot_q.count()
-            today_sessions = tot_q.filter(Attendance.date == today).count()
+            total_sessions = tot_q.with_entities(func.count(func.distinct(Attendance.date))).scalar() or 0
+            scanned_today = tot_q.filter(Attendance.date == today).count()
+            today_sessions = 1 if scanned_today > 0 else 0
             present_today = tot_q.filter(
                 Attendance.date == today,
                 Attendance.status.in_(['Present', 'Late', 'Half Day'])
@@ -616,10 +621,12 @@ def teacher_subjects():
                 'today_sessions': today_sessions,
                 'present_today': present_today,
                 'total_classes': total_sessions,
-                'scanned_today': today_sessions
+                'scanned_today': scanned_today,
+                'conducted_today': today_sessions
             })
     elif current_user.is_admin:
         from app.models.class_coordinator import ClassCoordinator
+        from sqlalchemy import func
         active_coords = ClassCoordinator.query.filter_by(is_active=True).all()
         is_coordinator = True
         coordinator_list = [c.to_dict() for c in active_coords]
@@ -630,13 +637,17 @@ def teacher_subjects():
                 s = asgn.subject
                 if not s or not s.is_active:
                     continue
-                tot_q = Attendance.query.filter_by(subject_id=s.id)
+                tot_q = Attendance.query.filter(
+                    Attendance.subject_id == s.id,
+                    Attendance.attendance_type == 'SUBJECT'
+                )
                 if asgn.semester:
                     tot_q = tot_q.filter(
                         (Attendance.semester.ilike(asgn.semester.strip())) | (Attendance.semester.is_(None))
                     )
-                total_sessions = tot_q.count()
-                today_sessions = tot_q.filter(Attendance.date == today).count()
+                total_sessions = tot_q.with_entities(func.count(func.distinct(Attendance.date))).scalar() or 0
+                scanned_today = tot_q.filter(Attendance.date == today).count()
+                today_sessions = 1 if scanned_today > 0 else 0
                 present_today = tot_q.filter(
                     Attendance.date == today,
                     Attendance.status.in_(['Present', 'Late', 'Half Day'])
@@ -659,15 +670,20 @@ def teacher_subjects():
                     'today_sessions': today_sessions,
                     'present_today': present_today,
                     'total_classes': total_sessions,
-                    'scanned_today': today_sessions
+                    'scanned_today': scanned_today,
+                    'conducted_today': today_sessions
                 })
         else:
             subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
             for s in subjects:
-                total_sessions = Attendance.query.filter_by(subject_id=s.id).count()
-                today_sessions = Attendance.query.filter(Attendance.subject_id == s.id, Attendance.date == today).count()
-                present_today = Attendance.query.filter(
+                tot_q = Attendance.query.filter(
                     Attendance.subject_id == s.id,
+                    Attendance.attendance_type == 'SUBJECT'
+                )
+                total_sessions = tot_q.with_entities(func.count(func.distinct(Attendance.date))).scalar() or 0
+                scanned_today = tot_q.filter(Attendance.date == today).count()
+                today_sessions = 1 if scanned_today > 0 else 0
+                present_today = tot_q.filter(
                     Attendance.date == today,
                     Attendance.status.in_(['Present', 'Late', 'Half Day'])
                 ).count()
@@ -689,7 +705,8 @@ def teacher_subjects():
                     'today_sessions': today_sessions,
                     'present_today': present_today,
                     'total_classes': total_sessions,
-                    'scanned_today': today_sessions
+                    'scanned_today': scanned_today,
+                    'conducted_today': today_sessions
                 })
     else:
         return jsonify({'success': False, 'message': 'Unauthorized: Only faculty can access assigned subjects.'}), 403

@@ -104,6 +104,9 @@
                             <span class="text-muted small">&rarr;</span>
                             <span class="badge badge-soft-secondary px-1.5 py-0.5" style="font-size: 0.72rem;">{{ f.semester }}</span>
                           {% endif %}
+                          {% if f.section %}
+                            <span class="badge badge-soft-light border px-1 py-0.5 text-secondary" style="font-size: 0.70rem;">Sec {{ f.section }}</span>
+                          {% endif %}
                         </div>
                       {% endfor %}
                     </div>
@@ -134,7 +137,7 @@
                   {% endif %}
                 </td>
                 <td class="text-center">
-                  <span class="fw-bold">{{ s.attendances.count() }}</span>
+                  <span class="fw-bold font-mono">{{ s.total_sessions }}</span>
                 </td>
                 <td>
                   {% if s.is_active %}

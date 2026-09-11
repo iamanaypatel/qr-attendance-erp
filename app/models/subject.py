@@ -61,13 +61,16 @@ class Subject(db.Model):
     def active_teacher_assignments(self):
         """Returns all active TeacherSubjectAssignment records for this subject."""
         from app.models.subject_assignment import TeacherSubjectAssignment
-        return TeacherSubjectAssignment.query.filter_by(subject_id=self.id, is_active=True).all()
+        return TeacherSubjectAssignment.query.filter(
+            TeacherSubjectAssignment.subject_id == self.id,
+            TeacherSubjectAssignment.is_active != False
+        ).all()
 
     @property
     def assigned_faculty_list(self):
         """
         Returns list of assigned faculty items with teacher details, full name, and formatted semester:
-        [{'teacher_id': t_id, 'name': full_name, 'email': email, 'semester': sem, 'assignment_id': id}]
+        [{'teacher_id': t_id, 'name': full_name, 'email': email, 'semester': sem, 'section': sec, 'assignment_id': id}]
         Prioritizes the active AcademicSession where applicable to prevent historical sessions from leaking.
         """
         items = []
@@ -87,10 +90,15 @@ class Subject(db.Model):
                 active_asgns = session_scoped + unscoped
 
         for asgn in active_asgns:
-            if asgn.teacher and asgn.teacher.is_active:
+            if asgn.teacher and asgn.teacher.is_active is not False:
                 sem = format_semester_name(asgn.semester or self.semester)
-                teacher_name = asgn.teacher.full_name or (asgn.teacher.user.get_display_name() if asgn.teacher.user else f"Faculty #{asgn.teacher_id}")
-                key = (asgn.teacher_id, sem)
+                teacher_name = (
+                    asgn.teacher.full_name or
+                    (asgn.teacher.user.get_display_name() if asgn.teacher.user else None) or
+                    getattr(asgn.teacher, 'name', None) or
+                    (f"Prof. {asgn.teacher.employee_id}" if asgn.teacher.employee_id else "Assigned Faculty")
+                )
+                key = (asgn.teacher_id, sem, asgn.section, asgn.course)
                 if key not in seen:
                     seen.add(key)
                     items.append({
@@ -99,6 +107,7 @@ class Subject(db.Model):
                         'email': asgn.teacher.email,
                         'semester': sem,
                         'section': asgn.section,
+                        'course': asgn.course,
                         'assignment_id': asgn.id,
                         'teacher': asgn.teacher,
                         'session_id': asgn.session_id
@@ -107,10 +116,15 @@ class Subject(db.Model):
         # 2. Secondary fallback: from legacy/many-to-many relationship ONLY if no formal assignments exist
         if not items:
             for t in self.teachers:
-                if t.is_active:
+                if t.is_active is not False:
                     sem = format_semester_name(self.semester)
-                    teacher_name = t.full_name or (t.user.get_display_name() if t.user else f"Faculty #{t.id}")
-                    key = (t.id, sem)
+                    teacher_name = (
+                        t.full_name or
+                        (t.user.get_display_name() if t.user else None) or
+                        getattr(t, 'name', None) or
+                        (f"Prof. {t.employee_id}" if t.employee_id else "Assigned Faculty")
+                    )
+                    key = (t.id, sem, None, None)
                     if key not in seen:
                         seen.add(key)
                         items.append({
@@ -119,6 +133,7 @@ class Subject(db.Model):
                             'email': t.email,
                             'semester': sem,
                             'section': None,
+                            'course': None,
                             'assignment_id': None,
                             'teacher': t,
                             'session_id': None
@@ -169,6 +184,24 @@ class Subject(db.Model):
         """Alias for assigned_faculty_list."""
         return self.assigned_faculty_list
 
+    @property
+    def total_sessions(self) -> int:
+        """
+        Returns the number of conducted class days/sessions for this subject.
+        Strictly counts DISTINCT conducted dates where attendance_type == 'SUBJECT'.
+        1 day with 5, 50, or 100 students = 1 session.
+        Uses _cached_total_sessions if pre-calculated in batch to avoid N+1 queries.
+        """
+        if hasattr(self, '_cached_total_sessions') and self._cached_total_sessions is not None:
+            return self._cached_total_sessions
+        from app.models.attendance import Attendance
+        from sqlalchemy import func
+        count = db.session.query(func.count(func.distinct(Attendance.date))).filter(
+            Attendance.subject_id == self.id,
+            Attendance.attendance_type == 'SUBJECT'
+        ).scalar()
+        return count or 0
+
     def to_dict(self):
         faculty = self.assigned_faculty_list
         primary_sem = self.primary_semester
@@ -192,13 +225,17 @@ class Subject(db.Model):
                 {
                     'id': f['teacher_id'],
                     'name': f['name'],
-                    'semester': f['semester']
+                    'semester': f['semester'],
+                    'section': f.get('section'),
+                    'course': f.get('course')
                 }
                 for f in faculty
             ],
             'teachers': [{'id': t.id, 'name': t.full_name, 'employee_id': t.employee_id} for t in self.teachers],
             'teacher_names': [f['name'] for f in faculty] if faculty else [t.full_name for t in self.teachers],
-            'attendance_count': self.attendances.count() if hasattr(self, 'attendances') else 0,
+            'total_sessions': self.total_sessions,
+            'attendance_count': self.total_sessions,
+            'historical_records_count': self.attendances.count() if hasattr(self, 'attendances') else 0,
             'created_at': self.created_at.strftime('%Y-%m-%d') if self.created_at else None
         }
 

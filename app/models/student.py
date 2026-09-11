@@ -150,8 +150,11 @@ class Student(db.Model):
                 total_conducted_query = total_conducted_query.filter(Attendance.date <= end_date)
             conducted_dates = total_conducted_query.with_entities(Attendance.date).distinct().count()
 
-            total = max(len(sub_records), conducted_dates)
-            present = sum(1 for a in sub_records if a.status in ('Present', 'Late', 'Half Day'))
+            # Deduplicate student attendance by date so multiple scans on the same day = 1 class attended
+            student_present_dates = len(set(a.date for a in sub_records if a.status in ('Present', 'Late', 'Half Day')))
+            student_all_dates = len(set(a.date for a in sub_records))
+            total = max(student_all_dates, conducted_dates)
+            present = student_present_dates
             absent = max(0, total - present)
             pct = round((present / total * 100), 1) if total > 0 else 0.0
 

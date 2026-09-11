@@ -35,7 +35,13 @@
   <div class="row g-3 mb-4">
     <div class="col-6 col-md-3">
       <div class="glass-card p-3 text-center">
-        <div class="text-muted extra-small fw-semibold text-uppercase">Total Records</div>
+        <div class="text-muted extra-small fw-semibold text-uppercase">Conducted Sessions</div>
+        <div class="fs-4 fw-bold font-mono text-dark mt-1">{{ total_sessions }}</div>
+      </div>
+    </div>
+    <div class="col-6 col-md-3">
+      <div class="glass-card p-3 text-center">
+        <div class="text-muted extra-small fw-semibold text-uppercase">Total Scans</div>
         <div class="fs-4 fw-bold text-dark mt-1">{{ total_records }}</div>
       </div>
     </div>
@@ -43,12 +49,6 @@
       <div class="glass-card p-3 text-center">
         <div class="text-muted extra-small fw-semibold text-uppercase">Present Marks</div>
         <div class="fs-4 fw-bold text-success mt-1">{{ present_records }}</div>
-      </div>
-    </div>
-    <div class="col-6 col-md-3">
-      <div class="glass-card p-3 text-center">
-        <div class="text-muted extra-small fw-semibold text-uppercase">Absent Marks</div>
-        <div class="fs-4 fw-bold text-danger mt-1">{{ absent_records }}</div>
       </div>
     </div>
     <div class="col-6 col-md-3">

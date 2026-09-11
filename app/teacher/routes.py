@@ -67,20 +67,27 @@ def subjects():
         s = asgn.subject
         if not s or not s.is_active:
             continue
-        query = Attendance.query.filter_by(subject_id=s.id)
+        from sqlalchemy import func
+        query = Attendance.query.filter(
+            Attendance.subject_id == s.id,
+            Attendance.attendance_type == 'SUBJECT'
+        )
         if asgn.semester:
             query = query.filter(
                 (Attendance.semester.ilike(asgn.semester.strip())) | (Attendance.semester.is_(None))
             )
-        total_sessions = query.count()
-        today_sessions = query.filter(Attendance.date == today).count()
+        total_sessions = query.with_entities(func.count(func.distinct(Attendance.date))).scalar() or 0
+        today_scans = query.filter(Attendance.date == today).count()
+        today_sessions = today_scans # Represents students scanned today for the 'Scanned Today' KPI
         subject_stats.append({
             'assignment': asgn,
             'subject': s,
             'semester': asgn.semester,
             'teacher': asgn.teacher,
             'total_sessions': total_sessions,
-            'today_sessions': today_sessions
+            'today_sessions': today_sessions,
+            'scanned_today': today_scans,
+            'conducted_today': 1 if today_scans > 0 else 0
         })
 
     return render_template(
@@ -141,6 +148,11 @@ def subject_attendance(subject_id):
         metrics_query = metrics_query.filter(
             (Attendance.semester.ilike(semester.strip())) | (Attendance.semester.is_(None))
         )
+    from sqlalchemy import func
+    total_sessions = metrics_query.filter(Attendance.attendance_type == 'SUBJECT').with_entities(
+        func.count(func.distinct(Attendance.date))
+    ).scalar() or 0
+
     all_subject_records = metrics_query.all()
     total_records = len(all_subject_records)
     present_records = sum(1 for a in all_subject_records if a.status in ('Present', 'Late', 'Half Day'))
@@ -152,6 +164,7 @@ def subject_attendance(subject_id):
         subject=subject,
         pagination=pagination,
         records=pagination.items,
+        total_sessions=total_sessions,
         total_records=total_records,
         present_records=present_records,
         absent_records=absent_records,
