@@ -70,71 +70,72 @@
           </a>
         </div>
 
+        {% set ep = request.endpoint or '' %}
         <ul class="sidebar-nav">
           {% if current_user.is_admin %}
             <li class="nav-section-title">Administration</li>
             <li>
-              <a href="{{ url_for('admin.dashboard') }}" class="sidebar-link {% if request.endpoint == 'admin.dashboard' %}active{% endif %}">
+              <a href="{{ url_for('admin.dashboard') }}" class="sidebar-link {% if ep == 'admin.dashboard' %}active{% endif %}">
                 <i class="bi bi-grid-1x2-fill"></i>
                 <span>Dashboard</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.students') }}" class="sidebar-link {% if 'admin.student' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('admin.students') }}" class="sidebar-link {% if 'admin.student' in ep %}active{% endif %}">
                 <i class="bi bi-people-fill"></i>
                 <span>Students</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.teachers') }}" class="sidebar-link {% if 'admin.teacher' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('admin.teachers') }}" class="sidebar-link {% if 'admin.teacher' in ep %}active{% endif %}">
                 <i class="bi bi-person-badge-fill"></i>
                 <span>Teachers</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.subjects') }}" class="sidebar-link {% if request.endpoint == 'admin.subjects' or 'admin.subject_' in request.endpoint and 'assignment' not in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('admin.subjects') }}" class="sidebar-link {% if ep == 'admin.subjects' or ('admin.subject_' in ep and 'assignment' not in ep) %}active{% endif %}">
                 <i class="bi bi-journal-bookmark-fill"></i>
                 <span>Subjects</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.subject_assignments') }}" class="sidebar-link {% if 'subject_assignment' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('admin.subject_assignments') }}" class="sidebar-link {% if 'subject_assignment' in ep %}active{% endif %}">
                 <i class="bi bi-diagram-3-fill"></i>
                 <span>Subject Assignments</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.class_coordinators') }}" class="sidebar-link {% if 'class_coordinator' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('admin.class_coordinators') }}" class="sidebar-link {% if 'class_coordinator' in ep %}active{% endif %}">
                 <i class="bi bi-person-workspace"></i>
                 <span>Class Coordinators</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if request.endpoint == 'attendance.scanner' %}active{% endif %}">
+              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if ep == 'attendance.scanner' %}active{% endif %}">
                 <i class="bi bi-qr-code-scan"></i>
                 <span>Take Attendance</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('reports.index') }}" class="sidebar-link {% if 'reports.' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('reports.index') }}" class="sidebar-link {% if 'reports.' in ep %}active{% endif %}">
                 <i class="bi bi-file-earmark-bar-graph-fill"></i>
                 <span>Reports & Exports</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.qr_generator') }}" class="sidebar-link {% if request.endpoint == 'admin.qr_generator' %}active{% endif %}">
+              <a href="{{ url_for('admin.qr_generator') }}" class="sidebar-link {% if ep == 'admin.qr_generator' %}active{% endif %}">
                 <i class="bi bi-upc-scan"></i>
                 <span>QR Generator</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('attendance.calendar') }}" class="sidebar-link {% if request.endpoint == 'attendance.calendar' %}active{% endif %}">
+              <a href="{{ url_for('attendance.calendar') }}" class="sidebar-link {% if ep == 'attendance.calendar' %}active{% endif %}">
                 <i class="bi bi-calendar3"></i>
                 <span>Calendar & Holidays</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('admin.settings') }}" class="sidebar-link {% if request.endpoint == 'admin.settings' %}active{% endif %}">
+              <a href="{{ url_for('admin.settings') }}" class="sidebar-link {% if ep == 'admin.settings' %}active{% endif %}">
                 <i class="bi bi-gear-fill"></i>
                 <span>Settings</span>
               </a>
@@ -143,37 +144,37 @@
           {% elif current_user.is_teacher %}
             <li class="nav-section-title">Academic Portal</li>
             <li>
-              <a href="{{ url_for('teacher.dashboard') }}" class="sidebar-link {% if request.endpoint == 'teacher.dashboard' %}active{% endif %}">
+              <a href="{{ url_for('teacher.dashboard') }}" class="sidebar-link {% if ep == 'teacher.dashboard' %}active{% endif %}">
                 <i class="bi bi-grid-1x2-fill"></i>
                 <span>Dashboard</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('teacher.subjects') }}" class="sidebar-link {% if 'teacher.subject' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('teacher.subjects') }}" class="sidebar-link {% if 'teacher.subject' in ep %}active{% endif %}">
                 <i class="bi bi-journal-bookmark-fill"></i>
                 <span>My Subjects</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if request.endpoint == 'attendance.scanner' %}active{% endif %}">
+              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if ep == 'attendance.scanner' %}active{% endif %}">
                 <i class="bi bi-qr-code-scan"></i>
                 <span>Take Attendance</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('teacher.students') }}" class="sidebar-link {% if request.endpoint == 'teacher.students' %}active{% endif %}">
+              <a href="{{ url_for('teacher.students') }}" class="sidebar-link {% if ep == 'teacher.students' %}active{% endif %}">
                 <i class="bi bi-people-fill"></i>
                 <span>My Students</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('reports.index') }}" class="sidebar-link {% if 'reports.' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('reports.index') }}" class="sidebar-link {% if 'reports.' in ep %}active{% endif %}">
                 <i class="bi bi-file-earmark-bar-graph-fill"></i>
                 <span>Reports</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('attendance.calendar') }}" class="sidebar-link {% if request.endpoint == 'attendance.calendar' %}active{% endif %}">
+              <a href="{{ url_for('attendance.calendar') }}" class="sidebar-link {% if ep == 'attendance.calendar' %}active{% endif %}">
                 <i class="bi bi-calendar3"></i>
                 <span>Calendar</span>
               </a>
@@ -182,19 +183,19 @@
           {% elif current_user.is_student %}
             <li class="nav-section-title">Student Portal</li>
             <li>
-              <a href="{{ url_for('student.dashboard') }}" class="sidebar-link {% if request.endpoint == 'student.dashboard' %}active{% endif %}">
+              <a href="{{ url_for('student.dashboard') }}" class="sidebar-link {% if ep == 'student.dashboard' %}active{% endif %}">
                 <i class="bi bi-grid-1x2-fill"></i>
                 <span>Dashboard</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('student.subjects') }}" class="sidebar-link {% if 'student.subject' in request.endpoint %}active{% endif %}">
+              <a href="{{ url_for('student.subjects') }}" class="sidebar-link {% if 'student.subject' in ep %}active{% endif %}">
                 <i class="bi bi-journal-check"></i>
                 <span>Subject Attendance</span>
               </a>
             </li>
             <li>
-              <a href="{{ url_for('student.profile') }}" class="sidebar-link {% if request.endpoint == 'student.profile' %}active{% endif %}">
+              <a href="{{ url_for('student.profile') }}" class="sidebar-link {% if ep == 'student.profile' %}active{% endif %}">
                 <i class="bi bi-person-circle"></i>
                 <span>My Profile</span>
               </a>

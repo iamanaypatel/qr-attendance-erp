@@ -106,13 +106,9 @@
                 </td>
                 <td>
                   <div class="d-flex align-items-center">
-                    {% if a.teacher.photo %}
-                      <img src="{{ url_for('static', filename='uploads/photos/' + a.teacher.photo) }}" class="rounded-circle me-2" width="36" height="36" style="object-fit: cover;">
-                    {% else %}
-                      <div class="avatar-circle me-2 bg-secondary-subtle text-secondary fw-bold" style="width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 13px;">
-                        {{ a.teacher.full_name[:2].upper() if a.teacher else 'FC' }}
-                      </div>
-                    {% endif %}
+                    <div class="rounded-circle bg-success text-white d-flex align-items-center justify-content-center fw-bold shadow-sm me-2" style="width: 36px; height: 36px; font-size: 0.85rem; flex-shrink: 0;">
+                      {{ (a.teacher.full_name[0] | upper) if (a.teacher and a.teacher.full_name) else 'FC' }}
+                    </div>
                     <div>
                       <span class="fw-semibold text-dark d-block">{{ a.teacher.full_name if a.teacher else 'Unknown' }}</span>
                       <small class="text-muted">{{ a.teacher.employee_id if a.teacher else '' }} • {{ a.teacher.designation or 'Faculty' }}</small>

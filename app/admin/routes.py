@@ -1498,7 +1498,7 @@ def class_coordinators():
     assignments = query.order_by(ClassCoordinator.department_id.asc(), ClassCoordinator.semester.asc(), ClassCoordinator.section.asc()).all()
 
     all_teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
-    all_departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+    all_departments = Department.query.order_by(Department.name).all()
 
     enriched = []
     for a in assignments:
@@ -1534,11 +1534,11 @@ def class_coordinator_assign():
     teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
     form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in teachers]
 
-    departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+    departments = Department.query.order_by(Department.name).all()
     form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
 
-    sessions = AcademicSession.query.order_by(AcademicSession.is_current.desc(), AcademicSession.name.asc()).all()
-    form.session_id.choices = [(0, '-- None / All Sessions --')] + [(s.id, f"{s.name}{' (Current)' if s.is_current else ''}") for s in sessions]
+    sessions = AcademicSession.query.order_by(AcademicSession.is_active.desc(), AcademicSession.name.asc()).all()
+    form.session_id.choices = [(0, '-- None / All Sessions --')] + [(s.id, f"{s.name}{' (Active)' if s.is_active else ''}") for s in sessions]
 
     if form.validate_on_submit():
         dept_id = form.department_id.data if form.department_id.data != 0 else None
@@ -1584,11 +1584,11 @@ def class_coordinator_edit(id):
     teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
     form.teacher_id.choices = [(t.id, f"{t.full_name} ({t.employee_id})") for t in teachers]
 
-    departments = Department.query.filter_by(is_active=True).order_by(Department.name).all()
+    departments = Department.query.order_by(Department.name).all()
     form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
 
-    sessions = AcademicSession.query.order_by(AcademicSession.is_current.desc(), AcademicSession.name.asc()).all()
-    form.session_id.choices = [(0, '-- None / All Sessions --')] + [(s.id, f"{s.name}{' (Current)' if s.is_current else ''}") for s in sessions]
+    sessions = AcademicSession.query.order_by(AcademicSession.is_active.desc(), AcademicSession.name.asc()).all()
+    form.session_id.choices = [(0, '-- None / All Sessions --')] + [(s.id, f"{s.name}{' (Active)' if s.is_active else ''}") for s in sessions]
 
     if request.method == 'GET':
         form.department_id.data = coord.department_id or 0
