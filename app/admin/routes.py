@@ -1184,6 +1184,12 @@ def subject_create():
     departments = Department.query.order_by(Department.name).all()
     form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
 
+    teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    form.faculty_id.choices = [(0, '-- Not Assigned / None --')] + [
+        (t.id, f"{t.full_name} ({t.employee_id}) — {t.department.name if t.department else 'General'}")
+        for t in teachers
+    ]
+
     if form.validate_on_submit():
         code = form.subject_code.data.strip().upper()
         name = form.subject_name.data.strip()
@@ -1210,6 +1216,25 @@ def subject_create():
             is_active=form.is_active.data
         )
         db.session.add(new_subject)
+        db.session.flush()
+
+        # Handle faculty assignment if selected
+        selected_faculty_id = form.faculty_id.data or 0
+        if selected_faculty_id > 0:
+            from app.models.subject_assignment import TeacherSubjectAssignment
+            assigned_teacher = Teacher.query.get(selected_faculty_id)
+            if assigned_teacher:
+                new_asgn = TeacherSubjectAssignment(
+                    teacher_id=assigned_teacher.id,
+                    subject_id=new_subject.id,
+                    semester=new_subject.semester or '1st Semester',
+                    department_id=new_subject.department_id,
+                    course=new_subject.course,
+                    is_active=True
+                )
+                db.session.add(new_asgn)
+                new_subject.teachers = [assigned_teacher]
+
         db.session.commit()
 
         AuditLog.log('SUBJECT_CREATE', f"Created subject {code} - {name}", user_id=current_user.id)
@@ -1226,6 +1251,17 @@ def subject_edit(id):
     form = SubjectForm(obj=subject)
     departments = Department.query.order_by(Department.name).all()
     form.department_id.choices = [(0, '-- None / General --')] + [(d.id, f"{d.name} ({d.code})") for d in departments]
+
+    teachers = Teacher.query.filter_by(is_active=True).order_by(Teacher.full_name).all()
+    form.faculty_id.choices = [(0, '-- Not Assigned / None --')] + [
+        (t.id, f"{t.full_name} ({t.employee_id}) — {t.department.name if t.department else 'General'}")
+        for t in teachers
+    ]
+    # Ensure current assigned teacher is always present in choices (even if inactive)
+    for f in (subject.assigned_faculty_list or []):
+        t_id = f.get('teacher_id')
+        if t_id and not any(c[0] == t_id for c in form.faculty_id.choices):
+            form.faculty_id.choices.append((t_id, f"{f.get('name', 'Faculty')} (#{t_id})"))
 
     if form.validate_on_submit():
         code = form.subject_code.data.strip().upper()
@@ -1251,8 +1287,54 @@ def subject_edit(id):
         subject.is_active = form.is_active.data
         subject.updated_at = datetime.utcnow()
 
+        # --- Handle Assigned Faculty Update ---
+        from app.models.subject_assignment import TeacherSubjectAssignment
+        selected_faculty_id = form.faculty_id.data or 0
+        active_assignments = TeacherSubjectAssignment.query.filter_by(subject_id=subject.id, is_active=True).all()
+
+        if selected_faculty_id == 0:
+            # Admin selected 'Not Assigned' -> deactivate active assignments for this subject
+            for asgn in active_assignments:
+                asgn.is_active = False
+                asgn.updated_at = datetime.utcnow()
+            subject.teachers = []
+        else:
+            new_teacher = Teacher.query.get(selected_faculty_id)
+            if not new_teacher:
+                flash("Selected faculty member was not found in the system.", "danger")
+                return render_template('admin/subjects/form.html', form=form, title=f'Edit {subject.subject_code}', is_edit=True, subject=subject)
+
+            # Update existing assignment in-place to avoid duplicate records
+            if active_assignments:
+                # Find matching assignment for the current semester or pick first active assignment
+                matching_asgn = next(
+                    (a for a in active_assignments if a.semester and subject.semester and a.semester.strip().lower() == subject.semester.strip().lower()),
+                    active_assignments[0]
+                )
+                matching_asgn.teacher_id = new_teacher.id
+                matching_asgn.semester = subject.semester or matching_asgn.semester or '1st Semester'
+                matching_asgn.department_id = subject.department_id or matching_asgn.department_id
+                matching_asgn.course = subject.course or matching_asgn.course
+                matching_asgn.is_active = True
+                matching_asgn.updated_at = datetime.utcnow()
+            else:
+                # No active assignment existed -> create a clean assignment
+                new_asgn = TeacherSubjectAssignment(
+                    teacher_id=new_teacher.id,
+                    subject_id=subject.id,
+                    semester=subject.semester or '1st Semester',
+                    department_id=subject.department_id,
+                    course=subject.course,
+                    session_id=subject.session_id,
+                    is_active=True
+                )
+                db.session.add(new_asgn)
+
+            # Synchronize secondary relationship
+            subject.teachers = [new_teacher]
+
         db.session.commit()
-        AuditLog.log('SUBJECT_UPDATE', f"Updated subject {code} - {name}", user_id=current_user.id)
+        AuditLog.log('SUBJECT_UPDATE', f"Updated subject {code} - {name} (Faculty ID: {selected_faculty_id})", user_id=current_user.id)
         flash(f"Subject '{name}' ({code}) updated successfully.", 'success')
         return redirect(url_for('admin.subjects'))
 
@@ -1261,6 +1343,15 @@ def subject_edit(id):
         if subject.semester:
             from app.models.subject import format_semester_name
             form.semester.data = format_semester_name(subject.semester)
+
+        # Auto-select currently assigned faculty
+        current_faculty = subject.assigned_faculty_list
+        if current_faculty:
+            form.faculty_id.data = current_faculty[0]['teacher_id']
+        elif subject.teachers:
+            form.faculty_id.data = subject.teachers[0].id
+        else:
+            form.faculty_id.data = 0
 
     return render_template('admin/subjects/form.html', form=form, title=f'Edit {subject.subject_code}', is_edit=True, subject=subject)
 

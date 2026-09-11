@@ -73,6 +73,7 @@ class SystemSettingsForm(FlaskForm):
 class SubjectForm(FlaskForm):
     subject_code = StringField('Subject Code (e.g. CS101)', validators=[DataRequired(), Length(max=32)])
     subject_name = StringField('Subject Name', validators=[DataRequired(), Length(max=120)])
+    faculty_id = SelectField('Assigned Faculty', coerce=int, validators=[Optional()])
     description = TextAreaField('Description / Syllabus', validators=[Optional()])
     department_id = SelectField('Department', coerce=int, validators=[Optional()])
     course = StringField('Course / Degree (e.g. B.Tech Computer Science)', validators=[Optional(), Length(max=100)])

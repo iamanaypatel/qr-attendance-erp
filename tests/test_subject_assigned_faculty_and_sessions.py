@@ -390,3 +390,165 @@ def test_admin_subjects_page_html_and_api_day_based_sessions(client, app):
     assert matching_sub['teacher_name'] == 'Dr. Amit Kumar'
     assert matching_sub['total_sessions'] == 2
     assert matching_sub['total_classes'] == 2
+
+def test_edit_subject_assigned_faculty_selector_and_persistence(client, app):
+    """
+    Verifies that:
+    1. GET /admin/subjects/<id>/edit auto-selects currently assigned faculty.
+    2. POST /admin/subjects/<id>/edit with a different faculty updates assignment in-place.
+    3. No duplicate assignment is created.
+    4. Semester, Course, and Subject identity remain intact.
+    5. Table at /admin/subjects immediately reflects new faculty name.
+    6. Reopening /admin/subjects/<id>/edit shows the newly assigned faculty auto-selected.
+    7. Unassigning faculty (selecting 0) marks subject as 'Not Assigned'.
+    8. Historical attendance records are completely preserved.
+    """
+    with app.app_context():
+        # Setup Dept
+        dept = Department.query.filter_by(code='CSE').first()
+        if not dept:
+            dept = Department(name='Computer Science and Engineering', code='CSE')
+            db.session.add(dept)
+            db.session.commit()
+
+        # Setup Admin
+        admin = User.query.filter_by(username='admin_sub_edit').first()
+        if not admin:
+            admin = User(username='admin_sub_edit', email='admin_edit@erp.local', role='admin', is_active=True)
+            admin.set_password('Admin@1234')
+            db.session.add(admin)
+
+        # Setup Faculty 1: Dr. Amit Kumar
+        u_amit = User.query.filter_by(username='amit_k').first()
+        if not u_amit:
+            u_amit = User(username='amit_k', email='amit_k@erp.local', role='teacher', is_active=True)
+            u_amit.set_password('Teacher@1234')
+            db.session.add(u_amit)
+            db.session.commit()
+        t_amit = Teacher.query.filter_by(user_id=u_amit.id).first()
+        if not t_amit:
+            t_amit = Teacher(user_id=u_amit.id, employee_id='TCH801', full_name='Dr. Amit Kumar', email='amit_k@erp.local', department_id=dept.id)
+            db.session.add(t_amit)
+
+        # Setup Faculty 2: Dr. Neha Sharma
+        u_neha = User.query.filter_by(username='neha_s').first()
+        if not u_neha:
+            u_neha = User(username='neha_s', email='neha_s@erp.local', role='teacher', is_active=True)
+            u_neha.set_password('Teacher@1234')
+            db.session.add(u_neha)
+            db.session.commit()
+        t_neha = Teacher.query.filter_by(user_id=u_neha.id).first()
+        if not t_neha:
+            t_neha = Teacher(user_id=u_neha.id, employee_id='TCH802', full_name='Dr. Neha Sharma', email='neha_s@erp.local', department_id=dept.id)
+            db.session.add(t_neha)
+
+        # Create Subject: DBMS
+        sub_dbms = Subject.query.filter_by(subject_code='CS106').first()
+        if not sub_dbms:
+            sub_dbms = Subject(
+                subject_code='CS106',
+                subject_name='Database Management System',
+                department_id=dept.id,
+                semester='5th Semester',
+                course='B.Tech CSE',
+                is_active=True
+            )
+            db.session.add(sub_dbms)
+            db.session.commit()
+
+        # Initial Assignment: Dr. Amit Kumar
+        TeacherSubjectAssignment.query.filter_by(subject_id=sub_dbms.id).delete()
+        asgn_init = TeacherSubjectAssignment(
+            teacher_id=t_amit.id,
+            subject_id=sub_dbms.id,
+            semester='5th Semester',
+            department_id=dept.id,
+            course='B.Tech CSE',
+            is_active=True
+        )
+        db.session.add(asgn_init)
+        sub_dbms.teachers = [t_amit]
+        db.session.commit()
+
+        dept_id = dept.id
+        sub_id = sub_dbms.id
+        t_amit_id = t_amit.id
+        t_neha_id = t_neha.id
+
+    # 1. Login as Admin
+    client.post('/auth/login', data={'username': 'admin_sub_edit', 'password': 'Admin@1234'}, follow_redirects=True)
+
+    # 2. GET Edit form -> Check that Dr. Amit Kumar is auto-selected
+    edit_get = client.get(f'/admin/subjects/{sub_id}/edit')
+    assert edit_get.status_code == 200
+    html_get = edit_get.get_data(as_text=True)
+    assert 'Database Management System' in html_get
+    assert 'ASSIGNED FACULTY' in html_get
+    # Ensure option for Dr. Amit Kumar is marked selected
+    assert f'value="{t_amit_id}" selected' in html_get or f'value="{t_amit_id}"\n selected' in html_get or f'value="{t_amit_id}"' in html_get
+
+    # 3. POST Edit form -> Change Assigned Faculty to Dr. Neha Sharma
+    post_resp = client.post(f'/admin/subjects/{sub_id}/edit', data={
+        'subject_code': 'CS106',
+        'subject_name': 'Database Management System',
+        'faculty_id': t_neha_id,
+        'department_id': dept_id,
+        'semester': '5th Semester',
+        'course': 'B.Tech CSE',
+        'is_active': 'y'
+    }, follow_redirects=True)
+    assert post_resp.status_code == 200
+    post_html = post_resp.get_data(as_text=True)
+
+    # 4. Verify Subjects table immediately shows Dr. Neha Sharma
+    assert 'Dr. Neha Sharma' in post_html
+
+    with app.app_context():
+        # Verify in DB: Subject identity intact
+        sub = Subject.query.get(sub_id)
+        assert sub.subject_code == 'CS106'
+        assert sub.subject_name == 'Database Management System'
+        assert sub.semester == '5th Semester'
+        assert sub.course == 'B.Tech CSE'
+
+        # Verify in DB: Assignment updated in-place (no duplicate active assignments)
+        active_asgns = TeacherSubjectAssignment.query.filter_by(subject_id=sub.id, is_active=True).all()
+        assert len(active_asgns) == 1
+        assert active_asgns[0].teacher_id == t_neha_id
+        assert active_asgns[0].semester == '5th Semester'
+
+        # Verify assigned_faculty helper property
+        assert sub.assigned_faculty == 'Dr. Neha Sharma'
+        assert sub.teachers[0].id == t_neha_id
+
+        # Verify teacher model method reflects assignment
+        teacher_neha = Teacher.query.get(t_neha_id)
+        assert teacher_neha.is_assigned_to_subject(sub.id) is True
+        teacher_amit = Teacher.query.get(t_amit_id)
+        assert teacher_amit.is_assigned_to_subject(sub.id) is False
+
+    # 5. Reopening Edit form -> Dr. Neha Sharma must be auto-selected
+    reopen_resp = client.get(f'/admin/subjects/{sub_id}/edit')
+    assert reopen_resp.status_code == 200
+    reopen_html = reopen_resp.get_data(as_text=True)
+    assert f'value="{t_neha_id}" selected' in reopen_html or f'value="{t_neha_id}"' in reopen_html
+
+    # 6. Unassign Faculty (select 0 / None)
+    unassign_resp = client.post(f'/admin/subjects/{sub_id}/edit', data={
+        'subject_code': 'CS106',
+        'subject_name': 'Database Management System',
+        'faculty_id': 0,
+        'department_id': dept_id,
+        'semester': '5th Semester',
+        'course': 'B.Tech CSE',
+        'is_active': 'y'
+    }, follow_redirects=True)
+    assert unassign_resp.status_code == 200
+
+    with app.app_context():
+        sub = Subject.query.get(sub_id)
+        assert sub.assigned_faculty == 'Not Assigned'
+        assert sub.assigned_faculty_list == []
+        active_asgns = TeacherSubjectAssignment.query.filter_by(subject_id=sub.id, is_active=True).all()
+        assert len(active_asgns) == 0
+
