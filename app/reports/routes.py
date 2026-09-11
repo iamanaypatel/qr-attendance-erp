@@ -141,6 +141,9 @@ def index():
         'rate': rate
     }
 
+    # Filter arguments without 'page' so url_for pagination calls do not receive duplicate 'page' keyword arguments
+    filter_args = {k: v for k, v in request.args.items() if k != 'page'}
+
     return render_template(
         'reports/index.html',
         pagination=pagination,
@@ -151,7 +154,7 @@ def index():
         semesters=semesters,
         stats=stats,
         filter_summary=filter_desc,
-        args=request.args
+        args=filter_args
     )
 
 @reports_bp.route('/export/excel')

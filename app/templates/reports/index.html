@@ -260,29 +260,37 @@
 
     <!-- Pagination -->
     {% if pagination and pagination.pages > 1 %}
+      {% set pagination_args = dict(args) if args else {} %}
+      {% set _ = pagination_args.pop('page', None) %}
       <div class="d-flex justify-content-between align-items-center mt-4 pt-3 border-top" style="border-color: var(--border-glass) !important;">
         <small class="text-muted">
           Showing <strong>{{ (pagination.page - 1) * pagination.per_page + 1 }}</strong> to
           <strong>{{ [pagination.page * pagination.per_page, pagination.total] | min }}</strong> of
           <strong>{{ pagination.total }}</strong> records
         </small>
-        <ul class="pagination pagination-sm mb-0">
-          {% if pagination.has_prev %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('reports.index', page=pagination.prev_num, **args) }}">Previous</a></li>
-          {% endif %}
-          {% for p in pagination.iter_pages(left_edge=2, right_edge=2, left_current=2, right_current=2) %}
-            {% if p %}
-              <li class="page-item {% if p == pagination.page %}active{% endif %}">
-                <a class="page-link" href="{{ url_for('reports.index', page=p, **args) }}">{{ p }}</a>
-              </li>
+        <nav aria-label="Reports pagination">
+          <ul class="pagination pagination-sm mb-0">
+            {% if pagination.has_prev %}
+              <li class="page-item"><a class="page-link" href="{{ url_for('reports.index', page=pagination.prev_num, **pagination_args) }}">Previous</a></li>
             {% else %}
-              <li class="page-item disabled"><span class="page-link">…</span></li>
+              <li class="page-item disabled"><span class="page-link">Previous</span></li>
             {% endif %}
-          {% endfor %}
-          {% if pagination.has_next %}
-            <li class="page-item"><a class="page-link" href="{{ url_for('reports.index', page=pagination.next_num, **args) }}">Next</a></li>
-          {% endif %}
-        </ul>
+            {% for p in pagination.iter_pages(left_edge=2, right_edge=2, left_current=2, right_current=2) %}
+              {% if p %}
+                <li class="page-item {% if p == pagination.page %}active{% endif %}">
+                  <a class="page-link" href="{{ url_for('reports.index', page=p, **pagination_args) }}">{{ p }}</a>
+                </li>
+              {% else %}
+                <li class="page-item disabled"><span class="page-link">…</span></li>
+              {% endif %}
+            {% endfor %}
+            {% if pagination.has_next %}
+              <li class="page-item"><a class="page-link" href="{{ url_for('reports.index', page=pagination.next_num, **pagination_args) }}">Next</a></li>
+            {% else %}
+              <li class="page-item disabled"><span class="page-link">Next</span></li>
+            {% endif %}
+          </ul>
+        </nav>
       </div>
     {% endif %}
   </div>
