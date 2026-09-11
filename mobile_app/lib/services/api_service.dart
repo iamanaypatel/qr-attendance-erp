@@ -234,7 +234,7 @@ class ApiService {
       'token': token.trim(),
       'attendance_type': attendanceType,
     };
-    if (attendanceType == 'SUBJECT') {
+    if (attendanceType == 'SUBJECT' || attendanceType == 'COMBINED') {
       if (subjectId != null) {
         bodyMap['subject_id'] = subjectId;
       }

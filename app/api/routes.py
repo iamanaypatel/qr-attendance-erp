@@ -246,12 +246,19 @@ def scan_attendance():
         token = data.get('token')
         subject_id = data.get('subject_id')
         semester = data.get('semester')
-        attendance_type = data.get('attendance_type') or ('GENERAL' if subject_id is None else 'SUBJECT')
+        raw_att_type = (data.get('attendance_type') or '').strip().upper()
     else:
         token = request.form.get('token')
         subject_id = request.form.get('subject_id')
         semester = request.form.get('semester')
-        attendance_type = request.form.get('attendance_type') or ('GENERAL' if subject_id is None else 'SUBJECT')
+        raw_att_type = (request.form.get('attendance_type') or '').strip().upper()
+
+    if raw_att_type == 'COMBINED':
+        attendance_type = 'COMBINED'
+    elif raw_att_type == 'GENERAL' or (subject_id is None and raw_att_type != 'SUBJECT'):
+        attendance_type = 'GENERAL'
+    else:
+        attendance_type = 'SUBJECT'
 
     if not token:
         return jsonify({
@@ -283,7 +290,7 @@ def scan_attendance():
 
     if result.get('success'):
         status_code = 200
-    elif result.get('error_code') in ('UNAUTHORIZED_SUBJECT', 'UNAUTHORIZED_TEACHER', 'UNAUTHORIZED_COORDINATOR'):
+    elif result.get('error_code') in ('UNAUTHORIZED_SUBJECT', 'UNAUTHORIZED_TEACHER', 'UNAUTHORIZED_COORDINATOR', 'UNAUTHORIZED'):
         status_code = 403
     elif result.get('action') in ('ALREADY_COMPLETED', 'COOLDOWN'):
         # Informative status, not a server error

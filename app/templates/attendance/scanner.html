@@ -51,25 +51,41 @@
           </span>
         </div>
 
-        <!-- Attendance Mode Selector (General vs Subject) -->
+        <!-- Attendance Mode Selector (General vs Subject vs Combined) -->
         {% if coordinator_assignments or current_user.is_admin %}
           <div class="mb-3">
             <div class="btn-group w-100 p-1 bg-body-tertiary rounded-3 border" role="group">
               <button type="button" class="btn btn-sm {% if attendance_type == 'GENERAL' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %}" id="btnModeGeneral" onclick="switchScannerMode('GENERAL')">
-                <i class="bi bi-person-workspace me-1"></i>General Attendance
+                <i class="bi bi-person-workspace me-1"></i>General
               </button>
-              <button type="button" class="btn btn-sm {% if attendance_type != 'GENERAL' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %}" id="btnModeSubject" onclick="switchScannerMode('SUBJECT')">
-                <i class="bi bi-journal-bookmark-fill me-1"></i>Subject Attendance
+              <button type="button" class="btn btn-sm {% if attendance_type == 'SUBJECT' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %}" id="btnModeSubject" onclick="switchScannerMode('SUBJECT')">
+                <i class="bi bi-journal-bookmark-fill me-1"></i>Subject
+              </button>
+              <button type="button" class="btn btn-sm {% if attendance_type == 'COMBINED' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %}" id="btnModeCombined" onclick="switchScannerMode('COMBINED')">
+                <i class="bi bi-layers-fill me-1"></i>Combined
               </button>
             </div>
           </div>
         {% endif %}
 
+        <!-- Combined Attendance Info Banner -->
+        <div id="combinedModeBanner" style="display: {% if attendance_type == 'COMBINED' %}block{% else %}none{% endif %};" class="mb-3">
+          <div class="p-3 rounded-3 border bg-info-subtle border-info-subtle shadow-xs">
+            <div class="d-flex align-items-center gap-2">
+              <i class="bi bi-layers-fill text-primary fs-4"></i>
+              <div>
+                <div class="fw-bold text-dark fs-7">COMBINED ATTENDANCE MODE</div>
+                <div class="small text-muted">Each student scan marks <strong>General / Journal</strong> AND <strong>Subject</strong> attendance simultaneously in one operation.</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
         <!-- General Attendance Card (Class Coordinator) -->
-        <div id="generalAttendanceCard" style="display: {% if attendance_type == 'GENERAL' %}block{% else %}none{% endif %};" class="mb-3">
+        <div id="generalAttendanceCard" style="display: {% if attendance_type == 'GENERAL' or attendance_type == 'COMBINED' %}block{% else %}none{% endif %};" class="mb-3">
           <div class="p-3 rounded-3 border bg-primary-subtle border-primary-subtle shadow-xs">
             <div class="d-flex justify-content-between align-items-center mb-1">
-              <span class="badge bg-primary text-white font-mono fs-7">GENERAL ATTENDANCE</span>
+              <span class="badge bg-primary text-white font-mono fs-7">GENERAL / JOURNAL ATTENDANCE</span>
               <span class="badge bg-white text-primary border fw-semibold">Class Coordinator</span>
             </div>
             {% if selected_coordinator %}
@@ -441,20 +457,31 @@
     lastScannedTime = 0;
     const btnGen = document.getElementById('btnModeGeneral');
     const btnSub = document.getElementById('btnModeSubject');
+    const btnComb = document.getElementById('btnModeCombined');
     const genCard = document.getElementById('generalAttendanceCard');
     const subCard = document.getElementById('subjectAttendanceContainer');
+    const combBanner = document.getElementById('combinedModeBanner');
+
+    if (btnGen) btnGen.className = (mode === 'GENERAL') ? 'btn btn-sm btn-primary fw-bold shadow-xs' : 'btn btn-sm btn-ghost text-muted';
+    if (btnSub) btnSub.className = (mode === 'SUBJECT') ? 'btn btn-sm btn-primary fw-bold shadow-xs' : 'btn btn-sm btn-ghost text-muted';
+    if (btnComb) btnComb.className = (mode === 'COMBINED') ? 'btn btn-sm btn-primary fw-bold shadow-xs' : 'btn btn-sm btn-ghost text-muted';
 
     if (mode === 'GENERAL') {
-      if (btnGen) btnGen.className = 'btn btn-sm btn-primary fw-bold shadow-xs';
-      if (btnSub) btnSub.className = 'btn btn-sm btn-ghost text-muted';
+      if (combBanner) combBanner.style.display = 'none';
       if (genCard) genCard.style.display = 'block';
       if (subCard) subCard.style.display = 'none';
       if (isScanning) {
         showToast("Switched to General Attendance mode. Ready to scan.", "info", "Mode Changed");
       }
+    } else if (mode === 'COMBINED') {
+      if (combBanner) combBanner.style.display = 'block';
+      if (genCard) genCard.style.display = 'block';
+      if (subCard) subCard.style.display = 'block';
+      if (isScanning) {
+        showToast("Switched to Combined Attendance mode (General + Subject). Ready to scan.", "info", "Mode Changed");
+      }
     } else {
-      if (btnGen) btnGen.className = 'btn btn-sm btn-ghost text-muted';
-      if (btnSub) btnSub.className = 'btn btn-sm btn-primary fw-bold shadow-xs';
+      if (combBanner) combBanner.style.display = 'none';
       if (genCard) genCard.style.display = 'none';
       if (subCard) subCard.style.display = 'block';
       if (isScanning) {
@@ -516,25 +543,32 @@
 
     const fixedSub = document.getElementById('activeSubjectId');
     const fixedSem = document.getElementById('activeSemester');
+    let subId = null;
+    let sem = null;
+
     if (fixedSub && fixedSub.value) {
+      subId = parseInt(fixedSub.value);
+      sem = fixedSem ? fixedSem.value : null;
+    } else if (assignmentSelect && assignmentSelect.selectedOptions.length > 0) {
+      const opt = assignmentSelect.selectedOptions[0];
+      const sId = opt.getAttribute('data-subject-id');
+      subId = sId ? parseInt(sId) : null;
+      sem = opt.getAttribute('data-semester') || null;
+    }
+
+    if (activeMode === 'COMBINED') {
       return {
-        attendance_type: 'SUBJECT',
-        subject_id: parseInt(fixedSub.value),
-        semester: fixedSem ? fixedSem.value : null
+        attendance_type: 'COMBINED',
+        subject_id: subId,
+        semester: sem
       };
     }
 
-    if (assignmentSelect && assignmentSelect.selectedOptions.length > 0) {
-      const opt = assignmentSelect.selectedOptions[0];
-      const sId = opt.getAttribute('data-subject-id');
-      const sem = opt.getAttribute('data-semester');
-      return {
-        attendance_type: sId ? 'SUBJECT' : 'GENERAL',
-        subject_id: sId ? parseInt(sId) : null,
-        semester: sem || null
-      };
-    }
-    return { attendance_type: 'SUBJECT', subject_id: null, semester: null };
+    return {
+      attendance_type: subId ? 'SUBJECT' : 'GENERAL',
+      subject_id: subId,
+      semester: sem
+    };
   }
 
   function onScanFailure(error) {
@@ -608,16 +642,38 @@
       rollEl.textContent = 'Roll: ' + s.roll_number;
       deptEl.textContent = s.department_code || 'General';
 
-      if (data.action === 'TIME_IN') {
+      if (data.attendance_type === 'COMBINED') {
+        const genStatus = data.general ? (data.general.action === 'TIME_IN' ? 'Time In' : (data.general.action === 'TIME_OUT' ? 'Time Out' : (data.general.action === 'ALREADY_COMPLETED' ? 'Already Completed' : data.general.status))) : 'Recorded';
+        const subStatus = data.subject ? (data.subject.action === 'TIME_IN' ? 'Time In' : (data.subject.action === 'TIME_OUT' ? 'Time Out' : (data.subject.action === 'ALREADY_COMPLETED' ? 'Already Completed' : data.subject.status))) : 'Recorded';
+        const subName = data.subject ? (data.subject.name || data.subject.code || 'Subject') : 'Subject';
+        actionBadge.className = 'badge bg-primary fs-6 px-3 py-2';
+        actionBadge.innerHTML = `<i class="bi bi-layers-fill me-1"></i>COMBINED`;
+        alertMsg.className = 'alert alert-primary mt-3 mb-0';
+        alertMsg.innerHTML = `
+          <div class="d-flex flex-column gap-1">
+            <div class="fw-bold fs-6"><i class="bi bi-check-circle-fill text-success me-1"></i>Combined Attendance Processed</div>
+            <div class="d-flex flex-wrap gap-2 mt-1">
+              <span class="badge bg-success text-white px-2 py-1">
+                <i class="bi bi-person-workspace me-1"></i>General / Journal: <strong>${genStatus}</strong>
+              </span>
+              <span class="badge bg-info text-dark px-2 py-1">
+                <i class="bi bi-journal-bookmark me-1"></i>${subName}: <strong>${subStatus}</strong>
+              </span>
+            </div>
+            <div class="extra-small text-muted mt-1">${data.message}</div>
+          </div>
+        `;
+      } else if (data.action === 'TIME_IN') {
         actionBadge.className = 'badge bg-success fs-6 px-3 py-2';
         actionBadge.textContent = 'TIME IN';
         alertMsg.className = 'alert alert-success mt-3 mb-0';
+        alertMsg.textContent = data.message;
       } else {
         actionBadge.className = 'badge bg-info text-dark fs-6 px-3 py-2';
         actionBadge.textContent = 'TIME OUT';
         alertMsg.className = 'alert alert-info mt-3 mb-0';
+        alertMsg.textContent = data.message;
       }
-      alertMsg.textContent = data.message;
 
       // Update photo or avatar
       const initial = (s.full_name && s.full_name.length > 0) ? s.full_name[0].toUpperCase() : 'S';
@@ -629,8 +685,8 @@
       }
 
       // Add to session feed
-      addSessionFeedRow(s, data.attendance);
-      showToast(data.message, "success", data.action === 'TIME_IN' ? 'Time In Recorded' : 'Time Out Recorded');
+      addSessionFeedRow(s, data.attendance || (data.subject ? data.subject.attendance : null) || {});
+      showToast(data.message, "success", "Attendance Recorded");
     } else {
       playWarningBeep();
       if (data.student) {

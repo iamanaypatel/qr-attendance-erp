@@ -104,8 +104,10 @@ class _ScannerScreenState extends State<ScannerScreen> {
     _selectedSection = item['section']?.toString();
     _selectedSubjectLabel = "${_selectedSubjectCode ?? ''} - ${_selectedSubjectName ?? ''}";
 
-    // When selecting a subject, ensure SUBJECT mode is active
-    _attendanceMode = 'SUBJECT';
+    // When selecting a subject, maintain COMBINED mode if active, otherwise set SUBJECT
+    if (_attendanceMode != 'COMBINED') {
+      _attendanceMode = 'SUBJECT';
+    }
 
     // Clear previous scan session token cache so switching subjects allows immediate scanning
     _lastScannedToken = null;
@@ -134,7 +136,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     // Scope debounce key strictly by mode + subject so switching modes or subjects allows immediate scanning of the same student
     final scanKey = _attendanceMode == 'GENERAL'
         ? "GENERAL_$rawValue"
-        : "${_selectedSubjectId ?? 'sub'}_$rawValue";
+        : (_attendanceMode == 'COMBINED'
+            ? "COMBINED_${_selectedSubjectId ?? 'sub'}_$rawValue"
+            : "${_selectedSubjectId ?? 'sub'}_$rawValue");
 
     if (scanKey == _lastScannedToken &&
         now.difference(_lastScannedTime).inMilliseconds < 2000) {
@@ -288,15 +292,26 @@ class _ScannerScreenState extends State<ScannerScreen> {
   Future<void> _processToken(String token) async {
     if (_isProcessing || _isSheetOpen) return;
 
-    // Capture context based on active attendance mode (GENERAL vs SUBJECT)
+    // Capture context based on active attendance mode (GENERAL vs SUBJECT vs COMBINED)
     final isGeneral = _attendanceMode == 'GENERAL';
+    final isCombined = _attendanceMode == 'COMBINED';
     final currentSubId = isGeneral ? null : _selectedSubjectId;
     final currentSubCode = isGeneral ? 'GENERAL' : _selectedSubjectCode;
     final currentSubName = isGeneral ? 'General Daily Attendance' : _selectedSubjectName;
     final currentSem = isGeneral ? null : _selectedSemester;
     final currentLabel = isGeneral
         ? (_coordinatorAssignments.isNotEmpty ? _coordinatorAssignments[0]['class_label'] : 'General Attendance')
-        : _selectedSubjectLabel;
+        : (isCombined ? "Combined: [${_selectedSubjectCode ?? 'SUB'}] + Journal" : _selectedSubjectLabel);
+
+    if (isCombined && currentSubId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("Please select an academic subject for Combined Attendance."),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     setState(() {
       _isProcessing = true;
@@ -352,13 +367,16 @@ class _ScannerScreenState extends State<ScannerScreen> {
 
       await _showScanFeedbackSheet(
         isSuccess: true,
-        title: result['action'] == 'TIME_IN' ? 'TIME IN RECORDED' : 'TIME OUT RECORDED',
+        title: isCombined ? 'COMBINED ATTENDANCE' : (result['action'] == 'TIME_IN' ? 'TIME IN RECORDED' : 'TIME OUT RECORDED'),
         message: result['message'] ?? 'Attendance marked successfully.',
         action: result['action'] ?? 'TIME_IN',
         student: student,
         attendance: attendance,
         subject: result['subject'] is Map ? Map<String, dynamic>.from(result['subject']) : null,
         subjectLabel: currentLabel,
+        attendanceType: result['attendance_type']?.toString() ?? _attendanceMode,
+        generalData: result['general'] is Map ? Map<String, dynamic>.from(result['general']) : null,
+        subjectData: result['subject'] is Map ? Map<String, dynamic>.from(result['subject']) : null,
       );
     } else {
       HapticFeedback.vibrate();
@@ -372,6 +390,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
         attendance: result['attendance'] is Map ? Map<String, dynamic>.from(result['attendance']) : null,
         subject: result['subject'] is Map ? Map<String, dynamic>.from(result['subject']) : null,
         subjectLabel: currentLabel,
+        attendanceType: result['attendance_type']?.toString() ?? _attendanceMode,
+        generalData: result['general'] is Map ? Map<String, dynamic>.from(result['general']) : null,
+        subjectData: result['subject'] is Map ? Map<String, dynamic>.from(result['subject']) : null,
       );
     }
   }
@@ -493,6 +514,9 @@ class _ScannerScreenState extends State<ScannerScreen> {
     Map<String, dynamic>? attendance,
     Map<String, dynamic>? subject,
     String? subjectLabel,
+    String? attendanceType,
+    Map<String, dynamic>? generalData,
+    Map<String, dynamic>? subjectData,
   }) async {
     setState(() {
       _isSheetOpen = true;
@@ -609,7 +633,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              statusStr,
+                              attendanceType == 'COMBINED' ? 'COMBINED' : statusStr,
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 12,
@@ -619,37 +643,117 @@ class _ScannerScreenState extends State<ScannerScreen> {
                           ),
                         ],
                       ),
-                      const Divider(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Row(
+                      if (attendanceType == 'COMBINED') ...[
+                        const Divider(height: 16),
+                        // Row 1: General / Journal Attendance
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            const Row(
                               children: [
-                                const Icon(Icons.menu_book, size: 14, color: Color(0xFF2563EB)),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: Text(
-                                    "[$subCode] $subName (${subSem.isNotEmpty ? subSem : 'General'})",
-                                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
+                                Icon(Icons.person_pin_outlined, size: 16, color: Color(0xFF2563EB)),
+                                SizedBox(width: 6),
+                                Text(
+                                  "General / Journal Attendance",
+                                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
                                 ),
                               ],
                             ),
-                          ),
-                          Row(
-                            children: [
-                              const Icon(Icons.access_time, size: 14, color: Colors.grey),
-                              const SizedBox(width: 4),
-                              Text(
-                                timeStr,
-                                style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (generalData?['status'] == 'Present' || generalData?['action'] == 'TIME_IN')
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                    : Colors.grey.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
                               ),
-                            ],
-                          ),
-                        ],
-                      ),
+                              child: Text(
+                                generalData?['status'] ?? (generalData?['action'] == 'TIME_IN' ? 'Present' : 'Completed'),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  color: (generalData?['status'] == 'Present' || generalData?['action'] == 'TIME_IN')
+                                      ? const Color(0xFF10B981)
+                                      : Colors.grey.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        // Row 2: Subject Attendance
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.menu_book, size: 16, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      "Subject: [$subCode] $subName",
+                                      style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: (subjectData?['status'] == 'Present' || subjectData?['action'] == 'TIME_IN')
+                                    ? const Color(0xFF10B981).withValues(alpha: 0.15)
+                                    : Colors.grey.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(6),
+                              ),
+                              child: Text(
+                                subjectData?['status'] ?? (subjectData?['action'] == 'TIME_IN' ? 'Present' : 'Completed'),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 11,
+                                  color: (subjectData?['status'] == 'Present' || subjectData?['action'] == 'TIME_IN')
+                                      ? const Color(0xFF10B981)
+                                      : Colors.grey.shade800,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ] else ...[
+                        const Divider(height: 16),
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.menu_book, size: 14, color: Color(0xFF2563EB)),
+                                  const SizedBox(width: 4),
+                                  Expanded(
+                                    child: Text(
+                                      "[$subCode] $subName (${subSem.isNotEmpty ? subSem : 'General'})",
+                                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: Color(0xFF2563EB)),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            Row(
+                              children: [
+                                const Icon(Icons.access_time, size: 14, color: Colors.grey),
+                                const SizedBox(width: 4),
+                                Text(
+                                  timeStr,
+                                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.black87),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -767,7 +871,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                 )
               : Column(
                   children: [
-                    // ATTENDANCE MODE SWITCHER (General vs Subject)
+                    // ATTENDANCE MODE SWITCHER (General vs Subject vs Combined)
                     if (_coordinatorAssignments.isNotEmpty)
                       Container(
                         margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
@@ -813,7 +917,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      "General Attendance",
+                                      "General",
                                       style: TextStyle(
                                         color: _attendanceMode == 'GENERAL' ? Colors.white : Colors.grey.shade700,
                                         fontWeight: FontWeight.bold,
@@ -869,7 +973,7 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      "Subject Attendance",
+                                      "Subject",
                                       style: TextStyle(
                                         color: _attendanceMode == 'SUBJECT' ? Colors.white : Colors.grey.shade700,
                                         fontWeight: FontWeight.bold,
@@ -880,12 +984,236 @@ class _ScannerScreenState extends State<ScannerScreen> {
                                 ),
                               ),
                             ),
+                            Expanded(
+                              child: GestureDetector(
+                                onTap: () {
+                                  if (_subjects.isEmpty) {
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      const SnackBar(
+                                        content: Text("No academic subjects assigned for Combined Attendance."),
+                                        duration: Duration(seconds: 2),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                    return;
+                                  }
+                                  if (_selectedSubjectId == null && _subjects.isNotEmpty) {
+                                    _selectSubjectAtIndex(0);
+                                  }
+                                  if (_attendanceMode != 'COMBINED') {
+                                    setState(() {
+                                      _attendanceMode = 'COMBINED';
+                                      _lastScannedToken = null;
+                                      _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+                                    });
+                                    ScaffoldMessenger.of(context).showSnackBar(
+                                      SnackBar(
+                                        content: Text("Switched to Combined Attendance (General + [${_selectedSubjectCode ?? ''}] ${_selectedSubjectName ?? ''}). Ready to scan."),
+                                        duration: const Duration(seconds: 2),
+                                        backgroundColor: const Color(0xFF7C3AED),
+                                        behavior: SnackBarBehavior.floating,
+                                      ),
+                                    );
+                                  }
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(vertical: 8),
+                                  decoration: BoxDecoration(
+                                    color: _attendanceMode == 'COMBINED' ? const Color(0xFF7C3AED) : Colors.transparent,
+                                    borderRadius: BorderRadius.circular(8),
+                                    boxShadow: _attendanceMode == 'COMBINED'
+                                        ? [
+                                            BoxShadow(
+                                              color: const Color(0xFF7C3AED).withValues(alpha: 0.3),
+                                              blurRadius: 4,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ]
+                                        : null,
+                                  ),
+                                  child: Center(
+                                    child: Row(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          Icons.layers_rounded,
+                                          size: 13,
+                                          color: _attendanceMode == 'COMBINED' ? Colors.white : Colors.grey.shade700,
+                                        ),
+                                        const SizedBox(width: 3),
+                                        Text(
+                                          "Combined",
+                                          style: TextStyle(
+                                            color: _attendanceMode == 'COMBINED' ? Colors.white : Colors.grey.shade700,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
                           ],
                         ),
                       ),
 
+                    // COMBINED ATTENDANCE CARDS
+                    if (_attendanceMode == 'COMBINED') ...[
+                      Container(
+                        margin: const EdgeInsets.fromLTRB(16, 6, 16, 4),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF5F3FF),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.4)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF7C3AED),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'COMBINED ATTENDANCE',
+                                    style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+                                  ),
+                                  child: Text(
+                                    _coordinatorAssignments.isNotEmpty
+                                        ? (_coordinatorAssignments[0]['semester'] ?? 'General')
+                                        : 'Combined',
+                                    style: const TextStyle(color: Color(0xFF7C3AED), fontWeight: FontWeight.bold, fontSize: 11),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              "CLASS: ${_coordinatorAssignments.isNotEmpty ? (_coordinatorAssignments[0]['class_label'] ?? 'Class Coordinator') : 'Class'}",
+                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Color(0xFF4C1D95)),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              "FACULTY: ${ApiService().currentUser?['full_name'] ?? 'Faculty'}",
+                              style: TextStyle(fontSize: 12, color: Colors.purple.shade900, fontWeight: FontWeight.w500),
+                            ),
+                            const SizedBox(height: 4),
+                            const Text(
+                              "⚡ 1 QR Scan marks both General & Subject Attendance without duplicate counts.",
+                              style: TextStyle(fontSize: 11, color: Color(0xFF6D28D9)),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_subjects.length == 1)
+                        // Exactly 1 assigned subject -> Hide dropdown, display locked subject directly
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    "SUBJECT: [${_selectedSubjectCode ?? ''}] ${_selectedSubjectName ?? ''}",
+                                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                                  ),
+                                  Text(
+                                    "Sem: ${_selectedSemester ?? '-'} • Teacher: ${_selectedTeacherName ?? ''}",
+                                    style: const TextStyle(fontSize: 11, color: Colors.grey),
+                                  ),
+                                ],
+                              ),
+                              const Chip(
+                                label: Text("Auto Locked", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Color(0xFF4C1D95))),
+                                backgroundColor: Color(0xFFEDE9FE),
+                                padding: EdgeInsets.zero,
+                              ),
+                            ],
+                          ),
+                        )
+                      else if (_subjects.length > 1)
+                        // Multiple subjects -> Show selector for coordinator to choose subject
+                        Container(
+                          margin: const EdgeInsets.fromLTRB(16, 2, 16, 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          decoration: BoxDecoration(
+                            color: Theme.of(context).colorScheme.surface,
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFF7C3AED).withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.book_outlined, size: 18, color: Color(0xFF7C3AED)),
+                              const SizedBox(width: 8),
+                              const Text("SUBJECT: ", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: Color(0xFF7C3AED))),
+                              Expanded(
+                                child: DropdownButtonHideUnderline(
+                                  child: DropdownButton<int>(
+                                    value: _selectedSubjectIndex,
+                                    isDense: true,
+                                    isExpanded: true,
+                                    items: _subjects.asMap().entries.map((entry) {
+                                      final idx = entry.key;
+                                      final sub = entry.value;
+                                      final code = sub['code'] ?? sub['subject_code'] ?? '';
+                                      final name = sub['name'] ?? sub['subject_name'] ?? '';
+                                      final sem = sub['semester'] ?? '';
+                                      return DropdownMenuItem<int>(
+                                        value: idx,
+                                        child: Text(
+                                          "[$code] $name ($sem)",
+                                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600),
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
+                                      );
+                                    }).toList(),
+                                    onChanged: (idx) {
+                                      if (idx != null) {
+                                        setState(() {
+                                          _selectSubjectAtIndex(idx);
+                                        });
+                                        ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text("Combined mode subject: [${_selectedSubjectCode ?? ''}] ${_selectedSubjectName ?? ''}."),
+                                            duration: const Duration(seconds: 2),
+                                            backgroundColor: const Color(0xFF7C3AED),
+                                          ),
+                                        );
+                                      }
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ]
                     // GENERAL ATTENDANCE CARD
-                    if (_attendanceMode == 'GENERAL')
+                    else if (_attendanceMode == 'GENERAL')
                       Container(
                         margin: const EdgeInsets.fromLTRB(16, 8, 16, 4),
                         padding: const EdgeInsets.all(12),
@@ -1118,7 +1446,21 @@ class _ScannerScreenState extends State<ScannerScreen> {
                         width: double.infinity,
                         child: ElevatedButton.icon(
                           onPressed: () {
-                            if (_subjects.length > 1) {
+                            if (_attendanceMode == 'GENERAL') {
+                              setState(() {
+                                _isScanningActive = true;
+                                _lastScannedToken = null;
+                                _lastScannedTime = DateTime.now().subtract(const Duration(seconds: 10));
+                              });
+                              ScaffoldMessenger.of(context).hideCurrentSnackBar();
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text("General Attendance scanner active and ready."),
+                                  duration: Duration(seconds: 2),
+                                  backgroundColor: Color(0xFF2563EB),
+                                ),
+                              );
+                            } else if (_subjects.length > 1) {
                               _completeSessionAndSwitchSubject();
                             } else {
                               setState(() {
@@ -1129,25 +1471,35 @@ class _ScannerScreenState extends State<ScannerScreen> {
                               ScaffoldMessenger.of(context).hideCurrentSnackBar();
                               ScaffoldMessenger.of(context).showSnackBar(
                                 SnackBar(
-                                  content: Text("${_selectedSubjectCode ?? 'Subject'} scanner active and ready."),
+                                  content: Text("${_attendanceMode == 'COMBINED' ? 'Combined' : (_selectedSubjectCode ?? 'Subject')} scanner active and ready."),
                                   duration: const Duration(seconds: 2),
-                                  backgroundColor: const Color(0xFF10B981),
+                                  backgroundColor: _attendanceMode == 'COMBINED' ? const Color(0xFF7C3AED) : const Color(0xFF10B981),
                                 ),
                               );
                             }
                           },
                           icon: Icon(
-                            _subjects.length > 1 ? Icons.swap_horiz_rounded : Icons.check_circle_rounded,
+                            _attendanceMode == 'GENERAL'
+                                ? Icons.check_circle_rounded
+                                : (_subjects.length > 1 ? Icons.swap_horiz_rounded : Icons.check_circle_rounded),
                             size: 20,
                           ),
                           label: Text(
-                            _subjects.length > 1
-                                ? "Switch Subject (${_selectedSubjectCode ?? ''})"
-                                : "${_selectedSubjectCode ?? 'Subject'} Active",
+                            _attendanceMode == 'GENERAL'
+                                ? "General Attendance Active"
+                                : (_attendanceMode == 'COMBINED'
+                                    ? (_subjects.length > 1
+                                        ? "Switch Subject (${_selectedSubjectCode ?? ''})"
+                                        : "Combined Active (${_selectedSubjectCode ?? ''})")
+                                    : (_subjects.length > 1
+                                        ? "Switch Subject (${_selectedSubjectCode ?? ''})"
+                                        : "${_selectedSubjectCode ?? 'Subject'} Active")),
                             style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: const Color(0xFF2563EB),
+                            backgroundColor: _attendanceMode == 'COMBINED'
+                                ? const Color(0xFF7C3AED)
+                                : const Color(0xFF2563EB),
                             foregroundColor: Colors.white,
                             padding: const EdgeInsets.symmetric(vertical: 11),
                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),

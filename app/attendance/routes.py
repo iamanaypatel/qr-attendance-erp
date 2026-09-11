@@ -131,6 +131,14 @@ def scanner():
         )
         if current_user.is_teacher and current_user.teacher_profile:
             recent_query = recent_query.filter_by(teacher_id=current_user.teacher_profile.id)
+    elif attendance_type == 'COMBINED':
+        if current_user.is_teacher and current_user.teacher_profile:
+            recent_query = recent_query.filter(
+                (Attendance.teacher_id == current_user.teacher_profile.id) |
+                (Attendance.marked_by == current_user.id)
+            )
+        elif selected_subject_id:
+            recent_query = recent_query.filter_by(subject_id=selected_subject_id)
     else:
         if selected_subject_id:
             recent_query = recent_query.filter_by(subject_id=selected_subject_id)
