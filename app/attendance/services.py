@@ -30,6 +30,9 @@ def process_qr_attendance(token: str, marker_user=None, subject_id=None, semeste
     token = token.strip()
     student = Student.query.filter_by(qr_token=token).first()
     if not student:
+        student = Student.query.filter((Student.student_id == token) | (Student.roll_number == token)).first()
+
+    if not student:
         return {
             'success': False,
             'message': 'Unrecognized QR code. Student not found in system.'
