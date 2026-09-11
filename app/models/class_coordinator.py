@@ -11,6 +11,8 @@ class ClassCoordinator(db.Model):
     semester = db.Column(db.String(32), nullable=False, index=True) # e.g. "4th" or "4th Semester"
     section = db.Column(db.String(32), nullable=True) # e.g. "A", "B"
     session_id = db.Column(db.Integer, db.ForeignKey('academic_sessions.id', ondelete='SET NULL'), nullable=True)
+    effective_from = db.Column(db.Date, nullable=True)
+    effective_to = db.Column(db.Date, nullable=True)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -27,6 +29,7 @@ class ClassCoordinator(db.Model):
     @classmethod
     def assign_coordinator(cls, teacher_id: int, semester: str, department_id: int = None,
                            course: str = None, section: str = None, session_id: int = None,
+                           effective_from = None, effective_to = None,
                            is_active: bool = True):
         """
         Assign a teacher as the active Class Coordinator for the specified class.
@@ -65,7 +68,11 @@ class ClassCoordinator(db.Model):
         ).first()
 
         if same_asgn:
-            same_asgn.is_active = True
+            same_asgn.is_active = is_active
+            if effective_from is not None:
+                same_asgn.effective_from = effective_from
+            if effective_to is not None:
+                same_asgn.effective_to = effective_to
             same_asgn.updated_at = datetime.utcnow()
             asgn = same_asgn
         else:
@@ -76,12 +83,49 @@ class ClassCoordinator(db.Model):
                 semester=sem_clean,
                 section=sec_clean,
                 session_id=session_id,
-                is_active=True
+                effective_from=effective_from,
+                effective_to=effective_to,
+                is_active=is_active
             )
             db.session.add(asgn)
 
         db.session.commit()
         return asgn
+
+    @property
+    def assigned_at(self):
+        """Historical assignment timestamp."""
+        return self.created_at
+
+    def is_effective_on(self, target_date) -> bool:
+        """
+        Verify if this coordinator assignment was in effect on the target attendance date.
+        Uses date-sensitive checks:
+        1. Explicit effective_from / effective_to bounds.
+        2. Linked AcademicSession start_date / end_date bounds.
+        3. Fallback to assignment creation date or active status.
+        """
+        if not target_date:
+            return self.is_active
+
+        # Check explicit effective date range
+        if self.effective_from and target_date < self.effective_from:
+            return False
+        if self.effective_to and target_date > self.effective_to:
+            return False
+        if self.effective_from or self.effective_to:
+            return True
+
+        # Check linked academic session date range
+        if self.academic_session:
+            sess = self.academic_session
+            if sess.start_date and target_date < sess.start_date:
+                return False
+            if sess.end_date and target_date > sess.end_date:
+                return False
+            return True
+
+        return True
 
     @property
     def class_label(self) -> str:
@@ -111,6 +155,9 @@ class ClassCoordinator(db.Model):
             'section': self.section,
             'session_id': self.session_id,
             'session_name': self.academic_session.name if self.academic_session else None,
+            'effective_from': self.effective_from.strftime('%Y-%m-%d') if self.effective_from else None,
+            'effective_to': self.effective_to.strftime('%Y-%m-%d') if self.effective_to else None,
+            'assigned_at': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None,
             'class_label': self.class_label,
             'is_active': self.is_active,
             'created_at': self.created_at.strftime('%Y-%m-%d') if self.created_at else None

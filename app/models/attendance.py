@@ -14,7 +14,9 @@ class Attendance(db.Model):
     time_in = db.Column(db.Time, nullable=True)
     time_out = db.Column(db.Time, nullable=True)
     status = db.Column(db.String(20), default='Present', nullable=False) # 'Present', 'Absent', 'Late', 'Half Day'
-    attendance_type = db.Column(db.String(20), default='SUBJECT', nullable=False, index=True) # 'GENERAL' or 'SUBJECT'
+    attendance_type = db.Column(db.String(20), default='SUBJECT', nullable=False, index=True) # 'GENERAL', 'SUBJECT', or 'LEGACY'
+    classification_reason = db.Column(db.String(255), nullable=True) # Exact rule/reason applied during role classification
+    classified_at = db.Column(db.DateTime, nullable=True)
     marked_by = db.Column(db.Integer, db.ForeignKey('users.id', ondelete='SET NULL'), nullable=True)
     method = db.Column(db.String(20), default='QR', nullable=False) # 'QR', 'Manual', 'Admin'
     remarks = db.Column(db.String(255), nullable=True)
@@ -102,6 +104,8 @@ class Attendance(db.Model):
             'status': self.status,
             'method': self.method,
             'marked_by': self.marker.get_display_name() if self.marker else 'System',
+            'classification_reason': self.classification_reason,
+            'classified_at': self.classified_at.strftime('%Y-%m-%d %H:%M:%S') if self.classified_at else None,
             'remarks': self.remarks
         }
 

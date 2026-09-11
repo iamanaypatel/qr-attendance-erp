@@ -54,8 +54,8 @@ def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swa
 
     # Table Headers at Row 6
     headers = [
-        "S.No", "Student ID", "Student Name", "Department", "Subject", "Semester",
-        "Date", "Time In", "Time Out", "Status", "Method", "Marked By"
+        "S.No", "Student ID", "Student Name", "Department", "Type", "Subject", "Semester",
+        "Date", "Time In", "Time Out", "Status", "Method", "Marked By", "Classification Reason"
     ]
     header_row = 6
     for col_idx, header in enumerate(headers, 1):
@@ -71,7 +71,8 @@ def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swa
     for idx, r in enumerate(records, 1):
         s = r.student
         dept_code = s.department.code if (s and s.department) else "N/A"
-        sub_name = f"[{r.subject.subject_code}] {r.subject.subject_name}" if r.subject else "General"
+        att_type = r.attendance_type or ('SUBJECT' if r.subject_id else 'GENERAL')
+        sub_name = f"[{r.subject.subject_code}] {r.subject.subject_name}" if r.subject else ("—" if att_type == 'GENERAL' else "N/A")
         sem_name = r.semester or (s.semester if s else "-")
         date_str = r.date.strftime('%Y-%m-%d') if r.date else ""
         in_str = r.time_in.strftime('%I:%M %p') if r.time_in else "-"
@@ -83,6 +84,7 @@ def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swa
             s.student_id if s else "N/A",
             s.full_name if s else "N/A",
             dept_code,
+            att_type,
             sub_name,
             sem_name,
             date_str,
@@ -90,7 +92,8 @@ def generate_attendance_excel(records, institution_name: str = "Dr. Virendra Swa
             out_str,
             r.status,
             r.method,
-            marker_name
+            marker_name,
+            r.classification_reason or ""
         ]
 
         is_even = (idx % 2 == 0)

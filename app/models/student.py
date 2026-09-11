@@ -48,13 +48,15 @@ class Student(db.Model):
         if attendance_type:
             query = query.filter(Attendance.attendance_type == attendance_type)
         else:
-            # Check if explicit GENERAL records exist
-            has_general = self.attendances.filter(
-                (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
-            ).first() is not None
+            # Strictly use GENERAL attendance, never pollute with SUBJECT or LEGACY
+            has_general = self.attendances.filter(Attendance.attendance_type == 'GENERAL').first() is not None
             if has_general:
+                query = query.filter(Attendance.attendance_type == 'GENERAL')
+            else:
+                # Fallback before migration: records with no subject, excluding LEGACY
                 query = query.filter(
-                    (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+                    Attendance.subject_id.is_(None),
+                    Attendance.attendance_type != 'LEGACY'
                 )
 
         if start_date:
@@ -91,7 +93,10 @@ class Student(db.Model):
         from app.models.subject import Subject
         from app.models.attendance import Attendance
 
-        query = self.attendances
+        query = self.attendances.filter(
+            Attendance.attendance_type == 'SUBJECT',
+            Attendance.subject_id.isnot(None)
+        )
         if start_date:
             query = query.filter(Attendance.date >= start_date)
         if end_date:
@@ -131,7 +136,10 @@ class Student(db.Model):
             sub_records = records_by_subject.get(sid, [])
 
             # Compute total conducted classes vs student present classes
-            total_conducted_query = Attendance.query.filter(Attendance.subject_id == subject.id)
+            total_conducted_query = Attendance.query.filter(
+                Attendance.subject_id == subject.id,
+                Attendance.attendance_type == 'SUBJECT'
+            )
             if self.semester:
                 total_conducted_query = total_conducted_query.filter(
                     (Attendance.semester.ilike(self.semester.strip())) | (Attendance.semester.is_(None))

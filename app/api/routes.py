@@ -338,10 +338,11 @@ def dashboard_stats():
             .all()
         )
     else:
-        # If General Attendance has not yet been recorded today, strictly count UNIQUE students
+        # If General Attendance has not yet been recorded today, strictly count UNIQUE students (excluding LEGACY)
         present_today = db.session.query(func.count(func.distinct(Attendance.student_id))).filter(
             Attendance.date == today,
-            Attendance.status.in_(['Present', 'Late', 'Half Day'])
+            Attendance.status.in_(['Present', 'Late', 'Half Day']),
+            Attendance.attendance_type != 'LEGACY'
         ).scalar() or 0
 
         present_records = (
@@ -349,7 +350,8 @@ def dashboard_stats():
             .join(Student)
             .filter(
                 Attendance.date == today,
-                Attendance.status.in_(['Present', 'Late', 'Half Day'])
+                Attendance.status.in_(['Present', 'Late', 'Half Day']),
+                Attendance.attendance_type != 'LEGACY'
             )
             .order_by(Attendance.time_in.asc().nullslast())
             .all()
@@ -683,7 +685,10 @@ def student_subject_attendance_detail(subject_id):
     from app.models.subject import Subject
     subject = Subject.query.get_or_404(subject_id)
 
-    records = student.attendances.filter_by(subject_id=subject_id).order_by(Attendance.date.desc()).all()
+    records = student.attendances.filter(
+        Attendance.subject_id == subject_id,
+        Attendance.attendance_type == 'SUBJECT'
+    ).order_by(Attendance.date.desc()).all()
     total_classes = len(records)
     present_classes = sum(1 for a in records if a.status in ('Present', 'Late', 'Half Day'))
     absent_classes = sum(1 for a in records if a.status == 'Absent')

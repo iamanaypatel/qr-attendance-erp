@@ -110,6 +110,7 @@
           <option value="">All Attendance Types</option>
           <option value="GENERAL" {% if args.get('type') == 'GENERAL' %}selected{% endif %}>General Daily Attendance</option>
           <option value="SUBJECT" {% if args.get('type') == 'SUBJECT' %}selected{% endif %}>Subject-wise Attendance</option>
+          <option value="LEGACY" {% if args.get('type') == 'LEGACY' %}selected{% endif %}>Legacy / Historical Attendance</option>
         </select>
       </div>
       <div class="col-md-3">
@@ -178,15 +179,16 @@
         <thead>
           <tr>
             <th>Student</th>
-            <th>Dept</th>
-            <th>Subject</th>
-            <th>Semester</th>
             <th>Date</th>
+            <th>Type</th>
+            <th>Subject</th>
+            <th>Faculty / Marker</th>
+            <th>Dept</th>
+            <th>Semester</th>
             <th>Time In</th>
             <th>Time Out</th>
             <th>Status</th>
             <th>Method</th>
-            <th>Marked By</th>
           </tr>
         </thead>
         <tbody>
@@ -197,17 +199,38 @@
                   <div class="fw-semibold">{{ r.student.full_name }}</div>
                   <small class="text-muted font-monospace">{{ r.student.student_id }} &bull; Roll: {{ r.student.roll_number }}</small>
                 </td>
-                <td><span class="badge bg-secondary">{{ r.student.department.code if r.student.department else 'GEN' }}</span></td>
+                <td class="fw-semibold text-nowrap">{{ r.date.strftime('%d %b %Y') }}</td>
                 <td>
-                  {% if r.attendance_type == 'GENERAL' or not r.subject_id %}
-                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle">General Daily</span>
+                  {% if r.attendance_type == 'GENERAL' %}
+                    <span class="badge badge-soft-success font-mono">GENERAL</span>
+                  {% elif r.attendance_type == 'SUBJECT' %}
+                    <span class="badge badge-soft-primary font-mono">SUBJECT</span>
+                  {% elif r.attendance_type == 'LEGACY' %}
+                    <span class="badge badge-soft-secondary font-mono" title="{{ r.classification_reason or 'Legacy record' }}">LEGACY</span>
                   {% else %}
-                    <span class="badge badge-soft-primary">{{ r.subject.subject_code if r.subject else 'SUB' }}</span>
-                    <small class="text-muted d-block text-truncate" style="max-width: 140px;" title="{{ r.subject.subject_name if r.subject else '' }}">{{ r.subject.subject_name if r.subject else '' }}</small>
+                    <span class="badge badge-soft-secondary font-mono">{{ r.attendance_type }}</span>
                   {% endif %}
                 </td>
+                <td>
+                  {% if r.attendance_type == 'GENERAL' %}
+                    <span class="text-muted">—</span>
+                  {% elif r.subject %}
+                    <span class="badge badge-soft-primary">{{ r.subject.subject_code }}</span>
+                    <small class="text-muted d-block text-truncate" style="max-width: 140px;" title="{{ r.subject.subject_name }}">{{ r.subject.subject_name }}</small>
+                  {% elif r.attendance_type == 'LEGACY' %}
+                    <span class="text-muted fst-italic">{{ r.remarks or 'Historical' }}</span>
+                  {% else %}
+                    <span class="text-muted">—</span>
+                  {% endif %}
+                </td>
+                <td class="small">
+                  <div class="fw-medium">{{ r.teacher.full_name if r.teacher else (r.marker.username if r.marker else 'System') }}</div>
+                  {% if r.classification_reason %}
+                    <small class="text-muted d-block text-truncate" style="max-width: 160px;" title="{{ r.classification_reason }}"><i class="bi bi-info-circle me-1"></i>{{ r.classification_reason }}</small>
+                  {% endif %}
+                </td>
+                <td><span class="badge bg-secondary">{{ r.student.department.code if r.student.department else 'GEN' }}</span></td>
                 <td><span class="badge badge-soft-info">{{ r.semester or (r.student.semester or '-') }}</span></td>
-                <td class="fw-semibold">{{ r.date.strftime('%d %b %Y') }}</td>
                 <td>{{ r.time_in.strftime('%I:%M %p') if r.time_in else '-' }}</td>
                 <td>{{ r.time_out.strftime('%I:%M %p') if r.time_out else '-' }}</td>
                 <td>
@@ -220,17 +243,14 @@
                   {% endif %}
                 </td>
                 <td><span class="badge bg-secondary">{{ r.method }}</span></td>
-                <td class="small text-muted">
-                  {{ r.teacher.full_name if r.teacher else (r.marker.username if r.marker else 'System') }}
-                </td>
               </tr>
             {% endfor %}
           {% else %}
             <tr>
-              <td colspan="10" class="text-center py-5 text-muted">
+              <td colspan="11" class="text-center py-5 text-muted">
                 <i class="bi bi-search fs-1 d-block mb-2"></i>
                 <h5>No attendance records match your criteria</h5>
-                <p class="small">Try adjusting or clearing your date and department filters.</p>
+                <p class="small">Try adjusting or clearing your date, type, and department filters.</p>
               </td>
             </tr>
           {% endif %}

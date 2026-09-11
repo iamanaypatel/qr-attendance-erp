@@ -48,25 +48,48 @@ def dashboard():
     total_students = Student.query.filter_by(is_active=True).count()
     total_teachers = Teacher.query.filter_by(is_active=True).count()
     
-    # Present today (status in Present, Late, Half Day)
-    present_today = Attendance.query.filter(
+    # Present today (strictly unique students for General Attendance, excluding LEGACY)
+    has_general_today = Attendance.query.filter(
         Attendance.date == today,
-        Attendance.status.in_(['Present', 'Late', 'Half Day'])
-    ).count()
+        Attendance.attendance_type == 'GENERAL'
+    ).first() is not None
+
+    if has_general_today:
+        present_today = db.session.query(func.count(func.distinct(Attendance.student_id))).filter(
+            Attendance.date == today,
+            Attendance.status.in_(['Present', 'Late', 'Half Day']),
+            Attendance.attendance_type == 'GENERAL'
+        ).scalar() or 0
+    else:
+        present_today = db.session.query(func.count(func.distinct(Attendance.student_id))).filter(
+            Attendance.date == today,
+            Attendance.status.in_(['Present', 'Late', 'Half Day']),
+            Attendance.attendance_type != 'LEGACY'
+        ).scalar() or 0
+
     absent_today = max(0, total_students - present_today)
     attendance_rate = round((present_today / total_students * 100), 1) if total_students > 0 else 0.0
 
-    # 7-Day Trend
+    # 7-Day Trend (unique students, strictly excluding LEGACY)
     trend_labels = []
     trend_data = []
     for i in range(6, -1, -1):
         d = today - timedelta(days=i)
         trend_labels.append(d.strftime('%a (%d/%m)'))
-        count = Attendance.query.filter(
-            Attendance.date == d,
-            Attendance.status.in_(['Present', 'Late', 'Half Day'])
-        ).count()
-        trend_data.append(count)
+        has_gen_d = Attendance.query.filter(Attendance.date == d, Attendance.attendance_type == 'GENERAL').first() is not None
+        if has_gen_d:
+            cnt = db.session.query(func.count(func.distinct(Attendance.student_id))).filter(
+                Attendance.date == d,
+                Attendance.status.in_(['Present', 'Late', 'Half Day']),
+                Attendance.attendance_type == 'GENERAL'
+            ).scalar() or 0
+        else:
+            cnt = db.session.query(func.count(func.distinct(Attendance.student_id))).filter(
+                Attendance.date == d,
+                Attendance.status.in_(['Present', 'Late', 'Half Day']),
+                Attendance.attendance_type != 'LEGACY'
+            ).scalar() or 0
+        trend_data.append(cnt)
 
     # Department breakdown
     dept_labels = []
@@ -74,14 +97,15 @@ def dashboard():
     departments = Department.query.all()
     for dept in departments:
         dept_labels.append(dept.code)
-        c = Attendance.query.join(Student).filter(
+        c = db.session.query(func.count(func.distinct(Attendance.student_id))).join(Student).filter(
             Student.department_id == dept.id,
             Attendance.date == today,
-            Attendance.status.in_(['Present', 'Late', 'Half Day'])
-        ).count()
+            Attendance.status.in_(['Present', 'Late', 'Half Day']),
+            Attendance.attendance_type != 'LEGACY'
+        ).scalar() or 0
         dept_data.append(c)
 
-    # Recent Scans & Present Today Roster
+    # Recent Scans & Present Today Roster (deduplicated by student)
     recent_scans = (
         Attendance.query
         .join(Student)
@@ -91,16 +115,23 @@ def dashboard():
         .all()
     )
 
-    present_students = (
+    all_present = (
         Attendance.query
         .join(Student)
         .filter(
             Attendance.date == today,
-            Attendance.status.in_(['Present', 'Late', 'Half Day'])
+            Attendance.status.in_(['Present', 'Late', 'Half Day']),
+            Attendance.attendance_type != 'LEGACY'
         )
         .order_by(Attendance.time_in.asc().nullslast())
         .all()
     )
+    seen_student_ids = set()
+    present_students = []
+    for p in all_present:
+        if p.student_id not in seen_student_ids:
+            seen_student_ids.add(p.student_id)
+            present_students.append(p)
 
     return render_template(
         'admin/dashboard.html',

@@ -1,4 +1,5 @@
 import os
+import click
 from datetime import datetime
 from flask import Flask, redirect, url_for, render_template, request, jsonify
 from flask_login import current_user
@@ -96,6 +97,25 @@ def create_app(config_name=None):
     # Error handlers
     register_error_handlers(app)
 
+    # CLI commands
+    @app.cli.group("attendance")
+    def attendance_cli():
+        """Attendance management CLI."""
+        pass
+
+    @attendance_cli.command("classify-historical")
+    @click.option("--dry-run", is_flag=True, help="Simulate classification without modifying database.")
+    @click.option("--force", is_flag=True, help="Force re-evaluation of all records.")
+    def classify_historical_cmd(dry_run, force):
+        """Classify historical attendance records by original role context (GENERAL / SUBJECT / LEGACY)."""
+        from app.attendance.classifier import run_historical_classification_migration
+        click.echo(f"Starting historical attendance classification (dry_run={dry_run}, force={force})...")
+        res = run_historical_classification_migration(dry_run=dry_run, force=force)
+        click.echo(
+            f"✓ Completed! Total: {res['total_after']} | GENERAL: {res['general_count']} | "
+            f"SUBJECT: {res['subject_count']} | LEGACY: {res['legacy_count']} | Reclassified: {res['reclassified_count']}"
+        )
+
     # Cache control for brand assets so updates reflect immediately
     @app.after_request
     def add_header(response):
@@ -165,6 +185,35 @@ def _auto_bootstrap_database(app):
                         try:
                             db.session.execute(text("UPDATE attendances SET attendance_type = 'GENERAL' WHERE subject_id IS NULL"))
                             db.session.execute(text("UPDATE attendances SET attendance_type = 'SUBJECT' WHERE subject_id IS NOT NULL"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+
+                    if 'classification_reason' not in cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN classification_reason VARCHAR(255)"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+
+                    if 'classified_at' not in cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN classified_at DATETIME"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+
+                if 'class_coordinators' in inspector.get_table_names():
+                    coord_cols = [c['name'] for c in inspector.get_columns('class_coordinators')]
+                    if 'effective_from' not in coord_cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE class_coordinators ADD COLUMN effective_from DATE"))
+                            db.session.commit()
+                        except Exception as e:
+                            db.session.rollback()
+                    if 'effective_to' not in coord_cols:
+                        try:
+                            db.session.execute(text("ALTER TABLE class_coordinators ADD COLUMN effective_to DATE"))
                             db.session.commit()
                         except Exception as e:
                             db.session.rollback()
@@ -396,6 +445,13 @@ def _auto_bootstrap_database(app):
                             )
                             db.session.add(new_assign)
                             app.logger.info(f"Auto-bootstrap: Assigned {scode} to {teacher_obj.full_name} for {sub.semester} Semester")
+
+            # Idempotent historical attendance classification
+            try:
+                from app.attendance.classifier import run_historical_classification_migration
+                run_historical_classification_migration(dry_run=False)
+            except Exception as hce:
+                app.logger.warning(f"Historical attendance classification bootstrap notice: {hce}")
 
             db.session.commit()
             app.logger.info("✓ Database auto-bootstrap completed.")

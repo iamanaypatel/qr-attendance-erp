@@ -30,17 +30,16 @@ def build_filtered_query(args):
 
     filter_desc = []
 
-    if att_type in ('GENERAL', 'SUBJECT'):
+    if att_type in ('GENERAL', 'SUBJECT', 'LEGACY'):
         if att_type == 'GENERAL':
-            query = query.filter(
-                (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
-            )
-            filter_desc.append("Type: General Attendance")
-        else:
-            query = query.filter(
-                (Attendance.attendance_type == 'SUBJECT') & (Attendance.subject_id.isnot(None))
-            )
-            filter_desc.append("Type: Subject Attendance")
+            query = query.filter(Attendance.attendance_type == 'GENERAL')
+            filter_desc.append("Type: General Daily Attendance")
+        elif att_type == 'SUBJECT':
+            query = query.filter(Attendance.attendance_type == 'SUBJECT')
+            filter_desc.append("Type: Subject-wise Attendance")
+        elif att_type == 'LEGACY':
+            query = query.filter(Attendance.attendance_type == 'LEGACY')
+            filter_desc.append("Type: Legacy / Historical Attendance")
 
     if from_date_str:
         try:
@@ -204,22 +203,24 @@ def export_csv():
     # Headers
     writer.writerow([
         "Student ID", "Student Name", "Department", "Course", "Semester",
-        "Subject Code", "Subject Name", "Faculty",
-        "Date", "Time In", "Time Out", "Status", "Method", "Marked By", "Remarks"
+        "Attendance Type", "Subject Code", "Subject Name", "Faculty",
+        "Date", "Time In", "Time Out", "Status", "Method", "Marked By", "Classification Reason", "Remarks"
     ])
 
     for r in records:
         s = r.student
         sub = r.subject
         t = r.teacher
+        att_type = r.attendance_type or ('SUBJECT' if r.subject_id else 'GENERAL')
         writer.writerow([
             s.student_id if s else "",
             s.full_name if s else "",
             s.department.code if (s and s.department) else "",
             s.course if s else "",
             s.semester if s else "",
-            sub.subject_code if sub else "GEN",
-            sub.subject_name if sub else "General Attendance",
+            att_type,
+            sub.subject_code if sub else ("—" if att_type == 'GENERAL' else "GEN"),
+            sub.subject_name if sub else ("General Daily Attendance" if att_type == 'GENERAL' else "Legacy"),
             t.full_name if t else (r.marker.username if r.marker else "System"),
             r.date.strftime('%Y-%m-%d') if r.date else "",
             r.time_in.strftime('%I:%M %p') if r.time_in else "",
@@ -227,6 +228,7 @@ def export_csv():
             r.status,
             r.method,
             r.marker.username if r.marker else "System",
+            r.classification_reason or "",
             r.remarks or ""
         ])
 
