@@ -17,11 +17,108 @@ csrf.exempt(api_bp)
 
 @api_bp.route('/health')
 def health():
+    import os
     return jsonify({
         'status': 'healthy',
         'system': 'QR Attendance ERP V2.0',
+        'commit': os.environ.get('RENDER_GIT_COMMIT', 'local'),
         'timestamp': datetime.utcnow().isoformat()
     })
+
+@api_bp.route('/diagnostics/db-forensic')
+def db_forensic():
+    """
+    Forensic diagnostics route to inspect the database schema, tables, and test query execution
+    directly on the deployed live environment.
+    """
+    import os
+    import traceback
+    from sqlalchemy import inspect, text
+
+    results = {
+        'commit': os.environ.get('RENDER_GIT_COMMIT', 'local'),
+        'env': os.environ.get('FLASK_ENV', 'unknown'),
+        'dialect': db.engine.dialect.name,
+        'driver': db.engine.url.drivername
+    }
+    try:
+        inspector = inspect(db.engine)
+        existing_tables = inspector.get_table_names()
+        results['tables'] = existing_tables
+
+        table_cols = {}
+        for t in ['attendances', 'subjects', 'teachers', 'students', 'academic_sessions', 'class_coordinators', 'teacher_subject_assignments', 'holidays', 'users']:
+            if t in existing_tables:
+                table_cols[t] = [c['name'] for c in inspector.get_columns(t)]
+            else:
+                table_cols[t] = 'TABLE_MISSING'
+        results['table_columns'] = table_cols
+
+        # Test each section query
+        test_results = {}
+        
+        # 1. Dashboard
+        try:
+            today = get_current_ist_date()
+            stu_count = Student.query.count()
+            tch_count = Teacher.query.count()
+            att_count = Attendance.query.count()
+            gen_count = Attendance.query.filter(Attendance.date == today, Attendance.attendance_type == 'GENERAL').count()
+            test_results['dashboard'] = {
+                'status': 'OK',
+                'students': stu_count,
+                'teachers': tch_count,
+                'total_attendances': att_count,
+                'general_today': gen_count
+            }
+        except Exception as ex:
+            test_results['dashboard'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
+
+        # 2. Calendar / Holiday
+        try:
+            from app.models.holiday import Holiday
+            holidays = Holiday.query.all()
+            test_results['calendar'] = {'status': 'OK', 'holidays_count': len(holidays)}
+        except Exception as ex:
+            test_results['calendar'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
+
+        # 3. Take Attendance (Scanner)
+        try:
+            from app.models.subject import Subject
+            subs = Subject.query.all()
+            test_results['scanner'] = {'status': 'OK', 'subjects_count': len(subs)}
+        except Exception as ex:
+            test_results['scanner'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
+
+        # 4. Class Coordinator
+        try:
+            from app.models.class_coordinator import ClassCoordinator
+            coords = ClassCoordinator.query.all()
+            test_results['class_coordinators'] = {'status': 'OK', 'count': len(coords)}
+        except Exception as ex:
+            test_results['class_coordinators'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
+
+        # 5. Subject Assignments
+        try:
+            from app.models.subject_assignment import TeacherSubjectAssignment
+            asgns = TeacherSubjectAssignment.query.all()
+            test_results['subject_assignments'] = {'status': 'OK', 'count': len(asgns)}
+        except Exception as ex:
+            test_results['subject_assignments'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
+
+        # 6. Subjects
+        try:
+            from app.models.subject import Subject
+            subs = Subject.query.all()
+            rendered_subs = [s.to_dict() for s in subs[:3]]
+            test_results['subjects'] = {'status': 'OK', 'sample_count': len(subs), 'sample': rendered_subs}
+        except Exception as ex:
+            test_results['subjects'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
+
+        results['tests'] = test_results
+        return jsonify({'success': True, 'forensics': results}), 200
+    except Exception as e:
+        return jsonify({'success': False, 'error': f"{type(e).__name__}: {str(e)}", 'trace': traceback.format_exc()}), 500
 
 @api_bp.route('/auth/login', methods=['POST'])
 def api_login():

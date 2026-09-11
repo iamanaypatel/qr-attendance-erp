@@ -145,81 +145,36 @@ def _auto_bootstrap_database(app):
 
             db.create_all()
 
-            # Ensure attendances table has subject_id, teacher_id, semester, section, attendance_type columns
-            # AND enforce composite uniqueness on (student_id, date, subject_id)
+            # Universal schema synchronization: Compare SQLAlchemy metadata with existing tables/columns
+            # and automatically add any missing columns safely across PostgreSQL and SQLite
             try:
                 inspector = inspect(db.engine)
-                if 'attendances' in inspector.get_table_names():
-                    cols = [c['name'] for c in inspector.get_columns('attendances')]
-                    if 'subject_id' not in cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN subject_id INTEGER REFERENCES subjects(id)"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-                    if 'teacher_id' not in cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN teacher_id INTEGER REFERENCES teachers(id)"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-                    if 'semester' not in cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN semester VARCHAR(32)"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-                    if 'section' not in cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN section VARCHAR(32)"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-                    if 'attendance_type' not in cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN attendance_type VARCHAR(20) DEFAULT 'SUBJECT' NOT NULL"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-                        # Backfill legacy attendance records safely
-                        try:
-                            db.session.execute(text("UPDATE attendances SET attendance_type = 'GENERAL' WHERE subject_id IS NULL"))
-                            db.session.execute(text("UPDATE attendances SET attendance_type = 'SUBJECT' WHERE subject_id IS NOT NULL"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
+                existing_tables = set(inspector.get_table_names())
+                dialect_name = db.engine.dialect.name
 
-                    if 'classification_reason' not in cols:
+                for table_name, model_table in db.metadata.tables.items():
+                    if table_name in existing_tables:
                         try:
-                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN classification_reason VARCHAR(255)"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
+                            existing_cols = {c['name'] for c in inspector.get_columns(table_name)}
+                            for col in model_table.columns:
+                                if col.name not in existing_cols:
+                                    col_type = col.type.compile(db.engine.dialect)
+                                    if dialect_name == 'postgresql':
+                                        sql = f'ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS "{col.name}" {col_type}'
+                                    else:
+                                        sql = f'ALTER TABLE {table_name} ADD COLUMN "{col.name}" {col_type}'
+                                    try:
+                                        db.session.execute(text(sql))
+                                        db.session.commit()
+                                        app.logger.info(f"Auto-migration: Added column {table_name}.{col.name} ({col_type})")
+                                    except Exception as ce:
+                                        db.session.rollback()
+                                        app.logger.warning(f"Column migration notice for {table_name}.{col.name}: {ce}")
+                        except Exception as te:
+                            app.logger.warning(f"Table inspection notice for {table_name}: {te}")
 
-                    if 'classified_at' not in cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE attendances ADD COLUMN classified_at DATETIME"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-
-                if 'class_coordinators' in inspector.get_table_names():
-                    coord_cols = [c['name'] for c in inspector.get_columns('class_coordinators')]
-                    if 'effective_from' not in coord_cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE class_coordinators ADD COLUMN effective_from DATE"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-                    if 'effective_to' not in coord_cols:
-                        try:
-                            db.session.execute(text("ALTER TABLE class_coordinators ADD COLUMN effective_to DATE"))
-                            db.session.commit()
-                        except Exception as e:
-                            db.session.rollback()
-
-                    # Migrate UNIQUE constraint to include subject_id
-                    dialect_name = db.engine.dialect.name
+                # Migrate unique constraints for Subject vs General Attendance isolation
+                if 'attendances' in existing_tables:
                     if dialect_name == 'sqlite':
                         res = db.session.execute(text("SELECT sql FROM sqlite_master WHERE type='table' AND name='attendances'")).fetchone()
                         table_sql = res[0] if res else ""
@@ -292,7 +247,7 @@ def _auto_bootstrap_database(app):
                             app.logger.warning(f"PostgreSQL attendances constraint migration notice: {pge}")
             except Exception as e:
                 db.session.rollback()
-                app.logger.warning(f"Attendance table inspection/alter skipped: {e}")
+                app.logger.warning(f"Schema inspection/auto-migration notice: {e}")
 
             from datetime import date
 
@@ -463,43 +418,53 @@ def _auto_bootstrap_database(app):
             app.logger.warning(f"Database auto-bootstrap skipped: {e}")
 
 def register_error_handlers(app):
-    def make_error_response(error_code, title, message):
+    def make_error_response(error_code, title, message, details=None):
         if request.is_json or request.path.startswith('/api/'):
-            return jsonify({
+            resp = {
                 'success': False,
                 'error_code': error_code,
                 'message': message
-            }), error_code
+            }
+            if details:
+                resp['details'] = details
+            return jsonify(resp), error_code
         return render_template(
             f'errors/{error_code}.html' if os.path.exists(f'app/templates/errors/{error_code}.html') else 'errors/general.html',
             error_code=error_code,
             title=title,
-            message=message
+            message=message,
+            error_details=details
         ), error_code
 
     @app.errorhandler(400)
     def bad_request(e):
-        return make_error_response(400, 'Bad Request', 'The server could not understand the request or invalid form data was supplied.')
+        return make_error_response(400, 'Bad Request', 'The server could not understand the request or invalid form data was supplied.', details=str(e))
 
     @app.errorhandler(401)
     def unauthorized(e):
-        return make_error_response(401, 'Unauthorized', 'You must log in with valid credentials to access this resource.')
+        return make_error_response(401, 'Unauthorized', 'You must log in with valid credentials to access this resource.', details=str(e))
 
     @app.errorhandler(403)
     def forbidden(e):
-        return make_error_response(403, 'Access Forbidden', 'You do not have administrative or role-level permissions to access this page.')
+        return make_error_response(403, 'Access Forbidden', 'You do not have administrative or role-level permissions to access this page.', details=str(e))
 
     @app.errorhandler(404)
     def not_found(e):
-        return make_error_response(404, 'Page Not Found', 'The page or resource you are looking for does not exist or has been moved.')
+        return make_error_response(404, 'Page Not Found', 'The page or resource you are looking for does not exist or has been moved.', details=str(e))
 
     @app.errorhandler(413)
     def request_entity_too_large(e):
-        return make_error_response(413, 'File Too Large', 'The uploaded file exceeds the maximum allowed size (5MB). Please select a smaller photo.')
+        return make_error_response(413, 'File Too Large', 'The uploaded file exceeds the maximum allowed size (5MB). Please select a smaller photo.', details=str(e))
 
     @app.errorhandler(500)
     def internal_error(e):
         db.session.rollback()
-        app.logger.error(f"500 Internal Server Error: {e}", exc_info=True)
-        return make_error_response(500, 'Server Error', 'An unexpected internal server error occurred. Please try again or check the details.')
+        import traceback
+        tb = traceback.format_exc()
+        app.logger.error(f"500 Internal Server Error: {e}\n{tb}")
+        orig_err = getattr(e, 'original_exception', e)
+        err_msg = f"{type(orig_err).__name__}: {str(orig_err)}"
+        trace_summary = tb[-800:] if tb else ''
+        details = f"{err_msg}\n{trace_summary}" if trace_summary else err_msg
+        return make_error_response(500, 'Server Error', 'An unexpected internal server error occurred. Please try again or check the details.', details=details)
 

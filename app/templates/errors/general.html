@@ -10,6 +10,12 @@
         <div class="display-1 fw-bold text-primary mb-2 brand-font">{{ error_code }}</div>
         <h3 class="fw-bold mb-3">{{ title }}</h3>
         <p class="text-muted mb-4">{{ message }}</p>
+        {% if error_details %}
+          <div class="alert alert-danger text-start font-mono small mb-4 text-break" style="max-height: 200px; overflow-y: auto;">
+            <strong>Error Details:</strong>
+            <pre class="mb-0 mt-1" style="white-space: pre-wrap; font-size: 0.8rem;">{{ error_details }}</pre>
+          </div>
+        {% endif %}
         <div class="d-flex justify-content-center gap-3">
           <a href="/" class="btn btn-primary-glow px-4 py-2">
             <i class="bi bi-house-door-fill me-1"></i> Return Home

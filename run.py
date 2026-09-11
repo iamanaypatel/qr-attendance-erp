@@ -12,6 +12,9 @@ from app.models.holiday import Holiday
 from app.models.session import AcademicSession
 from app.models.settings import SystemSetting
 from app.models.audit import AuditLog
+from app.models.subject import Subject
+from app.models.subject_assignment import TeacherSubjectAssignment
+from app.models.class_coordinator import ClassCoordinator
 
 app = create_app(os.environ.get('FLASK_ENV', 'development'))
 
@@ -27,7 +30,10 @@ def make_shell_context():
         'Holiday': Holiday,
         'AcademicSession': AcademicSession,
         'SystemSetting': SystemSetting,
-        'AuditLog': AuditLog
+        'AuditLog': AuditLog,
+        'Subject': Subject,
+        'TeacherSubjectAssignment': TeacherSubjectAssignment,
+        'ClassCoordinator': ClassCoordinator
     }
 
 @app.cli.command('init-db')
