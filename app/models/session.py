@@ -12,11 +12,18 @@ class AcademicSession(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
     def to_dict(self):
+        def _fmt(d):
+            if not d:
+                return ''
+            if hasattr(d, 'strftime'):
+                return d.strftime('%Y-%m-%d')
+            return str(d)
+
         return {
             'id': self.id,
             'name': self.name,
-            'start_date': self.start_date.strftime('%Y-%m-%d'),
-            'end_date': self.end_date.strftime('%Y-%m-%d'),
+            'start_date': _fmt(self.start_date),
+            'end_date': _fmt(self.end_date),
             'is_active': self.is_active
         }
 

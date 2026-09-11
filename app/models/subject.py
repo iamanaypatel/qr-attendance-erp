@@ -89,7 +89,7 @@ class Subject(db.Model):
         for asgn in active_asgns:
             if asgn.teacher and asgn.teacher.is_active:
                 sem = format_semester_name(asgn.semester or self.semester)
-                teacher_name = asgn.teacher.full_name or (asgn.teacher.user.name if asgn.teacher.user else f"Faculty #{asgn.teacher_id}")
+                teacher_name = asgn.teacher.full_name or (asgn.teacher.user.get_display_name() if asgn.teacher.user else f"Faculty #{asgn.teacher_id}")
                 key = (asgn.teacher_id, sem)
                 if key not in seen:
                     seen.add(key)
@@ -109,7 +109,7 @@ class Subject(db.Model):
             for t in self.teachers:
                 if t.is_active:
                     sem = format_semester_name(self.semester)
-                    teacher_name = t.full_name or (t.user.name if t.user else f"Faculty #{t.id}")
+                    teacher_name = t.full_name or (t.user.get_display_name() if t.user else f"Faculty #{t.id}")
                     key = (t.id, sem)
                     if key not in seen:
                         seen.add(key)

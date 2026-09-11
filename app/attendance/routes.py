@@ -296,6 +296,7 @@ def manual():
     )
 
 @attendance_bp.route('/calendar', endpoint='calendar')
+@attendance_bp.route('/calendar', endpoint='calendar_view')
 @login_required
 def calendar_view():
     year = request.args.get('year', datetime.now().year, type=int)
@@ -372,25 +373,25 @@ def add_holiday():
 
     if not title or not hdate_str:
         flash('Holiday title and date are required.', 'danger')
-        return redirect(url_for('attendance.calendar_view'))
+        return redirect(url_for('attendance.calendar'))
 
     try:
         hdate = datetime.strptime(hdate_str, '%Y-%m-%d').date()
     except ValueError:
         flash('Invalid date format.', 'danger')
-        return redirect(url_for('attendance.calendar_view'))
+        return redirect(url_for('attendance.calendar'))
 
     existing = Holiday.query.filter_by(date=hdate).first()
     if existing:
         flash(f"A holiday '{existing.title}' already exists on {hdate}.", 'warning')
-        return redirect(url_for('attendance.calendar_view'))
+        return redirect(url_for('attendance.calendar'))
 
     holiday = Holiday(title=title, date=hdate, description=desc)
     db.session.add(holiday)
     db.session.commit()
     AuditLog.log('HOLIDAY_ADD', f"Added holiday {title} on {hdate}", user_id=current_user.id)
     flash(f"Holiday '{title}' added.", 'success')
-    return redirect(url_for('attendance.calendar_view', year=hdate.year, month=hdate.month))
+    return redirect(url_for('attendance.calendar', year=hdate.year, month=hdate.month))
 
 @attendance_bp.route('/calendar/holiday/<int:id>/delete', methods=['POST'])
 @login_required
@@ -402,4 +403,4 @@ def delete_holiday(id):
     db.session.commit()
     AuditLog.log('HOLIDAY_DELETE', f"Deleted holiday {title}", user_id=current_user.id)
     flash(f"Holiday '{title}' deleted.", 'info')
-    return redirect(url_for('attendance.calendar_view'))
+    return redirect(url_for('attendance.calendar'))

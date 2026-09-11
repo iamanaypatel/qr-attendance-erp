@@ -95,6 +95,10 @@ class User(UserMixin, db.Model):
             return self.teacher_profile.full_name
         return self.username
 
+    @property
+    def name(self) -> str:
+        return self.get_display_name()
+
     def __repr__(self) -> str:
         return f"<User {self.username} [{self.role}]>"
 

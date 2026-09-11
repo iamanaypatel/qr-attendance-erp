@@ -74,7 +74,10 @@ class Teacher(db.Model):
                             is_active=True
                         )
                         db.session.add(existing)
-                db.session.commit()
+                try:
+                    db.session.commit()
+                except Exception:
+                    db.session.rollback()
                 assignments = self.subject_assignments.filter_by(is_active=True).all()
         return assignments
 
