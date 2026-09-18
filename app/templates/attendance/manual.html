@@ -10,8 +10,8 @@
       <p class="text-muted mb-0">Record or modify student attendance sessions with full audit trail attribution.</p>
     </div>
     <div class="d-flex gap-2">
-      <a href="{{ url_for('attendance.scanner') }}" class="btn btn-primary-glow">
-        <i class="bi bi-qr-code-scan me-1"></i> Launch QR Scanner
+      <a href="{{ url_for('attendance.take_attendance') }}" class="btn btn-primary-glow">
+        <i class="bi bi-card-checklist me-1"></i> Take Attendance
       </a>
       <a href="{{ url_for('reports.index') }}" class="btn btn-outline-secondary">
         <i class="bi bi-file-earmark-bar-graph me-1"></i> Attendance Reports

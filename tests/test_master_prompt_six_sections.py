@@ -43,7 +43,7 @@ def test_six_critical_sections_empty_and_populated(client, seeded_db):
     # 2. Take Attendance (Admin scanner)
     res_scan_admin = client.get('/attendance/scanner')
     assert res_scan_admin.status_code == 200, f"Scanner failed with {res_scan_admin.status_code}"
-    assert 'QR Attendance Scanner' in res_scan_admin.data.decode('utf-8')
+    assert 'Take Attendance' in res_scan_admin.data.decode('utf-8')
 
     # 3. Class Coordinator
     res_coord = client.get('/admin/class-coordinators')
@@ -80,7 +80,7 @@ def test_six_critical_sections_empty_and_populated(client, seeded_db):
     # Teacher Scanner (Take Attendance)
     res_t_scan = client.get('/attendance/scanner')
     assert res_t_scan.status_code == 200
-    assert 'QR Attendance Scanner' in res_t_scan.data.decode('utf-8')
+    assert 'Take Attendance' in res_t_scan.data.decode('utf-8')
 
     # Teacher Calendar
     res_t_cal = client.get('/attendance/calendar')
@@ -122,7 +122,7 @@ def test_six_critical_sections_multiple_assignments_and_coordinators(client, see
     # Check all 6 pages with multiple items
     for url, kw in [
         ('/attendance/calendar', 'Calendar'),
-        ('/attendance/scanner', 'QR Attendance Scanner'),
+        ('/attendance/scanner', 'Take Attendance'),
         ('/admin/class-coordinators', 'CS501' if False else 'Class Coordinator'),
         ('/admin/subject-assignments', 'CS501'),
         ('/admin/subjects', 'CS501'),

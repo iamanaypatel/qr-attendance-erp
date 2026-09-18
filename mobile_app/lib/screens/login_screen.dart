@@ -284,7 +284,7 @@ class _LoginScreenState extends State<LoginScreen> {
                             'assets/images/app_logo.png',
                             fit: BoxFit.cover,
                             errorBuilder: (ctx, err, stack) => const Icon(
-                              Icons.qr_code_scanner_rounded,
+                              Icons.school_rounded,
                               size: 48,
                               color: Colors.white,
                             ),
@@ -344,7 +344,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          "Access Admin, Faculty Scanner, or Student Portal",
+                          "Access Admin, Faculty Attendance, or Student Portal",
                           style: TextStyle(fontSize: 12, color: Colors.grey),
                         ),
                         const SizedBox(height: 18),

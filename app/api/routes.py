@@ -87,13 +87,13 @@ def db_forensic():
         except Exception as ex:
             test_results['calendar'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
 
-        # 3. Take Attendance (Scanner)
+        # 3. Take Attendance
         try:
             from app.models.subject import Subject
             subs = Subject.query.all()
-            test_results['scanner'] = {'status': 'OK', 'subjects_count': len(subs)}
+            test_results['take_attendance'] = {'status': 'OK', 'subjects_count': len(subs)}
         except Exception as ex:
-            test_results['scanner'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
+            test_results['take_attendance'] = {'status': 'ERROR', 'error': f"{type(ex).__name__}: {str(ex)}", 'trace': traceback.format_exc()}
 
         # 4. Class Coordinator
         try:
@@ -759,11 +759,10 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
                 return None, ('You are not assigned to this subject.', 403)
 
         if att_type == 'GENERAL':
-            if not teacher.is_class_coordinator:
-                return None, ('Unauthorized: Only designated Class Coordinators can access General attendance rosters.', 403)
             coords = teacher.get_active_coordinator_assignments()
-            if not coords:
-                return None, ('Unauthorized: You have no active Class Coordinator assignments.', 403)
+            asgns = teacher.get_active_assignments()
+            if not coords and not asgns and not teacher.is_class_coordinator:
+                return None, ('Unauthorized: You have no active teaching or coordinator assignments.', 403)
 
     # Base query: Active students only
     query = Student.query.filter_by(is_active=True)
@@ -820,7 +819,7 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
 
     elif att_type == 'GENERAL' and current_user.is_teacher and current_user.teacher_profile:
         coords = current_user.teacher_profile.get_active_coordinator_assignments()
-        coord = next((c for c in coords if (not semester or semesters_match(c.semester, semester))), None)
+        coord = next((c for c in coords if (not semester or semesters_match(c.semester, semester))), None) if coords else None
         if coord:
             if coord.department_id:
                 dept_matches = query.filter(Student.department_id == coord.department_id)
@@ -830,6 +829,10 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
                 course_matches = query.filter(Student.course.ilike(f"%{coord.course.strip()}%"))
                 if course_matches.count() > 0:
                     query = course_matches
+        elif current_user.teacher_profile.department_id:
+            dept_matches = query.filter(Student.department_id == current_user.teacher_profile.department_id)
+            if dept_matches.count() > 0:
+                query = dept_matches
 
     query = query.order_by(Student.roll_number.asc(), Student.full_name.asc())
     candidates = query.all()
@@ -843,6 +846,7 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
 
 @api_bp.route('/teacher/students', methods=['GET'])
 @api_bp.route('/teacher/roster', methods=['GET'])
+@api_bp.route('/attendance/roster', methods=['GET'])
 @login_required
 def teacher_students():
     """
@@ -921,6 +925,7 @@ def teacher_students():
             'course': s.course,
             'photo_url': s.photo_url,
             'current_status': current_status,
+            'status': current_status,
             'time_in': time_in_str
         })
 
@@ -937,6 +942,8 @@ def teacher_students():
 
 @api_bp.route('/attendance/mark-bulk', methods=['POST'])
 @api_bp.route('/attendance/bulk', methods=['POST'])
+@api_bp.route('/attendance/bulk-mark', methods=['POST'])
+@api_bp.route('/teacher/bulk-mark', methods=['POST'])
 @login_required
 def mark_bulk_attendance():
     """
@@ -1133,6 +1140,9 @@ def mark_bulk_attendance():
         return jsonify({
             'success': True,
             'message': f"Attendance successfully recorded: {present_count} Present, {absent_count} Absent ({len(roster)} Total).",
+            'present_count': present_count,
+            'absent_count': absent_count,
+            'total': len(roster),
             'summary': {
                 'total': len(roster),
                 'present': present_count,

@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:mobile_app/services/api_service.dart';
-import 'package:mobile_app/screens/scanner_screen.dart';
 
 class TakeAttendanceScreen extends StatefulWidget {
   const TakeAttendanceScreen({super.key});
@@ -19,6 +18,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
   int? _selectedSubjectId;
   String? _selectedSemester;
   String? _selectedSection = 'All';
+  DateTime _selectedDate = DateTime.now();
 
   List<Map<String, dynamic>> _roster = [];
   final Map<dynamic, String> _studentStatusMap = {}; // id -> 'Present' | 'Absent'
@@ -147,6 +147,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
       semester: semParam,
       section: _selectedSection == 'All' ? null : _selectedSection,
       attendanceType: _attendanceMode,
+      date: DateFormat('yyyy-MM-dd').format(_selectedDate),
     );
 
     if (mounted) {
@@ -387,6 +388,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
       semester: _selectedSemester,
       section: _selectedSection == 'All' ? null : _selectedSection,
       attendanceType: _attendanceMode,
+      date: DateFormat('yyyy-MM-dd').format(_selectedDate),
     );
 
     if (!mounted) return;
@@ -436,16 +438,6 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
         title: const Text("Take Attendance", style: TextStyle(fontWeight: FontWeight.bold)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.qr_code_scanner_rounded),
-            tooltip: "Switch to Camera Scanner",
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ScannerScreen()),
-              );
-            },
-          ),
-          IconButton(
             icon: const Icon(Icons.refresh_rounded),
             tooltip: "Refresh Roster",
             onPressed: _loadRoster,
@@ -456,27 +448,26 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
               children: [
-                // Mode selector if coordinator or admin
-                if (_coordinatorAssignments.isNotEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-                    child: SegmentedButton<String>(
-                      segments: const [
-                        ButtonSegment(value: 'SUBJECT', label: Text("Subject")),
-                        ButtonSegment(value: 'GENERAL', label: Text("General")),
-                        ButtonSegment(value: 'COMBINED', label: Text("Combined")),
-                      ],
-                      selected: {_attendanceMode},
-                      onSelectionChanged: (val) {
-                        setState(() {
-                          _attendanceMode = val.first;
-                        });
-                        _loadRoster();
-                      },
-                    ),
+                // Mode selector (Subject vs Journal vs Combined)
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                  child: SegmentedButton<String>(
+                    segments: const [
+                      ButtonSegment(value: 'SUBJECT', label: Text("Subject")),
+                      ButtonSegment(value: 'GENERAL', label: Text("Journal")),
+                      ButtonSegment(value: 'COMBINED', label: Text("Combined")),
+                    ],
+                    selected: {_attendanceMode},
+                    onSelectionChanged: (val) {
+                      setState(() {
+                        _attendanceMode = val.first;
+                      });
+                      _loadRoster();
+                    },
                   ),
+                ),
 
-                // Controls: Subject, Semester, Section
+                // Controls: Subject, Semester, Section, Date
                 Card(
                   margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   elevation: 1,
@@ -486,7 +477,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        if (_attendanceMode != 'GENERAL')
+                        if (_attendanceMode != 'GENERAL') ...[
                           if (_subjects.length == 1)
                             Container(
                               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
@@ -533,7 +524,8 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                               }).toList(),
                               onChanged: _onSubjectChanged,
                             ),
-                        const SizedBox(height: 8),
+                          const SizedBox(height: 8),
+                        ],
                         Row(
                           children: [
                             Expanded(
@@ -544,7 +536,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                                 decoration: const InputDecoration(
                                   labelText: "Semester",
                                   isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                 ),
                                 items: [
                                   'All Semesters',
@@ -556,7 +548,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                                   '6th Semester',
                                   '7th Semester',
                                   '8th Semester',
-                                ].map((sem) => DropdownMenuItem(value: sem, child: Text(sem))).toList(),
+                                ].map((sem) => DropdownMenuItem(value: sem, child: Text(sem, style: const TextStyle(fontSize: 12)))).toList(),
                                 onChanged: (val) {
                                   setState(() {
                                     _selectedSemester = val;
@@ -565,7 +557,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                                 },
                               ),
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(width: 6),
                             Expanded(
                               flex: 2,
                               child: DropdownButtonFormField<String>(
@@ -574,10 +566,10 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                                 decoration: const InputDecoration(
                                   labelText: "Section",
                                   isDense: true,
-                                  contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                                  contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
                                 ),
                                 items: ['All', 'A', 'B', 'C']
-                                    .map((sec) => DropdownMenuItem(value: sec, child: Text("Sec $sec")))
+                                    .map((sec) => DropdownMenuItem(value: sec, child: Text("Sec $sec", style: const TextStyle(fontSize: 12))))
                                     .toList(),
                                 onChanged: (val) {
                                   setState(() {
@@ -585,6 +577,44 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                                   });
                                   _loadRoster();
                                 },
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              flex: 3,
+                              child: InkWell(
+                                onTap: () async {
+                                  final picked = await showDatePicker(
+                                    context: context,
+                                    initialDate: _selectedDate,
+                                    firstDate: DateTime(2020),
+                                    lastDate: DateTime(2030),
+                                  );
+                                  if (picked != null && picked != _selectedDate) {
+                                    setState(() {
+                                      _selectedDate = picked;
+                                    });
+                                    _loadRoster();
+                                  }
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: InputDecorator(
+                                  decoration: const InputDecoration(
+                                    labelText: "Date",
+                                    isDense: true,
+                                    contentPadding: EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                                  ),
+                                  child: Row(
+                                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                    children: [
+                                      Text(
+                                        DateFormat('dd/MM/yy').format(_selectedDate),
+                                        style: const TextStyle(fontSize: 12),
+                                      ),
+                                      const Icon(Icons.calendar_today_rounded, size: 13, color: Color(0xFF2563EB)),
+                                    ],
+                                  ),
+                                ),
                               ),
                             ),
                           ],

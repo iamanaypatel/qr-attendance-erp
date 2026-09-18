@@ -321,3 +321,34 @@ def test_class_coordinator_general_attendance(client, setup_teacher_and_subjects
     ).first()
     assert att2 is not None
     assert att2.status == 'Absent'
+
+
+def test_teacher_mode_switching_and_roster_loading(client, setup_teacher_and_subjects):
+    env = setup_teacher_and_subjects
+    client.post('/auth/login', data={'identity': 'teacher', 'password': 'Teacher@1234'})
+
+    # 1. Subject mode
+    r_sub = client.get(f"/api/teacher/students?attendance_type=SUBJECT&subject_id={env['sub1'].id}&semester=4th")
+    assert r_sub.status_code == 200
+    assert r_sub.get_json()['success'] is True
+    assert len(r_sub.get_json()['students']) == 2
+
+    # 2. Journal mode (GENERAL) - works for all teachers without 403
+    r_gen = client.get("/api/teacher/students?attendance_type=GENERAL&semester=4th")
+    assert r_gen.status_code == 200
+    assert r_gen.get_json()['success'] is True
+    assert len(r_gen.get_json()['students']) == 2
+
+    # 3. Combined mode
+    r_comb = client.get(f"/api/teacher/students?attendance_type=COMBINED&subject_id={env['sub1'].id}&semester=4th")
+    assert r_comb.status_code == 200
+    assert r_comb.get_json()['success'] is True
+    assert len(r_comb.get_json()['students']) == 2
+
+
+def test_scanner_redirects_to_take_attendance(client, setup_teacher_and_subjects):
+    client.post('/auth/login', data={'identity': 'teacher', 'password': 'Teacher@1234'})
+    resp = client.get('/attendance/scanner', follow_redirects=True)
+    assert resp.status_code == 200
+    assert 'Take Attendance' in resp.data.decode('utf-8')
+
