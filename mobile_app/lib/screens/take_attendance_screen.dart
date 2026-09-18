@@ -454,7 +454,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                   child: SegmentedButton<String>(
                     segments: const [
                       ButtonSegment(value: 'SUBJECT', label: Text("Subject")),
-                      ButtonSegment(value: 'GENERAL', label: Text("Journal")),
+                      ButtonSegment(value: 'GENERAL', label: Text("General")),
                       ButtonSegment(value: 'COMBINED', label: Text("Combined")),
                     ],
                     selected: {_attendanceMode},

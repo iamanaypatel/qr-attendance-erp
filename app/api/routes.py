@@ -731,6 +731,24 @@ def teacher_subjects():
         'coordinator_assignments': coordinator_list
     })
 
+def normalize_attendance_type(raw_type, subject_id=None):
+    """
+    Standardize attendance mode string across all endpoints and tab selectors.
+    Normalizes 'GENERAL', 'JOURNAL', 'General Attendance', 'Journal Attendance' -> 'GENERAL'.
+    'COMBINED', 'Combined Attendance' -> 'COMBINED'.
+    'SUBJECT', 'Subject Attendance' -> 'SUBJECT'.
+    """
+    if not raw_type or not str(raw_type).strip():
+        return 'SUBJECT' if subject_id else 'GENERAL'
+    s = str(raw_type).strip().upper()
+    if 'COMBIN' in s:
+        return 'COMBINED'
+    if 'GEN' in s or 'JOURNAL' in s:
+        return 'GENERAL'
+    if 'SUB' in s:
+        return 'SUBJECT'
+    return 'SUBJECT' if subject_id else 'GENERAL'
+
 def _fetch_authorized_roster(subject_id=None, semester=None, section=None, attendance_type='SUBJECT'):
     """
     Authoritative student roster query with strict teacher authorization, semester filtering,
@@ -742,9 +760,7 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
     if not (current_user.is_teacher or current_user.is_admin):
         return None, ('Unauthorized: Only faculty and administrators can access student rosters.', 403)
 
-    att_type = (attendance_type or '').strip().upper()
-    if att_type not in ('SUBJECT', 'GENERAL', 'COMBINED'):
-        att_type = 'SUBJECT' if subject_id else 'GENERAL'
+    att_type = normalize_attendance_type(attendance_type, subject_id)
 
     # Security check: Teacher subject assignment or coordinator assignment
     if current_user.is_teacher:
@@ -752,7 +768,7 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
         if not teacher:
             return None, ('Teacher profile not found.', 404)
 
-        if att_type in ('SUBJECT', 'COMBINED') or subject_id:
+        if att_type in ('SUBJECT', 'COMBINED'):
             if not subject_id:
                 return None, ('Subject ID is required for Subject Attendance.', 400)
             if not teacher.is_assigned_to_subject(subject_id):
@@ -780,6 +796,7 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
                 Student.semester.ilike(f"{d}th%"),
                 Student.semester == d,
                 Student.semester.ilike(f"{d} %"),
+                Student.semester.ilike(f"%{d}%"),
                 Student.semester == sem_clean
             ))
         else:
@@ -790,7 +807,7 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
         query = query.filter(Student.section.ilike(str(section).strip()))
 
     # Filter Department & Course
-    if subject_id:
+    if att_type in ('SUBJECT', 'COMBINED') and subject_id:
         sub_obj = db.session.get(Subject, subject_id) if hasattr(db.session, 'get') else Subject.query.get(subject_id)
         dept_id = None
         course_val = None
@@ -829,10 +846,17 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
                 course_matches = query.filter(Student.course.ilike(f"%{coord.course.strip()}%"))
                 if course_matches.count() > 0:
                     query = course_matches
-        elif current_user.teacher_profile.department_id:
-            dept_matches = query.filter(Student.department_id == current_user.teacher_profile.department_id)
-            if dept_matches.count() > 0:
-                query = dept_matches
+        else:
+            assigned_dept_ids = set()
+            if current_user.teacher_profile.department_id:
+                assigned_dept_ids.add(current_user.teacher_profile.department_id)
+            for asgn in current_user.teacher_profile.get_active_assignments():
+                if asgn.department_id:
+                    assigned_dept_ids.add(asgn.department_id)
+            if assigned_dept_ids:
+                dept_matches = query.filter(Student.department_id.in_(assigned_dept_ids))
+                if dept_matches.count() > 0:
+                    query = dept_matches
 
     query = query.order_by(Student.roll_number.asc(), Student.full_name.asc())
     candidates = query.all()
@@ -857,9 +881,8 @@ def teacher_students():
     subject_id = request.args.get('subject_id', type=int)
     semester = request.args.get('semester', '').strip()
     section = request.args.get('section', '').strip()
-    att_type = (request.args.get('attendance_type') or request.args.get('type') or '').strip().upper()
-    if not att_type:
-        att_type = 'SUBJECT' if subject_id else 'GENERAL'
+    raw_type = request.args.get('attendance_type') or request.args.get('type')
+    att_type = normalize_attendance_type(raw_type, subject_id)
 
     date_str = request.args.get('date', '').strip()
     if date_str:
@@ -967,9 +990,8 @@ def mark_bulk_attendance():
 
     semester = (data.get('semester') or '').strip()
     section = (data.get('section') or '').strip()
-    att_type = (data.get('attendance_type') or '').strip().upper()
-    if not att_type:
-        att_type = 'SUBJECT' if subject_id else 'GENERAL'
+    raw_type = data.get('attendance_type') or data.get('type')
+    att_type = normalize_attendance_type(raw_type, subject_id)
 
     date_str = (data.get('date') or '').strip()
     if date_str:
