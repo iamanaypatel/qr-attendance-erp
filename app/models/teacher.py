@@ -36,16 +36,18 @@ class Teacher(db.Model):
         if semester and semester.strip():
             import re
             sem_clean = semester.strip().lower()
+            if sem_clean in ('all', 'any', 'general'):
+                return True
             req_digits = re.findall(r'\d+', sem_clean)
             # If an assignment matches the semester (exact, substring, or digit match e.g. '4th' vs '4th Semester')
             for asgn in assignments:
-                if not asgn.semester:
+                if not asgn.semester or asgn.semester.strip().lower() in ('general', 'all', 'any', ''):
                     return True
                 asgn_sem = asgn.semester.strip().lower()
                 if asgn_sem == sem_clean or sem_clean in asgn_sem or asgn_sem in sem_clean:
                     return True
                 asgn_digits = re.findall(r'\d+', asgn_sem)
-                if req_digits and asgn_digits and req_digits == asgn_digits:
+                if req_digits and asgn_digits and req_digits[0] == asgn_digits[0]:
                     return True
             # Explicit semester was specified and teacher is not assigned to this semester
             return False

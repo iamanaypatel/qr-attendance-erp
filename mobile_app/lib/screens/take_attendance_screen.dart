@@ -40,6 +40,37 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
     super.dispose();
   }
 
+  String _normalizeSemester(String? sem) {
+    if (sem == null || sem.isEmpty) return '4th Semester';
+    final s = sem.trim().toLowerCase();
+    final digits = RegExp(r'\d+').firstMatch(s);
+    if (digits != null) {
+      final d = digits.group(0);
+      switch (d) {
+        case '1': return '1st Semester';
+        case '2': return '2nd Semester';
+        case '3': return '3rd Semester';
+        case '4': return '4th Semester';
+        case '5': return '5th Semester';
+        case '6': return '6th Semester';
+        case '7': return '7th Semester';
+        case '8': return '8th Semester';
+      }
+    }
+    return '4th Semester';
+  }
+
+  String _normalizeSection(String? sec) {
+    if (sec == null || sec.isEmpty || sec.toLowerCase() == 'none' || sec.toLowerCase() == 'all') {
+      return 'All';
+    }
+    final upper = sec.trim().toUpperCase();
+    if (['A', 'B', 'C'].contains(upper)) {
+      return upper;
+    }
+    return 'All';
+  }
+
   Future<void> _fetchSubjects() async {
     final user = ApiService().currentUser;
     List<dynamic> list = [];
@@ -69,18 +100,15 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
         if (_subjects.isNotEmpty) {
           final first = _subjects.first;
           _selectedSubjectId = first['subject_id'] ?? first['id'];
-          _selectedSemester = first['semester']?.toString() ?? '4th Semester';
-          _selectedSection = first['section']?.toString().isNotEmpty == true
-              ? first['section'].toString()
-              : 'All';
+          _selectedSemester = _normalizeSemester(first['semester']?.toString());
+          _selectedSection = _normalizeSection(first['section']?.toString());
         } else if (_coordinatorAssignments.isNotEmpty) {
           final firstCoord = _coordinatorAssignments.first;
-          _selectedSemester = firstCoord['semester']?.toString() ?? '4th Semester';
-          _selectedSection = firstCoord['section']?.toString().isNotEmpty == true
-              ? firstCoord['section'].toString()
-              : 'All';
+          _selectedSemester = _normalizeSemester(firstCoord['semester']?.toString());
+          _selectedSection = _normalizeSection(firstCoord['section']?.toString());
         } else {
           _selectedSemester = '4th Semester';
+          _selectedSection = 'All';
         }
       });
 
@@ -89,6 +117,17 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
   }
 
   Future<void> _loadRoster() async {
+    if (_attendanceMode != 'GENERAL' && _selectedSubjectId == null) {
+      if (mounted) {
+        setState(() {
+          _loadingRoster = false;
+          _roster = [];
+          _studentStatusMap.clear();
+        });
+      }
+      return;
+    }
+
     setState(() {
       _loadingRoster = true;
     });
@@ -142,12 +181,8 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
     setState(() {
       _selectedSubjectId = newSubId;
       if (found.isNotEmpty) {
-        if (found['semester'] != null && found['semester'].toString().isNotEmpty) {
-          _selectedSemester = found['semester'].toString();
-        }
-        if (found['section'] != null && found['section'].toString().isNotEmpty) {
-          _selectedSection = found['section'].toString();
-        }
+        _selectedSemester = _normalizeSemester(found['semester']?.toString());
+        _selectedSection = _normalizeSection(found['section']?.toString());
       }
       _roster = [];
       _studentStatusMap.clear();

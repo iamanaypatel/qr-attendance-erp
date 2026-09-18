@@ -811,18 +811,27 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
             course_val = sub_obj.course
 
         if dept_id:
-            query = query.filter(Student.department_id == dept_id)
-        if course_val:
-            query = query.filter(Student.course.ilike(f"%{course_val.strip()}%"))
+            dept_matches = query.filter(Student.department_id == dept_id)
+            if dept_matches.count() > 0:
+                query = dept_matches
+        if course_val and course_val.strip() and course_val.strip().lower() not in ('general', 'all', 'any', 'campus wide', ''):
+            course_clean = course_val.strip()
+            course_matches = query.filter(Student.course.ilike(f"%{course_clean}%"))
+            if course_matches.count() > 0:
+                query = course_matches
 
     elif att_type == 'GENERAL' and current_user.is_teacher and current_user.teacher_profile:
         coords = current_user.teacher_profile.get_active_coordinator_assignments()
         coord = next((c for c in coords if (not semester or semesters_match(c.semester, semester))), None)
         if coord:
             if coord.department_id:
-                query = query.filter(Student.department_id == coord.department_id)
-            if coord.course:
-                query = query.filter(Student.course.ilike(f"%{coord.course.strip()}%"))
+                dept_matches = query.filter(Student.department_id == coord.department_id)
+                if dept_matches.count() > 0:
+                    query = dept_matches
+            if coord.course and coord.course.strip().lower() not in ('general', 'all', 'any', 'campus wide', ''):
+                course_matches = query.filter(Student.course.ilike(f"%{coord.course.strip()}%"))
+                if course_matches.count() > 0:
+                    query = course_matches
 
     query = query.order_by(Student.roll_number.asc(), Student.full_name.asc())
     candidates = query.all()
