@@ -1,0 +1,836 @@
+{% extends "base.html" %}
+
+{% block title %}Take Attendance — {{ institution_name }}{% endblock %}
+
+{% block extra_css %}
+<style>
+  .mode-pill-btn {
+    border-radius: var(--radius-sm);
+    font-weight: 600;
+    font-size: 0.82rem;
+    padding: 0.4rem 0.85rem;
+    transition: all 0.2s ease;
+  }
+  .student-row {
+    transition: background-color 0.15s ease, border-color 0.15s ease;
+  }
+  .student-row.marked-present {
+    background-color: rgba(16, 185, 129, 0.08) !important;
+    border-left: 4px solid var(--teal-present) !important;
+  }
+  .student-row.marked-absent {
+    background-color: rgba(239, 68, 68, 0.05) !important;
+    border-left: 4px solid rgba(239, 68, 68, 0.6) !important;
+  }
+  .btn-present-toggle {
+    min-width: 110px;
+    font-weight: 600;
+    border-radius: 20px;
+    transition: all 0.2s ease;
+  }
+  .btn-present-toggle.is-present {
+    background-color: #10b981;
+    color: #ffffff;
+    border-color: #10b981;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.35);
+  }
+  .btn-present-toggle.is-unmarked {
+    background-color: transparent;
+    color: var(--text-muted);
+    border: 1px dashed rgba(255, 255, 255, 0.25);
+  }
+  .btn-present-toggle.is-unmarked:hover {
+    border-color: #10b981;
+    color: #10b981;
+  }
+  .sticky-action-bar {
+    position: sticky;
+    bottom: 1rem;
+    z-index: 100;
+    backdrop-filter: blur(12px);
+    background: rgba(15, 23, 42, 0.88);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+  }
+  .student-avatar {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    object-fit: cover;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+  }
+  .student-avatar-placeholder {
+    width: 42px;
+    height: 42px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--laser-cyan-soft), rgba(79, 70, 229, 0.2));
+    color: var(--laser-cyan);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.95rem;
+    border: 2px solid rgba(255, 255, 255, 0.1);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container-fluid p-0">
+
+  <!-- Header & Meta Bar -->
+  <div class="d-flex flex-column flex-md-row justify-content-between align-items-md-center mb-4 gap-3">
+    <div>
+      <div class="d-flex align-items-center gap-2 mb-1">
+        <h2 class="fw-bold brand-font mb-0">Take Attendance</h2>
+        <span class="badge badge-soft-info font-mono fs-7">
+          <i class="bi bi-card-checklist me-1"></i>List Mode
+        </span>
+      </div>
+      <p class="text-muted mb-0">
+        Mark attending students as Present. Any student left unmarked when submitted will automatically become <span class="text-danger fw-semibold">Absent</span>.
+      </p>
+    </div>
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+      <div class="glass-card px-3 py-2 d-flex align-items-center gap-2 border">
+        <i class="bi bi-calendar3 text-primary"></i>
+        <span class="font-mono fs-7 fw-semibold text-light" id="displayDateText">
+          {{ today.strftime('%d %B %Y') }}
+        </span>
+        <span class="badge bg-secondary-subtle text-secondary extra-small">IST</span>
+      </div>
+      <a href="{{ url_for('attendance.scanner', view='camera') }}" class="btn btn-outline-secondary" title="Use Optical Camera Scanner">
+        <i class="bi bi-camera-video me-1"></i> Camera Scanner
+      </a>
+      <a href="{{ url_for('attendance.manual') }}" class="btn btn-outline-secondary">
+        <i class="bi bi-pencil-square me-1"></i> Manual Log
+      </a>
+    </div>
+  </div>
+
+  <!-- Attendance Mode Selector (General vs Subject vs Combined) -->
+  {% if is_coordinator or current_user.is_admin %}
+    <div class="mb-4">
+      <div class="btn-group p-1 bg-body-tertiary rounded-3 border" role="group" id="attendanceModeGroup">
+        <button type="button" class="btn btn-sm {% if attendance_type == 'SUBJECT' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %} mode-pill-btn" onclick="setAttendanceMode('SUBJECT')">
+          <i class="bi bi-journal-bookmark-fill me-1"></i>Subject Attendance
+        </button>
+        <button type="button" class="btn btn-sm {% if attendance_type == 'GENERAL' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %} mode-pill-btn" onclick="setAttendanceMode('GENERAL')">
+          <i class="bi bi-person-workspace me-1"></i>General / Journal Attendance
+        </button>
+        <button type="button" class="btn btn-sm {% if attendance_type == 'COMBINED' %}btn-primary fw-bold shadow-xs{% else %}btn-ghost text-muted{% endif %} mode-pill-btn" onclick="setAttendanceMode('COMBINED')">
+          <i class="bi bi-layers-fill me-1"></i>Combined (Subject + General)
+        </button>
+      </div>
+    </div>
+  {% endif %}
+
+  <!-- Combined Banner -->
+  <div id="combinedModeBanner" class="mb-3" style="display: {% if attendance_type == 'COMBINED' %}block{% else %}none{% endif %};">
+    <div class="p-3 rounded-3 border bg-info-subtle border-info-subtle shadow-xs">
+      <div class="d-flex align-items-center gap-2">
+        <i class="bi bi-layers-fill text-info fs-4"></i>
+        <div>
+          <div class="fw-bold text-dark fs-7">COMBINED ATTENDANCE MODE</div>
+          <div class="small text-muted">Submitting marks both <strong>Subject-wise</strong> and <strong>General Daily</strong> attendance for this class roster in one atomic transaction.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Filter & Roster Selection Card -->
+  <div class="glass-card p-3 p-md-4 mb-4">
+    <div class="row g-3 align-items-end">
+
+      <!-- Subject Selection (Visible in SUBJECT or COMBINED mode) -->
+      <div class="col-md-4" id="subjectCol">
+        <label class="form-label extra-small text-uppercase fw-bold text-muted mb-1">
+          <i class="bi bi-book me-1 text-primary"></i>Subject
+        </label>
+        {% if assignments and assignments|length == 1 %}
+          <!-- Auto-selected for Single Assignment Teacher -->
+          <div class="p-2 px-3 rounded-3 bg-primary-subtle border border-primary-subtle d-flex align-items-center justify-content-between">
+            <div class="text-truncate">
+              <span class="badge bg-primary me-1 font-mono">{{ assignments[0].subject_code }}</span>
+              <strong class="text-light">{{ assignments[0].subject_name }}</strong>
+            </div>
+            <span class="badge badge-soft-info extra-small">Auto-Selected</span>
+          </div>
+          <input type="hidden" id="subjectIdInput" value="{{ assignments[0].subject_id }}">
+        {% elif assignments and assignments|length > 1 %}
+          <!-- Dropdown for Multi-Subject Faculty -->
+          <select class="form-select form-select-sm" id="subjectIdInput" onchange="onSubjectChange()">
+            {% for asgn in assignments %}
+              <option value="{{ asgn.subject_id }}" data-semester="{{ asgn.semester }}" data-section="{{ asgn.section }}" {% if asgn.subject_id == selected_subject_id %}selected{% endif %}>
+                {{ asgn.subject_code }} — {{ asgn.subject_name }} ({{ asgn.semester }})
+              </option>
+            {% endfor %}
+          </select>
+        {% else %}
+          <select class="form-select form-select-sm" id="subjectIdInput" disabled>
+            <option value="">No Assigned Subjects</option>
+          </select>
+        {% endif %}
+      </div>
+
+      <!-- Semester Selection -->
+      <div class="col-md-3" id="semesterCol">
+        <label class="form-label extra-small text-uppercase fw-bold text-muted mb-1">
+          <i class="bi bi-mortarboard me-1 text-primary"></i>Semester
+        </label>
+        <select class="form-select form-select-sm" id="semesterInput" onchange="loadStudentRoster()">
+          {% if selected_semester %}
+            <option value="{{ selected_semester }}" selected>{{ selected_semester }}</option>
+          {% endif %}
+          <option value="1st Semester">1st Semester</option>
+          <option value="2nd Semester">2nd Semester</option>
+          <option value="3rd Semester">3rd Semester</option>
+          <option value="4th Semester" {% if not selected_semester or '4' in selected_semester %}selected{% endif %}>4th Semester</option>
+          <option value="5th Semester">5th Semester</option>
+          <option value="6th Semester">6th Semester</option>
+          <option value="7th Semester">7th Semester</option>
+          <option value="8th Semester">8th Semester</option>
+        </select>
+      </div>
+
+      <!-- Section Selection -->
+      <div class="col-md-2" id="sectionCol">
+        <label class="form-label extra-small text-uppercase fw-bold text-muted mb-1">
+          <i class="bi bi-diagram-3 me-1 text-primary"></i>Section
+        </label>
+        <select class="form-select form-select-sm" id="sectionInput" onchange="loadStudentRoster()">
+          <option value="All" {% if not selected_section or selected_section == 'All' %}selected{% endif %}>All Sections</option>
+          <option value="A" {% if selected_section == 'A' %}selected{% endif %}>Section A</option>
+          <option value="B" {% if selected_section == 'B' %}selected{% endif %}>Section B</option>
+          <option value="C" {% if selected_section == 'C' %}selected{% endif %}>Section C</option>
+        </select>
+      </div>
+
+      <!-- Action Button: Load Students -->
+      <div class="col-md-3 d-flex gap-2">
+        <button type="button" class="btn btn-primary-glow btn-sm flex-grow-1" id="btnLoadStudents" onclick="loadStudentRoster()">
+          <i class="bi bi-arrow-clockwise me-1"></i> Load Students
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Attendance KPI Counters -->
+  <div class="row g-3 mb-4" id="kpiCountersRow">
+    <div class="col-6 col-md-3">
+      <div class="kpi-card p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="kpi-label extra-small">Total Students</div>
+            <div class="fs-4 fw-bold mt-1 text-light" id="kpiTotal">0</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(59, 130, 246, 0.15); --bubble-color: #3b82f6;">
+            <i class="bi bi-people-fill"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="kpi-card p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="kpi-label extra-small text-success">Marked Present</div>
+            <div class="fs-4 fw-bold mt-1 text-success" id="kpiPresent">0</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(16, 185, 129, 0.15); --bubble-color: #10b981;">
+            <i class="bi bi-check2-circle"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="kpi-card p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="kpi-label extra-small text-danger">Explicit Absent</div>
+            <div class="fs-4 fw-bold mt-1 text-danger" id="kpiAbsent">0</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(239, 68, 68, 0.15); --bubble-color: #ef4444;">
+            <i class="bi bi-x-circle"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="col-6 col-md-3">
+      <div class="kpi-card p-3">
+        <div class="d-flex justify-content-between align-items-center">
+          <div>
+            <div class="kpi-label extra-small text-warning">Unmarked (Will Be Absent)</div>
+            <div class="fs-4 fw-bold mt-1 text-warning" id="kpiUnmarked">0</div>
+          </div>
+          <div class="kpi-icon-bubble" style="--bubble-bg: rgba(245, 158, 11, 0.15); --bubble-color: #f59e0b;">
+            <i class="bi bi-clock-history"></i>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Student List Main Card -->
+  <div class="glass-card mb-5">
+    <!-- Toolbar: Search & Bulk Buttons -->
+    <div class="p-3 border-bottom d-flex flex-column flex-md-row justify-content-between align-items-md-center gap-3">
+      <!-- Search Input -->
+      <div class="position-relative flex-grow-1" style="max-width: 360px;">
+        <i class="bi bi-search position-absolute top-50 start-0 translate-middle-y ms-3 text-muted"></i>
+        <input type="text" class="form-control form-control-sm ps-5" id="studentSearchInput" placeholder="Search by name, roll no, student ID..." oninput="filterRosterDisplay()">
+      </div>
+
+      <!-- Quick Action Buttons -->
+      <div class="d-flex gap-2 flex-wrap">
+        <button type="button" class="btn btn-outline-success btn-sm" onclick="markAllPresent()">
+          <i class="bi bi-check-all me-1"></i> Mark All Present
+        </button>
+        <button type="button" class="btn btn-outline-secondary btn-sm" onclick="clearAllMarks()">
+          <i class="bi bi-arrow-counterclockwise me-1"></i> Clear All
+        </button>
+        <button type="button" class="btn btn-outline-danger btn-sm" onclick="markAllAbsent()">
+          <i class="bi bi-x me-1"></i> Mark All Absent
+        </button>
+      </div>
+    </div>
+
+    <!-- Student Table Body -->
+    <div class="table-responsive">
+      <table class="table table-hover align-middle mb-0" id="studentsTable">
+        <thead class="table-light extra-small text-uppercase">
+          <tr>
+            <th style="width: 50px;" class="text-center">#</th>
+            <th style="width: 60px;">Photo</th>
+            <th>Student Details</th>
+            <th>Roll Number</th>
+            <th>Class / Section</th>
+            <th class="text-center" style="width: 160px;">Status</th>
+          </tr>
+        </thead>
+        <tbody id="studentRosterBody">
+          <tr>
+            <td colspan="6" class="text-center py-5 text-muted">
+              <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+              Loading student roster...
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Empty State / No Students Placeholder -->
+    <div id="emptyRosterState" class="text-center py-5 text-muted" style="display: none;">
+      <i class="bi bi-people fs-1 d-block mb-2 opacity-50"></i>
+      <h5>No Students Found</h5>
+      <p class="small text-muted mb-0">No active students match the selected semester and class criteria.</p>
+    </div>
+  </div>
+
+  <!-- Sticky Bottom Submission Bar -->
+  <div class="sticky-action-bar p-3 px-4 mb-4 d-flex flex-column flex-sm-row justify-content-between align-items-center gap-3" id="submitBar">
+    <div class="d-flex align-items-center gap-3">
+      <span class="fs-6 fw-bold text-light">Ready to submit?</span>
+      <div class="small text-muted d-none d-md-inline">
+        <span class="text-success fw-bold" id="bottomPresentText">0 Present</span>,
+        <span class="text-danger fw-bold" id="bottomAbsentText">0 Absent</span>
+        (including unmarked students)
+      </div>
+    </div>
+    <div class="d-flex gap-2 w-100 w-sm-auto">
+      <button type="button" class="btn btn-primary-glow btn-lg px-4 flex-grow-1 flex-sm-grow-0" id="btnOpenSubmitModal" onclick="openSubmitModal()">
+        <i class="bi bi-cloud-arrow-up-fill me-2"></i> Submit Attendance
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<!-- Submission Confirmation Modal -->
+<div class="modal fade" id="submitConfirmModal" tabindex="-1" aria-labelledby="submitConfirmModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content glass-card border-0 shadow-lg">
+      <div class="modal-header border-bottom">
+        <h5 class="modal-title fw-bold" id="submitConfirmModalLabel">
+          <i class="bi bi-shield-check text-primary me-2"></i>Attendance Summary
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <!-- Summary Context Banner -->
+        <div class="p-3 rounded-3 bg-body-tertiary border mb-3">
+          <div class="d-flex justify-content-between align-items-center mb-1">
+            <span class="text-muted extra-small text-uppercase fw-bold">Session Details</span>
+            <span class="badge bg-primary font-mono" id="modalAttType">SUBJECT</span>
+          </div>
+          <h6 class="fw-bold text-light mb-1" id="modalSubjectName">DBMS</h6>
+          <div class="small text-muted" id="modalClassContext">4th Semester &bull; Section A</div>
+          <div class="extra-small text-muted mt-1 font-mono" id="modalDateText">{{ today.strftime('%d %B %Y') }}</div>
+        </div>
+
+        <!-- Metric Breakdowns -->
+        <div class="row g-2 text-center mb-3">
+          <div class="col-4">
+            <div class="p-2 rounded bg-body-tertiary border">
+              <div class="extra-small text-muted">Total</div>
+              <div class="fs-4 fw-bold text-light" id="modalTotalCount">0</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 rounded bg-success-subtle border border-success-subtle">
+              <div class="extra-small text-success fw-bold">Present</div>
+              <div class="fs-4 fw-bold text-success" id="modalPresentCount">0</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="p-2 rounded bg-danger-subtle border border-danger-subtle">
+              <div class="extra-small text-danger fw-bold">Absent</div>
+              <div class="fs-4 fw-bold text-danger" id="modalAbsentCount">0</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Unmarked Auto-Absence Notice Alert -->
+        <div class="alert alert-warning d-flex align-items-start gap-2 mb-0 py-2 extra-small">
+          <i class="bi bi-exclamation-triangle-fill fs-6 mt-0.5 text-warning"></i>
+          <div>
+            <strong>Automated Absence Rule:</strong> Any students not explicitly checked Present will be stored in the database as <strong>Absent</strong>.
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer border-top">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Back to List</button>
+        <button type="button" class="btn btn-primary-glow px-4" id="btnConfirmSubmit" onclick="submitAttendancePayload()">
+          <span class="spinner-border spinner-border-sm me-1 d-none" id="submitSpinner"></span>
+          Confirm & Submit
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  let currentRoster = [];
+  let studentStatusMap = {}; // student_id -> 'Present' | 'Absent' | null
+  let currentMode = '{{ attendance_type or "SUBJECT" }}';
+
+  function setAttendanceMode(mode) {
+    currentMode = mode;
+    const group = document.getElementById('attendanceModeGroup');
+    if (group) {
+      group.querySelectorAll('.mode-pill-btn').forEach(btn => {
+        btn.classList.remove('btn-primary', 'fw-bold', 'shadow-xs');
+        btn.classList.add('btn-ghost', 'text-muted');
+      });
+    }
+
+    const subCol = document.getElementById('subjectCol');
+    const combBanner = document.getElementById('combinedModeBanner');
+
+    if (mode === 'GENERAL') {
+      if (subCol) subCol.style.opacity = '0.5';
+      if (combBanner) combBanner.style.display = 'none';
+    } else if (mode === 'COMBINED') {
+      if (subCol) subCol.style.opacity = '1';
+      if (combBanner) combBanner.style.display = 'block';
+    } else {
+      if (subCol) subCol.style.opacity = '1';
+      if (combBanner) combBanner.style.display = 'none';
+    }
+
+    loadStudentRoster();
+  }
+
+  function onSubjectChange() {
+    const sel = document.getElementById('subjectIdInput');
+    if (!sel || !sel.options || sel.selectedIndex < 0) return;
+    const opt = sel.options[sel.selectedIndex];
+    const sem = opt.getAttribute('data-semester');
+    const sec = opt.getAttribute('data-section');
+
+    if (sem) {
+      const semInput = document.getElementById('semesterInput');
+      if (semInput) {
+        for (let i = 0; i < semInput.options.length; i++) {
+          if (semInput.options[i].value.toLowerCase().includes(sem.toLowerCase())) {
+            semInput.selectedIndex = i;
+            break;
+          }
+        }
+      }
+    }
+    if (sec) {
+      const secInput = document.getElementById('sectionInput');
+      if (secInput) {
+        for (let i = 0; i < secInput.options.length; i++) {
+          if (secInput.options[i].value.toLowerCase() === sec.toLowerCase()) {
+            secInput.selectedIndex = i;
+            break;
+          }
+        }
+      }
+    }
+    loadStudentRoster();
+  }
+
+  async function loadStudentRoster() {
+    const subInput = document.getElementById('subjectIdInput');
+    const semInput = document.getElementById('semesterInput');
+    const secInput = document.getElementById('sectionInput');
+    const tbody = document.getElementById('studentRosterBody');
+    const emptyState = document.getElementById('emptyRosterState');
+    const table = document.getElementById('studentsTable');
+
+    const subjectId = subInput ? subInput.value : '';
+    const semester = semInput ? semInput.value : '';
+    const section = (secInput && secInput.value !== 'All') ? secInput.value : '';
+
+    tbody.innerHTML = `
+      <tr>
+        <td colspan="6" class="text-center py-5 text-muted">
+          <div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>
+          Loading student roster...
+        </td>
+      </tr>
+    `;
+    emptyState.style.display = 'none';
+
+    try {
+      const queryParams = new URLSearchParams({
+        attendance_type: currentMode,
+        semester: semester,
+        section: section
+      });
+      if (subjectId && currentMode !== 'GENERAL') {
+        queryParams.append('subject_id', subjectId);
+      }
+
+      const res = await fetch(`/api/teacher/students?${queryParams.toString()}`);
+      const data = await res.json();
+
+      if (!data.success) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="text-center py-4 text-danger">
+              <i class="bi bi-shield-x me-1"></i> ${data.message || 'Unable to load roster.'}
+            </td>
+          </tr>
+        `;
+        currentRoster = [];
+        updateCounters();
+        return;
+      }
+
+      currentRoster = data.students || [];
+      studentStatusMap = {};
+
+      // Seed current_status from already recorded attendance (if any)
+      currentRoster.forEach(s => {
+        if (s.current_status === 'Present') {
+          studentStatusMap[s.id] = 'Present';
+        } else if (s.current_status === 'Absent') {
+          studentStatusMap[s.id] = 'Absent';
+        } else {
+          studentStatusMap[s.id] = null; // Unmarked
+        }
+      });
+
+      renderRosterRows(currentRoster);
+      updateCounters();
+
+    } catch (err) {
+      console.error('Failed to load roster:', err);
+      tbody.innerHTML = `
+        <tr>
+          <td colspan="6" class="text-center py-4 text-danger">
+            <i class="bi bi-wifi-off me-1"></i> Network error loading student roster. Please check your connection.
+          </td>
+        </tr>
+      `;
+    }
+  }
+
+  function renderRosterRows(students) {
+    const tbody = document.getElementById('studentRosterBody');
+    const emptyState = document.getElementById('emptyRosterState');
+    tbody.innerHTML = '';
+
+    if (!students || students.length === 0) {
+      emptyState.style.display = 'block';
+      return;
+    }
+    emptyState.style.display = 'none';
+
+    students.forEach((s, idx) => {
+      const status = studentStatusMap[s.id] || null;
+      const isPresent = status === 'Present';
+      const isAbsent = status === 'Absent';
+
+      const tr = document.createElement('tr');
+      tr.id = `row-student-${s.id}`;
+      tr.className = `student-row ${isPresent ? 'marked-present' : (isAbsent ? 'marked-absent' : '')}`;
+
+      const avatarHtml = s.photo_url
+        ? `<img src="${s.photo_url}" class="student-avatar" alt="${s.full_name}">`
+        : `<div class="student-avatar-placeholder">${s.full_name ? s.full_name.charAt(0).toUpperCase() : 'S'}</div>`;
+
+      tr.innerHTML = `
+        <td class="text-center font-mono text-muted">${idx + 1}</td>
+        <td>${avatarHtml}</td>
+        <td>
+          <div class="fw-bold text-light">${s.full_name}</div>
+          <div class="extra-small text-muted font-mono">${s.student_id}</div>
+        </td>
+        <td>
+          <span class="badge bg-body-tertiary text-light border font-mono">${s.roll_number || 'N/A'}</span>
+        </td>
+        <td>
+          <span class="small text-muted">${s.semester || '-'} ${s.section ? '&bull; Sec ' + s.section : ''}</span>
+          <div class="extra-small text-muted">${s.department_name || s.course || ''}</div>
+        </td>
+        <td class="text-center">
+          <button type="button" class="btn btn-sm btn-present-toggle ${isPresent ? 'is-present' : 'is-unmarked'}" id="btn-toggle-${s.id}" onclick="toggleStudentAttendance(${s.id})">
+            ${isPresent ? '<i class="bi bi-check2-circle me-1"></i> Present' : '<i class="bi bi-circle me-1"></i> Unmarked'}
+          </button>
+        </td>
+      `;
+      tbody.appendChild(tr);
+    });
+  }
+
+  function toggleStudentAttendance(studentId) {
+    const current = studentStatusMap[studentId];
+    if (current === 'Present') {
+      studentStatusMap[studentId] = null; // Toggle back to unmarked
+    } else {
+      studentStatusMap[studentId] = 'Present';
+    }
+    updateRowVisuals(studentId);
+    updateCounters();
+  }
+
+  function updateRowVisuals(studentId) {
+    const tr = document.getElementById(`row-student-${studentId}`);
+    const btn = document.getElementById(`btn-toggle-${studentId}`);
+    if (!tr || !btn) return;
+
+    const status = studentStatusMap[studentId];
+    const isPresent = status === 'Present';
+    const isAbsent = status === 'Absent';
+
+    tr.className = `student-row ${isPresent ? 'marked-present' : (isAbsent ? 'marked-absent' : '')}`;
+
+    if (isPresent) {
+      btn.className = 'btn btn-sm btn-present-toggle is-present';
+      btn.innerHTML = '<i class="bi bi-check2-circle me-1"></i> Present';
+    } else if (isAbsent) {
+      btn.className = 'btn btn-sm btn-present-toggle text-danger border-danger';
+      btn.innerHTML = '<i class="bi bi-x-circle me-1"></i> Absent';
+    } else {
+      btn.className = 'btn btn-sm btn-present-toggle is-unmarked';
+      btn.innerHTML = '<i class="bi bi-circle me-1"></i> Unmarked';
+    }
+  }
+
+  function markAllPresent() {
+    currentRoster.forEach(s => {
+      studentStatusMap[s.id] = 'Present';
+      updateRowVisuals(s.id);
+    });
+    updateCounters();
+  }
+
+  function clearAllMarks() {
+    currentRoster.forEach(s => {
+      studentStatusMap[s.id] = null;
+      updateRowVisuals(s.id);
+    });
+    updateCounters();
+  }
+
+  function markAllAbsent() {
+    currentRoster.forEach(s => {
+      studentStatusMap[s.id] = 'Absent';
+      updateRowVisuals(s.id);
+    });
+    updateCounters();
+  }
+
+  function updateCounters() {
+    const total = currentRoster.length;
+    let present = 0;
+    let explicitAbsent = 0;
+    let unmarked = 0;
+
+    currentRoster.forEach(s => {
+      const st = studentStatusMap[s.id];
+      if (st === 'Present') present++;
+      else if (st === 'Absent') explicitAbsent++;
+      else unmarked++;
+    });
+
+    // Unmarked students automatically count towards total absence upon submission
+    const totalAbsent = explicitAbsent + unmarked;
+
+    document.getElementById('kpiTotal').textContent = total;
+    document.getElementById('kpiPresent').textContent = present;
+    document.getElementById('kpiAbsent').textContent = explicitAbsent;
+    document.getElementById('kpiUnmarked').textContent = unmarked;
+
+    const bottomPres = document.getElementById('bottomPresentText');
+    const bottomAbs = document.getElementById('bottomAbsentText');
+    if (bottomPres) bottomPres.textContent = `${present} Present`;
+    if (bottomAbs) bottomAbs.textContent = `${totalAbsent} Absent`;
+  }
+
+  function filterRosterDisplay() {
+    const q = (document.getElementById('studentSearchInput').value || '').trim().toLowerCase();
+    if (!q) {
+      renderRosterRows(currentRoster);
+      return;
+    }
+    const filtered = currentRoster.filter(s => {
+      const name = (s.full_name || '').toLowerCase();
+      const sid = (s.student_id || '').toLowerCase();
+      const roll = (s.roll_number || '').toLowerCase();
+      return name.includes(q) || sid.includes(q) || roll.includes(q);
+    });
+    renderRosterRows(filtered);
+  }
+
+  function openSubmitModal() {
+    if (currentRoster.length === 0) {
+      alert('No students loaded to submit attendance.');
+      return;
+    }
+
+    const total = currentRoster.length;
+    let present = 0;
+    let absent = 0;
+
+    currentRoster.forEach(s => {
+      if (studentStatusMap[s.id] === 'Present') present++;
+      else absent++; // Unmarked automatically becomes Absent!
+    });
+
+    const subInput = document.getElementById('subjectIdInput');
+    const semInput = document.getElementById('semesterInput');
+    const secInput = document.getElementById('sectionInput');
+
+    let subName = 'General Campus Attendance';
+    if (subInput && subInput.options && subInput.selectedIndex >= 0) {
+      subName = subInput.options[subInput.selectedIndex].text;
+    } else if (subInput && subInput.value) {
+      subName = 'Subject Attendance';
+    }
+
+    document.getElementById('modalAttType').textContent = currentMode;
+    document.getElementById('modalSubjectName').textContent = currentMode === 'GENERAL' ? 'General Daily Attendance' : subName;
+    document.getElementById('modalClassContext').textContent = `${semInput ? semInput.value : ''} • Section ${secInput ? secInput.value : 'All'}`;
+    document.getElementById('modalTotalCount').textContent = total;
+    document.getElementById('modalPresentCount').textContent = present;
+    document.getElementById('modalAbsentCount').textContent = absent;
+
+    const modalEl = document.getElementById('submitConfirmModal');
+    const modal = new bootstrap.Modal(modalEl);
+    modal.show();
+  }
+
+  async function submitAttendancePayload() {
+    const btn = document.getElementById('btnConfirmSubmit');
+    const spinner = document.getElementById('submitSpinner');
+    btn.disabled = true;
+    spinner.classList.remove('d-none');
+
+    const subInput = document.getElementById('subjectIdInput');
+    const semInput = document.getElementById('semesterInput');
+    const secInput = document.getElementById('sectionInput');
+
+    const subjectId = subInput ? subInput.value : null;
+    const semester = semInput ? semInput.value : '';
+    const section = (secInput && secInput.value !== 'All') ? secInput.value : '';
+
+    // Collect IDs of students explicitly marked Present
+    const presentIds = [];
+    currentRoster.forEach(s => {
+      if (studentStatusMap[s.id] === 'Present') {
+        presentIds.push(s.id);
+      }
+    });
+
+    const payload = {
+      attendance_type: currentMode,
+      semester: semester,
+      section: section,
+      present_student_ids: presentIds
+    };
+    if (subjectId && currentMode !== 'GENERAL') {
+      payload.subject_id = parseInt(subjectId);
+    }
+
+    try {
+      const res = await fetch('/api/attendance/mark-bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(payload)
+      });
+
+      const data = await res.json();
+      btn.disabled = false;
+      spinner.classList.add('d-none');
+
+      if (!data.success) {
+        alert(data.message || 'Failed to submit attendance.');
+        return;
+      }
+
+      // Hide confirmation modal
+      const modalEl = document.getElementById('submitConfirmModal');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) modal.hide();
+
+      // Show success notification toast/alert
+      showSuccessAlert(data.message || `Attendance recorded: ${data.summary.present} Present, ${data.summary.absent} Absent.`);
+
+      // Refresh roster to show updated recorded statuses
+      await loadStudentRoster();
+
+    } catch (err) {
+      btn.disabled = false;
+      spinner.classList.add('d-none');
+      console.error('Submission error:', err);
+      alert('Network error submitting attendance. Please retry.');
+    }
+  }
+
+  function showSuccessAlert(msg) {
+    const alertBox = document.createElement('div');
+    alertBox.className = 'alert alert-success alert-dismissible fade show position-fixed top-0 end-0 m-3 shadow-lg';
+    alertBox.style.zIndex = '9999';
+    alertBox.innerHTML = `
+      <i class="bi bi-check-circle-fill me-2"></i><strong>Success!</strong> ${msg}
+      <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+    `;
+    document.body.appendChild(alertBox);
+    setTimeout(() => {
+      alertBox.classList.remove('show');
+      setTimeout(() => alertBox.remove(), 200);
+    }, 4500);
+  }
+
+  // Auto-load on page ready
+  document.addEventListener('DOMContentLoaded', () => {
+    loadStudentRoster();
+  });
+</script>
+{% endblock %}

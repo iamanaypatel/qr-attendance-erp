@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from flask import jsonify, request, current_app
 from flask_login import current_user, login_required, login_user, logout_user
@@ -9,8 +10,12 @@ from app.models.student import Student
 from app.models.teacher import Teacher
 from app.models.department import Department
 from app.models.attendance import Attendance
+from app.models.audit import AuditLog
+from app.models.subject import Subject, semesters_match
+from app.models.subject_assignment import TeacherSubjectAssignment
+from app.models.class_coordinator import ClassCoordinator
 from app.attendance.services import process_qr_attendance
-from app.utils.timezone import get_current_ist_date
+from app.utils.timezone import get_current_ist_date, get_current_ist_time
 
 # Exempt API blueprint from form CSRF so mobile apps and fetch() can easily post
 csrf.exempt(api_bp)
@@ -725,6 +730,417 @@ def teacher_subjects():
         'is_coordinator': is_coordinator,
         'coordinator_assignments': coordinator_list
     })
+
+def _fetch_authorized_roster(subject_id=None, semester=None, section=None, attendance_type='SUBJECT'):
+    """
+    Authoritative student roster query with strict teacher authorization, semester filtering,
+    section filtering, and class context scoping.
+    """
+    if not current_user.is_authenticated:
+        return None, ('Authentication required.', 401)
+
+    if not (current_user.is_teacher or current_user.is_admin):
+        return None, ('Unauthorized: Only faculty and administrators can access student rosters.', 403)
+
+    att_type = (attendance_type or '').strip().upper()
+    if att_type not in ('SUBJECT', 'GENERAL', 'COMBINED'):
+        att_type = 'SUBJECT' if subject_id else 'GENERAL'
+
+    # Security check: Teacher subject assignment or coordinator assignment
+    if current_user.is_teacher:
+        teacher = current_user.teacher_profile
+        if not teacher:
+            return None, ('Teacher profile not found.', 404)
+
+        if att_type in ('SUBJECT', 'COMBINED') or subject_id:
+            if not subject_id:
+                return None, ('Subject ID is required for Subject Attendance.', 400)
+            if not teacher.is_assigned_to_subject(subject_id, semester=semester if semester else None):
+                return None, ('You are not assigned to this subject.', 403)
+
+        if att_type == 'GENERAL':
+            if not teacher.is_class_coordinator:
+                return None, ('Unauthorized: Only designated Class Coordinators can access General attendance rosters.', 403)
+            if semester:
+                coords = teacher.get_active_coordinator_assignments()
+                matched = any(semesters_match(c.semester, semester) for c in coords)
+                if not matched:
+                    return None, (f'Unauthorized: You are not assigned as Class Coordinator for semester {semester}.', 403)
+
+    # Base query: Active students only
+    query = Student.query.filter_by(is_active=True)
+
+    # Filter Semester
+    if semester and str(semester).strip() and str(semester).strip().lower() not in ('all', 'any', 'general'):
+        sem_clean = str(semester).strip()
+        digits = re.findall(r'\d+', sem_clean)
+        if digits:
+            d = digits[0]
+            query = query.filter(db.or_(
+                Student.semester.ilike(f"{d}st%"),
+                Student.semester.ilike(f"{d}nd%"),
+                Student.semester.ilike(f"{d}rd%"),
+                Student.semester.ilike(f"{d}th%"),
+                Student.semester == d,
+                Student.semester.ilike(f"{d} %"),
+                Student.semester == sem_clean
+            ))
+        else:
+            query = query.filter(Student.semester.ilike(sem_clean))
+
+    # Filter Section
+    if section and str(section).strip() and str(section).strip().lower() not in ('all', 'any'):
+        query = query.filter(Student.section.ilike(str(section).strip()))
+
+    # Filter Department & Course
+    if subject_id:
+        sub_obj = Subject.query.get(subject_id)
+        dept_id = None
+        course_val = None
+
+        if current_user.is_teacher and current_user.teacher_profile:
+            asgns = current_user.teacher_profile.subject_assignments.filter_by(subject_id=subject_id, is_active=True).all()
+            if semester:
+                asgns = [a for a in asgns if semesters_match(a.semester, semester)]
+            if asgns:
+                dept_id = asgns[0].department_id or (sub_obj.department_id if sub_obj else None)
+                course_val = asgns[0].course or (sub_obj.course if sub_obj else None)
+
+        if not dept_id and sub_obj:
+            dept_id = sub_obj.department_id
+            course_val = sub_obj.course
+
+        if dept_id:
+            query = query.filter(Student.department_id == dept_id)
+        if course_val:
+            query = query.filter(Student.course.ilike(f"%{course_val.strip()}%"))
+
+    elif att_type == 'GENERAL' and current_user.is_teacher and current_user.teacher_profile:
+        coords = current_user.teacher_profile.get_active_coordinator_assignments()
+        coord = next((c for c in coords if (not semester or semesters_match(c.semester, semester))), None)
+        if coord:
+            if coord.department_id:
+                query = query.filter(Student.department_id == coord.department_id)
+            if coord.course:
+                query = query.filter(Student.course.ilike(f"%{coord.course.strip()}%"))
+
+    query = query.order_by(Student.roll_number.asc(), Student.full_name.asc())
+    candidates = query.all()
+
+    # Exact semester verification in Python to guarantee 0% bleed between semesters
+    roster = [s for s in candidates if (not semester or str(semester).strip().lower() in ('all', 'any', 'general') or semesters_match(s.semester, semester))]
+    return roster, None
+
+@api_bp.route('/teacher/students', methods=['GET'])
+@api_bp.route('/teacher/roster', methods=['GET'])
+@login_required
+def teacher_students():
+    """
+    GET /api/teacher/students
+    Retrieves authorized student roster for the selected subject, semester, and section.
+    Includes current attendance status if already recorded today.
+    """
+    subject_id = request.args.get('subject_id', type=int)
+    semester = request.args.get('semester', '').strip()
+    section = request.args.get('section', '').strip()
+    att_type = (request.args.get('attendance_type') or request.args.get('type') or '').strip().upper()
+    if not att_type:
+        att_type = 'SUBJECT' if subject_id else 'GENERAL'
+
+    date_str = request.args.get('date', '').strip()
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            target_date = get_current_ist_date()
+    else:
+        target_date = get_current_ist_date()
+
+    roster, err = _fetch_authorized_roster(
+        subject_id=subject_id,
+        semester=semester,
+        section=section,
+        attendance_type=att_type
+    )
+
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+
+    # Pre-fetch existing attendance records for target_date to avoid N+1 queries
+    student_ids = [s.id for s in roster]
+    existing_att_map = {}
+    if student_ids:
+        att_q = Attendance.query.filter(
+            Attendance.student_id.in_(student_ids),
+            Attendance.date == target_date
+        )
+        if att_type == 'SUBJECT' and subject_id:
+            att_q = att_q.filter(Attendance.subject_id == subject_id)
+        elif att_type == 'GENERAL':
+            att_q = att_q.filter(
+                (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+            )
+        elif att_type == 'COMBINED':
+            if subject_id:
+                att_q = att_q.filter(
+                    (Attendance.subject_id == subject_id) | (Attendance.attendance_type == 'GENERAL')
+                )
+
+        records = att_q.all()
+        for r in records:
+            # For combined or subject, prefer subject-specific status
+            if r.student_id not in existing_att_map or r.subject_id == subject_id:
+                existing_att_map[r.student_id] = r
+
+    students_data = []
+    for s in roster:
+        att = existing_att_map.get(s.id)
+        current_status = att.status if att else None
+        time_in_str = att.time_in.strftime('%I:%M %p') if (att and att.time_in) else None
+
+        students_data.append({
+            'id': s.id,
+            'student_id': s.student_id,
+            'full_name': s.full_name,
+            'name': s.full_name,
+            'roll_number': s.roll_number,
+            'semester': s.semester,
+            'section': s.section,
+            'department_id': s.department_id,
+            'department_name': s.department.name if s.department else None,
+            'course': s.course,
+            'photo_url': s.photo_url,
+            'current_status': current_status,
+            'time_in': time_in_str
+        })
+
+    return jsonify({
+        'success': True,
+        'count': len(students_data),
+        'attendance_type': att_type,
+        'subject_id': subject_id,
+        'semester': semester,
+        'section': section,
+        'date': target_date.strftime('%Y-%m-%d'),
+        'students': students_data
+    }), 200
+
+@api_bp.route('/attendance/mark-bulk', methods=['POST'])
+@api_bp.route('/attendance/bulk', methods=['POST'])
+@login_required
+def mark_bulk_attendance():
+    """
+    POST /api/attendance/mark-bulk
+    Submits manual list-based student attendance.
+    CRITICAL BUSINESS RULE:
+    Teacher marks students who are Present.
+    Any student left unmarked automatically becomes ABSENT in the database.
+    Execution is wrapped in an atomic database transaction.
+    """
+    data = request.get_json(silent=True) or request.form.to_dict()
+    if not data:
+        return jsonify({'success': False, 'message': 'Invalid request: No attendance data provided.'}), 400
+
+    subject_id = data.get('subject_id')
+    if subject_id is not None:
+        try:
+            subject_id = int(subject_id)
+        except (ValueError, TypeError):
+            subject_id = None
+
+    semester = (data.get('semester') or '').strip()
+    section = (data.get('section') or '').strip()
+    att_type = (data.get('attendance_type') or '').strip().upper()
+    if not att_type:
+        att_type = 'SUBJECT' if subject_id else 'GENERAL'
+
+    date_str = (data.get('date') or '').strip()
+    if date_str:
+        try:
+            target_date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        except ValueError:
+            target_date = get_current_ist_date()
+    else:
+        target_date = get_current_ist_date()
+
+    # Determine full authorized student roster from server-side database
+    roster, err = _fetch_authorized_roster(
+        subject_id=subject_id,
+        semester=semester,
+        section=section,
+        attendance_type=att_type
+    )
+
+    if err:
+        return jsonify({'success': False, 'message': err[0]}), err[1]
+
+    if not roster:
+        return jsonify({'success': False, 'message': 'No active students found for the selected subject and class criteria.'}), 400
+
+    # Parse Present student identifiers from payload
+    present_ids_set = set()
+
+    # Support present_student_ids array: [1, 2, "STU2026001", ...]
+    raw_present_ids = data.get('present_student_ids') or []
+    if isinstance(raw_present_ids, (list, tuple, set)):
+        for item in raw_present_ids:
+            if item is not None and str(item).strip():
+                val_str = str(item).strip()
+                present_ids_set.add(val_str)
+                present_ids_set.add(val_str.upper())
+                try:
+                    present_ids_set.add(int(val_str))
+                except (ValueError, TypeError):
+                    pass
+
+    # Support students list with status: [{"student_id": 1, "status": "Present"}, ...]
+    students_input = data.get('students') or []
+    if isinstance(students_input, (list, tuple)):
+        for item in students_input:
+            if isinstance(item, dict):
+                st = (item.get('status') or '').strip().lower()
+                if st in ('present', 'late', 'half day'):
+                    sid = item.get('student_id') or item.get('id')
+                    if sid is not None and str(sid).strip():
+                        val_str = str(sid).strip()
+                        present_ids_set.add(val_str)
+                        present_ids_set.add(val_str.upper())
+                        try:
+                            present_ids_set.add(int(val_str))
+                        except (ValueError, TypeError):
+                            pass
+
+    # Atomic transaction execution
+    try:
+        ist_time = get_current_ist_time()
+        teacher_id = current_user.teacher_profile.id if (current_user.is_teacher and current_user.teacher_profile) else None
+        created_count = 0
+        updated_count = 0
+        present_count = 0
+        absent_count = 0
+
+        for s in roster:
+            is_present = (
+                s.id in present_ids_set or
+                s.student_id in present_ids_set or
+                s.student_id.upper() in present_ids_set or
+                s.roll_number in present_ids_set or
+                s.roll_number.upper() in present_ids_set
+            )
+            status = 'Present' if is_present else 'Absent'
+            if is_present:
+                present_count += 1
+            else:
+                absent_count += 1
+
+            # 1. Subject Attendance (if SUBJECT or COMBINED)
+            if att_type in ('SUBJECT', 'COMBINED') and subject_id:
+                existing = Attendance.query.filter(
+                    Attendance.student_id == s.id,
+                    Attendance.date == target_date,
+                    Attendance.subject_id == subject_id
+                ).first()
+
+                if existing:
+                    existing.status = status
+                    existing.semester = semester or existing.semester
+                    existing.section = s.section or existing.section
+                    existing.teacher_id = teacher_id or existing.teacher_id
+                    existing.method = 'Manual'
+                    existing.marked_by = current_user.id
+                    if is_present and not existing.time_in:
+                        existing.time_in = ist_time
+                    existing.updated_at = datetime.utcnow()
+                    updated_count += 1
+                else:
+                    rec = Attendance(
+                        student_id=s.id,
+                        subject_id=subject_id,
+                        teacher_id=teacher_id,
+                        semester=semester,
+                        section=s.section,
+                        date=target_date,
+                        time_in=ist_time if is_present else None,
+                        status=status,
+                        attendance_type='SUBJECT',
+                        method='Manual',
+                        marked_by=current_user.id
+                    )
+                    db.session.add(rec)
+                    created_count += 1
+
+            # 2. General Attendance (if GENERAL or COMBINED)
+            if att_type in ('GENERAL', 'COMBINED'):
+                existing_gen = Attendance.query.filter(
+                    Attendance.student_id == s.id,
+                    Attendance.date == target_date,
+                    (Attendance.attendance_type == 'GENERAL') | (Attendance.subject_id.is_(None))
+                ).first()
+
+                if existing_gen:
+                    # In Combined mode, don't overwrite existing Present General attendance from earlier today
+                    if att_type == 'COMBINED' and not is_present and existing_gen.status in ('Present', 'Late', 'Half Day'):
+                        pass
+                    else:
+                        existing_gen.status = status
+                        existing_gen.semester = semester or existing_gen.semester
+                        existing_gen.section = s.section or existing_gen.section
+                        existing_gen.attendance_type = 'GENERAL'
+                        existing_gen.teacher_id = teacher_id or existing_gen.teacher_id
+                        existing_gen.method = 'Manual'
+                        existing_gen.marked_by = current_user.id
+                        if is_present and not existing_gen.time_in:
+                            existing_gen.time_in = ist_time
+                        existing_gen.updated_at = datetime.utcnow()
+                        updated_count += 1
+                else:
+                    gen_rec = Attendance(
+                        student_id=s.id,
+                        subject_id=None,
+                        teacher_id=teacher_id,
+                        semester=semester,
+                        section=s.section,
+                        date=target_date,
+                        time_in=ist_time if is_present else None,
+                        status=status,
+                        attendance_type='GENERAL',
+                        method='Manual',
+                        marked_by=current_user.id
+                    )
+                    db.session.add(gen_rec)
+                    created_count += 1
+
+        # Audit trail
+        sub_code = Subject.query.get(subject_id).subject_code if subject_id else 'GENERAL'
+        AuditLog.log(
+            'ATTENDANCE_BULK_MARKED',
+            f"Bulk manual attendance by {current_user.get_display_name()} for {sub_code} ({semester}): {present_count} Present, {absent_count} Absent out of {len(roster)} total",
+            user_id=current_user.id
+        )
+
+        db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'message': f"Attendance successfully recorded: {present_count} Present, {absent_count} Absent ({len(roster)} Total).",
+            'summary': {
+                'total': len(roster),
+                'present': present_count,
+                'absent': absent_count,
+                'created': created_count,
+                'updated': updated_count,
+                'attendance_type': att_type,
+                'subject_id': subject_id,
+                'semester': semester,
+                'section': section,
+                'date': target_date.strftime('%Y-%m-%d')
+            }
+        }), 200
+
+    except Exception as ex:
+        db.session.rollback()
+        current_app.logger.error(f"Bulk attendance submission failed: {ex}", exc_info=True)
+        return jsonify({'success': False, 'message': f"Database transaction failed: {str(ex)}"}), 500
 
 @api_bp.route('/student/attendance')
 @login_required

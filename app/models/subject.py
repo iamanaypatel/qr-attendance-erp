@@ -30,6 +30,23 @@ def format_semester_name(sem):
 
     return f"{s} Semester"
 
+def semesters_match(sem1, sem2) -> bool:
+    """
+    Check if two semester representations refer to the same semester.
+    Handles '4th' vs '4th Semester', '4' vs '4th', case-insensitivity, etc.
+    """
+    if not sem1 or not sem2:
+        return False
+    s1 = str(sem1).strip().lower()
+    s2 = str(sem2).strip().lower()
+    if s1 == s2:
+        return True
+    d1 = re.findall(r'\d+', s1)
+    d2 = re.findall(r'\d+', s2)
+    if d1 and d2:
+        return d1[0] == d2[0]
+    return False
+
 teacher_subjects = db.Table(
     'teacher_subjects',
     db.Column('teacher_id', db.Integer, db.ForeignKey('teachers.id', ondelete='CASCADE'), primary_key=True),

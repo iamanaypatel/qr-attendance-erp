@@ -111,8 +111,8 @@
               </a>
             </li>
             <li>
-              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if ep == 'attendance.scanner' %}active{% endif %}">
-                <i class="bi bi-qr-code-scan"></i>
+              <a href="{{ url_for('attendance.take_attendance') }}" class="sidebar-link {% if ep in ('attendance.take_attendance', 'attendance.scanner') %}active{% endif %}">
+                <i class="bi bi-card-checklist"></i>
                 <span>Take Attendance</span>
               </a>
             </li>
@@ -156,8 +156,8 @@
               </a>
             </li>
             <li>
-              <a href="{{ url_for('attendance.scanner') }}" class="sidebar-link {% if ep == 'attendance.scanner' %}active{% endif %}">
-                <i class="bi bi-qr-code-scan"></i>
+              <a href="{{ url_for('attendance.take_attendance') }}" class="sidebar-link {% if ep in ('attendance.take_attendance', 'attendance.scanner') %}active{% endif %}">
+                <i class="bi bi-card-checklist"></i>
                 <span>Take Attendance</span>
               </a>
             </li>

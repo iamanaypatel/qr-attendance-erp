@@ -13,6 +13,125 @@ from app.utils.decorators import role_required
 from app.utils.timezone import get_current_ist_date, get_current_ist_time
 from app.attendance.services import process_qr_attendance
 
+@attendance_bp.route('/take', methods=['GET'])
+@login_required
+@role_required('admin', 'teacher')
+def take_attendance():
+    """
+    GET /attendance/take
+    Primary list-based attendance-taking screen for faculty and administrators.
+    """
+    today = get_current_ist_date()
+    attendance_type = request.args.get('type', '').strip().upper()
+    selected_subject_id = request.args.get('subject_id', type=int)
+    selected_semester = request.args.get('semester', '').strip()
+    selected_section = request.args.get('section', '').strip()
+
+    from app.models.subject import Subject
+    from app.models.subject_assignment import TeacherSubjectAssignment
+    from app.models.class_coordinator import ClassCoordinator
+
+    coordinator_assignments = []
+    assignments_data = []
+
+    if current_user.is_teacher and current_user.teacher_profile:
+        coordinator_assignments = current_user.teacher_profile.get_active_coordinator_assignments()
+        assignments = current_user.teacher_profile.get_active_assignments()
+        for asgn in assignments:
+            s = asgn.subject
+            if not s or not s.is_active:
+                continue
+            assignments_data.append({
+                'id': asgn.id,
+                'subject_id': s.id,
+                'subject_name': s.subject_name,
+                'subject_code': s.subject_code,
+                'teacher_name': asgn.teacher.full_name if asgn.teacher else current_user.teacher_profile.full_name,
+                'semester': asgn.semester or (s.semester or ''),
+                'department': asgn.department.name if asgn.department else (s.department.name if s.department else 'General'),
+                'department_id': asgn.department_id or (s.department_id if s else None),
+                'course': asgn.course or (s.course or 'General'),
+                'section': asgn.section or ''
+            })
+    else:
+        # Admin
+        coordinator_assignments = ClassCoordinator.query.filter_by(is_active=True).all()
+        assignments = TeacherSubjectAssignment.query.filter_by(is_active=True).all()
+        if assignments:
+            for asgn in assignments:
+                s = asgn.subject
+                if not s or not s.is_active:
+                    continue
+                assignments_data.append({
+                    'id': asgn.id,
+                    'subject_id': s.id,
+                    'subject_name': s.subject_name,
+                    'subject_code': s.subject_code,
+                    'teacher_name': asgn.teacher.full_name if asgn.teacher else 'Admin',
+                    'semester': asgn.semester or (s.semester or ''),
+                    'department': asgn.department.name if asgn.department else (s.department.name if s.department else 'General'),
+                    'department_id': asgn.department_id or (s.department_id if s else None),
+                    'course': asgn.course or (s.course or 'General'),
+                    'section': asgn.section or ''
+                })
+        else:
+            subjects = Subject.query.filter_by(is_active=True).order_by(Subject.subject_code).all()
+            for s in subjects:
+                assignments_data.append({
+                    'id': s.id,
+                    'subject_id': s.id,
+                    'subject_name': s.subject_name,
+                    'subject_code': s.subject_code,
+                    'teacher_name': 'Administrator',
+                    'semester': s.semester or '',
+                    'department': s.department.name if s.department else 'General',
+                    'department_id': s.department_id,
+                    'course': s.course or 'General',
+                    'section': ''
+                })
+
+    assignment_count = len(assignments_data)
+    selected_assignment = None
+
+    if assignment_count == 1:
+        selected_assignment = assignments_data[0]
+        selected_subject_id = selected_assignment['subject_id']
+        selected_semester = selected_assignment['semester']
+        if not selected_section:
+            selected_section = selected_assignment['section']
+    elif assignment_count > 1:
+        if selected_subject_id:
+            selected_assignment = next((a for a in assignments_data if a['subject_id'] == selected_subject_id and (not selected_semester or a['semester'] == selected_semester)), None)
+        if not selected_assignment and assignments_data:
+            selected_assignment = assignments_data[0]
+            selected_subject_id = selected_assignment['subject_id']
+            selected_semester = selected_assignment['semester']
+            if not selected_section:
+                selected_section = selected_assignment['section']
+
+    if not attendance_type:
+        if not assignments_data and coordinator_assignments:
+            attendance_type = 'GENERAL'
+        else:
+            attendance_type = 'SUBJECT'
+
+    selected_coordinator = coordinator_assignments[0] if coordinator_assignments else None
+
+    return render_template(
+        'attendance/take_attendance.html',
+        today=today,
+        attendance_type=attendance_type,
+        assignments=assignments_data,
+        assignment_count=assignment_count,
+        selected_assignment=selected_assignment,
+        selected_subject_id=selected_subject_id,
+        selected_semester=selected_semester,
+        selected_section=selected_section,
+        coordinator_assignments=coordinator_assignments,
+        selected_coordinator=selected_coordinator,
+        is_coordinator=len(coordinator_assignments) > 0
+    )
+
 @attendance_bp.route('/scanner')
 @login_required
 @role_required('admin', 'teacher')

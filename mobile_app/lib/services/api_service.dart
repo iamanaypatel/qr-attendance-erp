@@ -392,6 +392,89 @@ class ApiService {
     }
   }
 
+  Future<Map<String, dynamic>> getRoster({
+    int? subjectId,
+    String? semester,
+    String? section,
+    String attendanceType = 'SUBJECT',
+    String? date,
+  }) async {
+    try {
+      final queryParams = <String, String>{
+        'attendance_type': attendanceType,
+      };
+      if (subjectId != null) queryParams['subject_id'] = subjectId.toString();
+      if (semester != null && semester.isNotEmpty) queryParams['semester'] = semester;
+      if (section != null && section.isNotEmpty && section.toLowerCase() != 'all') {
+        queryParams['section'] = section;
+      }
+      if (date != null && date.isNotEmpty) queryParams['date'] = date;
+
+      final uri = Uri.parse('$_baseUrl/api/teacher/students').replace(queryParameters: queryParams);
+      final response = await http.get(uri, headers: _headers()).timeout(const Duration(seconds: 8));
+
+      _updateCookie(response);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return Map<String, dynamic>.from(data);
+      } else if (response.statusCode == 403) {
+        String msg = 'You are not authorized for this subject/class.';
+        try {
+          final errBody = jsonDecode(response.body);
+          if (errBody['message'] != null) msg = errBody['message'].toString();
+        } catch (_) {}
+        return {'success': false, 'message': msg, 'students': []};
+      }
+      return {'success': false, 'message': 'HTTP ${response.statusCode}', 'students': []};
+    } catch (e) {
+      debugPrint("getRoster error: $e");
+      return {'success': false, 'message': '$e', 'students': []};
+    }
+  }
+
+  Future<Map<String, dynamic>> submitBulkAttendance({
+    required List<dynamic> presentStudentIds,
+    int? subjectId,
+    String? semester,
+    String? section,
+    String attendanceType = 'SUBJECT',
+    String? date,
+  }) async {
+    try {
+      final endpoint = '$_baseUrl/api/attendance/mark-bulk';
+      final bodyMap = <String, dynamic>{
+        'attendance_type': attendanceType,
+        'present_student_ids': presentStudentIds,
+      };
+      if (subjectId != null) bodyMap['subject_id'] = subjectId;
+      if (semester != null && semester.isNotEmpty) bodyMap['semester'] = semester;
+      if (section != null && section.isNotEmpty && section.toLowerCase() != 'all') {
+        bodyMap['section'] = section;
+      }
+      if (date != null && date.isNotEmpty) bodyMap['date'] = date;
+
+      final response = await http
+          .post(
+            Uri.parse(endpoint),
+            headers: _headers(),
+            body: jsonEncode(bodyMap),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      _updateCookie(response);
+
+      final data = jsonDecode(response.body);
+      return Map<String, dynamic>.from(data);
+    } catch (e) {
+      debugPrint("submitBulkAttendance error: $e");
+      return {
+        'success': false,
+        'message': 'Failed to submit attendance: $e',
+      };
+    }
+  }
+
   Future<Map<String, dynamic>?> getStudentAttendanceSummary() async {
     try {
       final response = await http

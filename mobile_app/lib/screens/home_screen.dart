@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/services/api_service.dart';
-import 'package:mobile_app/screens/scanner_screen.dart';
+import 'package:mobile_app/screens/take_attendance_screen.dart';
 import 'package:mobile_app/screens/dashboard_screen.dart';
 import 'package:mobile_app/screens/student_qr_screen.dart';
 import 'package:mobile_app/screens/login_screen.dart';
@@ -271,7 +271,7 @@ class _HomeScreenState extends State<HomeScreen> {
             const DashboardScreen(),
           ]
         : [
-            const ScannerScreen(),
+            const TakeAttendanceScreen(),
             const DashboardScreen(),
             const StudentQrScreen(),
           ];
@@ -291,9 +291,9 @@ class _HomeScreenState extends State<HomeScreen> {
           ]
         : const [
             NavigationDestination(
-              icon: Icon(Icons.qr_code_scanner_outlined),
-              selectedIcon: Icon(Icons.qr_code_scanner_rounded),
-              label: "Scanner",
+              icon: Icon(Icons.how_to_reg_outlined),
+              selectedIcon: Icon(Icons.how_to_reg_rounded),
+              label: "Attendance",
             ),
             NavigationDestination(
               icon: Icon(Icons.dashboard_outlined),
