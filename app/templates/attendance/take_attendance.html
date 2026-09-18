@@ -178,6 +178,7 @@
           <i class="bi bi-mortarboard me-1 text-primary"></i>Semester
         </label>
         <select class="form-select form-select-sm" id="semesterInput" onchange="loadStudentRoster()">
+          <option value="All" {% if selected_semester == 'All' %}selected{% endif %}>All Semesters</option>
           {% for sem in ['1st Semester', '2nd Semester', '3rd Semester', '4th Semester', '5th Semester', '6th Semester', '7th Semester', '8th Semester'] %}
             {% set sem_num = loop.index|string %}
             {% set is_sel = (selected_semester and (selected_semester == sem or (sem_num in selected_semester and '1' ~ sem_num not in selected_semester))) or (not selected_semester and sem_num == '4') %}
@@ -319,7 +320,15 @@
     <div id="emptyRosterState" class="text-center py-5 text-muted" style="display: none;">
       <i class="bi bi-people fs-1 d-block mb-2 opacity-50"></i>
       <h5>No Students Found</h5>
-      <p class="small text-muted mb-0">No active students match the selected semester and class criteria.</p>
+      <p class="small text-muted mb-3" id="emptyRosterReason">No active students match the selected semester and class criteria.</p>
+      <div class="d-flex justify-content-center gap-2">
+        <button type="button" class="btn btn-sm btn-outline-primary px-3" onclick="setSemesterAndReload('All')">
+          <i class="bi bi-funnel-fill me-1"></i> Show All Semesters
+        </button>
+        <button type="button" class="btn btn-sm btn-outline-secondary px-3" onclick="loadStudentRoster()">
+          <i class="bi bi-arrow-clockwise me-1"></i> Reload
+        </button>
+      </div>
     </div>
   </div>
 
@@ -483,6 +492,14 @@
     loadStudentRoster();
   }
 
+  function setSemesterAndReload(sem) {
+    const semInput = document.getElementById('semesterInput');
+    if (semInput) {
+      semInput.value = sem;
+    }
+    loadStudentRoster();
+  }
+
   async function loadStudentRoster() {
     const subInput = document.getElementById('subjectIdInput');
     const semInput = document.getElementById('semesterInput');
@@ -522,7 +539,7 @@
     emptyState.style.display = 'none';
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 30000);
 
     try {
       const queryParams = new URLSearchParams({

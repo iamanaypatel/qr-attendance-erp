@@ -379,7 +379,7 @@ class ApiService {
     try {
       final response = await http
           .get(Uri.parse('$_baseUrl/api/teacher/subjects'), headers: _headers())
-          .timeout(const Duration(seconds: 6));
+          .timeout(const Duration(seconds: 25));
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
@@ -411,7 +411,7 @@ class ApiService {
       if (date != null && date.isNotEmpty) queryParams['date'] = date;
 
       final uri = Uri.parse('$_baseUrl/api/teacher/students').replace(queryParameters: queryParams);
-      final response = await http.get(uri, headers: _headers()).timeout(const Duration(seconds: 8));
+      final response = await http.get(uri, headers: _headers()).timeout(const Duration(seconds: 25));
 
       _updateCookie(response);
 
@@ -460,7 +460,7 @@ class ApiService {
             headers: _headers(),
             body: jsonEncode(bodyMap),
           )
-          .timeout(const Duration(seconds: 12));
+          .timeout(const Duration(seconds: 30));
 
       _updateCookie(response);
 

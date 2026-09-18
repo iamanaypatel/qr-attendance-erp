@@ -26,6 +26,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
   String _searchQuery = '';
   bool _isSubmitting = false;
 
+  String? _rosterErrorMessage;
   final TextEditingController _searchController = TextEditingController();
 
   @override
@@ -41,8 +42,11 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
   }
 
   String _normalizeSemester(String? sem) {
-    if (sem == null || sem.isEmpty) return '4th Semester';
+    if (sem == null || sem.isEmpty) return 'All Semesters';
     final s = sem.trim().toLowerCase();
+    if (s == 'all' || s == 'any' || s == 'all semesters' || s == 'general') {
+      return 'All Semesters';
+    }
     final digits = RegExp(r'\d+').firstMatch(s);
     if (digits != null) {
       final d = digits.group(0);
@@ -57,7 +61,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
         case '8': return '8th Semester';
       }
     }
-    return '4th Semester';
+    return 'All Semesters';
   }
 
   String _normalizeSection(String? sec) {
@@ -107,7 +111,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
           _selectedSemester = _normalizeSemester(firstCoord['semester']?.toString());
           _selectedSection = _normalizeSection(firstCoord['section']?.toString());
         } else {
-          _selectedSemester = '4th Semester';
+          _selectedSemester = 'All Semesters';
           _selectedSection = 'All';
         }
       });
@@ -123,6 +127,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
           _loadingRoster = false;
           _roster = [];
           _studentStatusMap.clear();
+          _rosterErrorMessage = null;
         });
       }
       return;
@@ -130,11 +135,16 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
 
     setState(() {
       _loadingRoster = true;
+      _rosterErrorMessage = null;
     });
+
+    final semParam = (_selectedSemester == null || _selectedSemester == 'All Semesters')
+        ? 'All'
+        : _selectedSemester;
 
     final res = await ApiService().getRoster(
       subjectId: _attendanceMode == 'GENERAL' ? null : _selectedSubjectId,
-      semester: _selectedSemester,
+      semester: semParam,
       section: _selectedSection == 'All' ? null : _selectedSection,
       attendanceType: _attendanceMode,
     );
@@ -143,6 +153,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
       setState(() {
         _loadingRoster = false;
         if (res['success'] == true) {
+          _rosterErrorMessage = null;
           final rawList = res['students'] as List<dynamic>? ?? [];
           _roster = rawList.map((e) => Map<String, dynamic>.from(e)).toList();
           _studentStatusMap.clear();
@@ -159,9 +170,10 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
         } else {
           _roster = [];
           _studentStatusMap.clear();
+          _rosterErrorMessage = res['message']?.toString() ?? 'Failed to load roster.';
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text(res['message']?.toString() ?? 'Failed to load roster.'),
+              content: Text(_rosterErrorMessage!),
               backgroundColor: Colors.redAccent,
             ),
           );
@@ -186,6 +198,7 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
       }
       _roster = [];
       _studentStatusMap.clear();
+      _rosterErrorMessage = null;
     });
 
     _loadRoster();
@@ -527,13 +540,14 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                               flex: 3,
                               child: DropdownButtonFormField<String>(
                                 key: ValueKey('sem_$_selectedSemester'),
-                                initialValue: _selectedSemester ?? '4th Semester',
+                                initialValue: _selectedSemester ?? 'All Semesters',
                                 decoration: const InputDecoration(
                                   labelText: "Semester",
                                   isDense: true,
                                   contentPadding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                                 ),
                                 items: [
+                                  'All Semesters',
                                   '1st Semester',
                                   '2nd Semester',
                                   '3rd Semester',
@@ -651,85 +665,149 @@ class _TakeAttendanceScreenState extends State<TakeAttendanceScreen> {
                 Expanded(
                   child: _loadingRoster
                       ? const Center(child: CircularProgressIndicator())
-                      : _filteredRoster.isEmpty
+                      : _rosterErrorMessage != null
                           ? Center(
-                              child: Column(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  Icon(Icons.group_off_rounded, size: 48, color: Colors.grey.shade400),
-                                  const SizedBox(height: 8),
-                                  const Text("No students found in this roster.", style: TextStyle(color: Colors.grey)),
-                                ],
+                              child: Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    const Icon(Icons.error_outline_rounded, size: 48, color: Colors.redAccent),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      _rosterErrorMessage!,
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
+                                    ),
+                                    const SizedBox(height: 16),
+                                    ElevatedButton.icon(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF2563EB),
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                      ),
+                                      onPressed: _loadRoster,
+                                      icon: const Icon(Icons.refresh_rounded, size: 18),
+                                      label: const Text("Retry"),
+                                    ),
+                                  ],
+                                ),
                               ),
                             )
-                          : ListView.builder(
-                              padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
-                              itemCount: _filteredRoster.length,
-                              itemBuilder: (ctx, idx) {
-                                final s = _filteredRoster[idx];
-                                final id = s['id'] ?? s['student_id'];
-                                final isPresent = _studentStatusMap[id] == 'Present';
-                                final name = s['full_name'] ?? s['name'] ?? 'Student';
-                                final roll = s['roll_number'] ?? '-';
-                                final sid = s['student_id'] ?? '';
-                                final sec = s['section'] ?? '';
+                          : _filteredRoster.isEmpty
+                              ? Center(
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(24),
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.group_off_rounded, size: 48, color: Colors.grey.shade400),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          "No students found in ${_selectedSemester ?? 'this semester'} (Sec ${_selectedSection ?? 'All'}).",
+                                          textAlign: TextAlign.center,
+                                          style: const TextStyle(color: Colors.black87, fontWeight: FontWeight.w500),
+                                        ),
+                                        const SizedBox(height: 16),
+                                        Wrap(
+                                          spacing: 8,
+                                          runSpacing: 8,
+                                          alignment: WrapAlignment.center,
+                                          children: [
+                                            if (_selectedSemester != 'All Semesters')
+                                              OutlinedButton.icon(
+                                                icon: const Icon(Icons.filter_alt_off_rounded, size: 16),
+                                                label: const Text("Show All Semesters"),
+                                                onPressed: () {
+                                                  setState(() {
+                                                    _selectedSemester = 'All Semesters';
+                                                  });
+                                                  _loadRoster();
+                                                },
+                                              ),
+                                            OutlinedButton.icon(
+                                              icon: const Icon(Icons.refresh_rounded, size: 16),
+                                              label: const Text("Refresh"),
+                                              onPressed: _loadRoster,
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                              : RefreshIndicator(
+                                  onRefresh: _loadRoster,
+                                  child: ListView.builder(
+                                    physics: const AlwaysScrollableScrollPhysics(),
+                                    padding: const EdgeInsets.fromLTRB(12, 4, 12, 80),
+                                    itemCount: _filteredRoster.length,
+                                    itemBuilder: (ctx, idx) {
+                                      final s = _filteredRoster[idx];
+                                      final id = s['id'] ?? s['student_id'];
+                                      final isPresent = _studentStatusMap[id] == 'Present';
+                                      final name = s['full_name'] ?? s['name'] ?? 'Student';
+                                      final roll = s['roll_number'] ?? '-';
+                                      final sid = s['student_id'] ?? '';
+                                      final sec = s['section'] ?? '';
 
-                                return Card(
-                                  margin: const EdgeInsets.symmetric(vertical: 4),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    side: BorderSide(
-                                      color: isPresent
-                                          ? const Color(0xFF10B981).withValues(alpha: 0.6)
-                                          : Colors.transparent,
-                                      width: 1.5,
-                                    ),
+                                      return Card(
+                                        margin: const EdgeInsets.symmetric(vertical: 4),
+                                        shape: RoundedRectangleBorder(
+                                          borderRadius: BorderRadius.circular(12),
+                                          side: BorderSide(
+                                            color: isPresent
+                                                ? const Color(0xFF10B981).withValues(alpha: 0.6)
+                                                : Colors.transparent,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        color: isPresent
+                                            ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.15 : 0.08)
+                                            : null,
+                                        child: ListTile(
+                                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+                                          leading: CircleAvatar(
+                                            backgroundColor: isPresent
+                                                ? const Color(0xFF10B981)
+                                                : const Color(0xFF2563EB).withValues(alpha: 0.15),
+                                            foregroundColor: isPresent ? Colors.white : const Color(0xFF2563EB),
+                                            child: Text(
+                                              name.isNotEmpty ? name[0].toUpperCase() : "S",
+                                              style: const TextStyle(fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                          title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
+                                          subtitle: Text(
+                                            "Roll: $roll • $sid ${sec.isNotEmpty ? '• Sec $sec' : ''}",
+                                            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                                          ),
+                                          trailing: ElevatedButton.icon(
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: isPresent
+                                                  ? const Color(0xFF10B981)
+                                                  : Colors.grey.withValues(alpha: 0.15),
+                                              foregroundColor: isPresent ? Colors.white : Colors.grey.shade700,
+                                              elevation: isPresent ? 2 : 0,
+                                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                            ),
+                                            icon: Icon(
+                                              isPresent ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                                              size: 16,
+                                            ),
+                                            label: Text(
+                                              isPresent ? "Present" : "Unmarked",
+                                              style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                            ),
+                                            onPressed: () => _toggleStudent(id),
+                                          ),
+                                          onTap: () => _toggleStudent(id),
+                                        ),
+                                      );
+                                    },
                                   ),
-                                  color: isPresent
-                                      ? const Color(0xFF10B981).withValues(alpha: isDark ? 0.15 : 0.08)
-                                      : null,
-                                  child: ListTile(
-                                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
-                                    leading: CircleAvatar(
-                                      backgroundColor: isPresent
-                                          ? const Color(0xFF10B981)
-                                          : const Color(0xFF2563EB).withValues(alpha: 0.15),
-                                      foregroundColor: isPresent ? Colors.white : const Color(0xFF2563EB),
-                                      child: Text(
-                                        name.isNotEmpty ? name[0].toUpperCase() : "S",
-                                        style: const TextStyle(fontWeight: FontWeight.bold),
-                                      ),
-                                    ),
-                                    title: Text(name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                                    subtitle: Text(
-                                      "Roll: $roll • $sid ${sec.isNotEmpty ? '• Sec $sec' : ''}",
-                                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                                    ),
-                                    trailing: ElevatedButton.icon(
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: isPresent
-                                            ? const Color(0xFF10B981)
-                                            : Colors.grey.withValues(alpha: 0.15),
-                                        foregroundColor: isPresent ? Colors.white : Colors.grey.shade700,
-                                        elevation: isPresent ? 2 : 0,
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                      ),
-                                      icon: Icon(
-                                        isPresent ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
-                                        size: 16,
-                                      ),
-                                      label: Text(
-                                        isPresent ? "Present" : "Unmarked",
-                                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                                      ),
-                                      onPressed: () => _toggleStudent(id),
-                                    ),
-                                    onTap: () => _toggleStudent(id),
-                                  ),
-                                );
-                              },
-                            ),
+                                ),
                 ),
               ],
             ),

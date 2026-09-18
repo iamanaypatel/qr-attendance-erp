@@ -143,6 +143,21 @@ def test_teacher_roster_authorization_and_filtering(client, setup_teacher_and_su
     assert env['student1'].id in student_ids
     assert env['student2'].id in student_ids
 
+    # Querying a semester with no enrolled students returns 200 OK with empty roster, never 403
+    resp_empty = client.get(f'/api/teacher/students?subject_id={env["sub1"].id}&semester=5th')
+    assert resp_empty.status_code == 200
+    empty_data = resp_empty.get_json()
+    assert empty_data['success'] is True
+    assert empty_data['count'] == 0
+    assert empty_data['students'] == []
+
+    # Querying 'All' semesters returns all enrolled students
+    resp_all = client.get(f'/api/teacher/students?subject_id={env["sub1"].id}&semester=All')
+    assert resp_all.status_code == 200
+    all_data = resp_all.get_json()
+    assert all_data['success'] is True
+    assert all_data['count'] >= 2
+
 
 def test_bulk_attendance_unmarked_becomes_absent(client, setup_teacher_and_subjects):
     env = setup_teacher_and_subjects

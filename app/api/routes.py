@@ -755,17 +755,15 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
         if att_type in ('SUBJECT', 'COMBINED') or subject_id:
             if not subject_id:
                 return None, ('Subject ID is required for Subject Attendance.', 400)
-            if not teacher.is_assigned_to_subject(subject_id, semester=semester if semester else None):
+            if not teacher.is_assigned_to_subject(subject_id):
                 return None, ('You are not assigned to this subject.', 403)
 
         if att_type == 'GENERAL':
             if not teacher.is_class_coordinator:
                 return None, ('Unauthorized: Only designated Class Coordinators can access General attendance rosters.', 403)
-            if semester:
-                coords = teacher.get_active_coordinator_assignments()
-                matched = any(semesters_match(c.semester, semester) for c in coords)
-                if not matched:
-                    return None, (f'Unauthorized: You are not assigned as Class Coordinator for semester {semester}.', 403)
+            coords = teacher.get_active_coordinator_assignments()
+            if not coords:
+                return None, ('Unauthorized: You have no active Class Coordinator assignments.', 403)
 
     # Base query: Active students only
     query = Student.query.filter_by(is_active=True)
@@ -794,17 +792,17 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
 
     # Filter Department & Course
     if subject_id:
-        sub_obj = Subject.query.get(subject_id)
+        sub_obj = db.session.get(Subject, subject_id) if hasattr(db.session, 'get') else Subject.query.get(subject_id)
         dept_id = None
         course_val = None
 
         if current_user.is_teacher and current_user.teacher_profile:
             asgns = current_user.teacher_profile.subject_assignments.filter_by(subject_id=subject_id, is_active=True).all()
-            if semester:
-                asgns = [a for a in asgns if semesters_match(a.semester, semester)]
             if asgns:
-                dept_id = asgns[0].department_id or (sub_obj.department_id if sub_obj else None)
-                course_val = asgns[0].course or (sub_obj.course if sub_obj else None)
+                matched_asgns = [a for a in asgns if (not semester or semesters_match(a.semester, semester))]
+                target_asgn = matched_asgns[0] if matched_asgns else asgns[0]
+                dept_id = target_asgn.department_id or (sub_obj.department_id if sub_obj else None)
+                course_val = target_asgn.course or (sub_obj.course if sub_obj else None)
 
         if not dept_id and sub_obj:
             dept_id = sub_obj.department_id
@@ -837,7 +835,10 @@ def _fetch_authorized_roster(subject_id=None, semester=None, section=None, atten
     candidates = query.all()
 
     # Exact semester verification in Python to guarantee 0% bleed between semesters
-    roster = [s for s in candidates if (not semester or str(semester).strip().lower() in ('all', 'any', 'general') or semesters_match(s.semester, semester))]
+    if semester and str(semester).strip().lower() not in ('all', 'any', 'general', ''):
+        roster = [s for s in candidates if semesters_match(s.semester, semester)]
+    else:
+        roster = candidates
     return roster, None
 
 @api_bp.route('/teacher/students', methods=['GET'])
