@@ -26,7 +26,6 @@ def test_empty_database_routes_resilience():
             '/admin/class-coordinators',
             '/admin/settings',
             '/admin/departments',
-            '/admin/qr-generator',
             '/attendance/calendar',
             '/attendance/manual',
             '/attendance/scanner',
@@ -37,6 +36,10 @@ def test_empty_database_routes_resilience():
         for path in empty_routes:
             resp = client.get(path)
             assert resp.status_code == 200, f"Failed on path {path} with status {resp.status_code}"
+
+        # Verify deprecated qr-generator redirects to student directory
+        redirect_resp = client.get('/admin/qr-generator')
+        assert redirect_resp.status_code == 302
 
         # Test empty API stats
         token = admin.generate_auth_token()

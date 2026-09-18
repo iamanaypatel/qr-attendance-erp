@@ -913,42 +913,16 @@ def department_delete(id):
     return redirect(url_for('admin.departments'))
 
 # ============================================================================
-# QR Generator Central Hub
+# QR Generator Central Hub (Deprecated & Redirected)
 # ============================================================================
 @admin_bp.route('/qr-generator')
 @login_required
 @role_required('admin')
 def qr_generator():
-    dept_id = request.args.get('dept', type=int)
-    search = request.args.get('q', '').strip()
-
-    query = Student.query.filter_by(is_active=True)
-    if dept_id:
-        query = query.filter_by(department_id=dept_id)
-    if search:
-        query = query.filter(
-            (Student.full_name.ilike(f"%{search}%")) |
-            (Student.student_id.ilike(f"%{search}%"))
-        )
-
-    students = query.order_by(Student.student_id).limit(60).all()
-    departments = Department.query.order_by(Department.name).all()
-
-    # Pre-generate data URIs for all displayed students
-    student_qrs = []
-    for s in students:
-        student_qrs.append({
-            'student': s,
-            'qr_uri': generate_qr_data_uri(s.qr_token, box_size=5, border=1)
-        })
-
-    return render_template(
-        'admin/qr_generator.html',
-        student_qrs=student_qrs,
-        departments=departments,
-        selected_dept=dept_id,
-        search=search
-    )
+    """
+    Deprecated QR generator section - redirects to Student Directory.
+    """
+    return redirect(url_for('admin.students'))
 
 # ============================================================================
 # System Settings & Audit Logs
