@@ -222,7 +222,18 @@
         document.getElementById('phoneStep2').classList.remove('d-none');
       } catch (err) {
         console.error("Phone OTP send error:", err);
-        phoneErr.textContent = err.message || "Failed to send SMS code. Ensure Phone provider is active in Firebase Console.";
+        let msg = err.message || "Failed to send SMS code.";
+        if (err.code === 'auth/configuration-not-found' || msg.includes('configuration-not-found')) {
+          msg = `<strong>Phone Authentication is not enabled</strong> in Firebase project <code>erpvsgoi</code>.<br><br>
+                 <strong>How to fix:</strong><br>
+                 1. Open <a href="https://console.firebase.google.com/project/erpvsgoi/authentication/providers" target="_blank" class="alert-link text-decoration-underline">Firebase Console &rarr; Authentication &rarr; Sign-in method</a>.<br>
+                 2. Click <strong>Phone</strong> and turn on the <strong>Enable</strong> toggle.<br>
+                 3. <em>(Recommended for instant testing)</em> Expand <strong>Phone numbers for testing</strong> and add e.g. <code>+91 9999999999</code> with code <code>123456</code>.<br>
+                 4. Click <strong>Save</strong> and try again.`;
+          phoneErr.innerHTML = msg;
+        } else {
+          phoneErr.textContent = msg;
+        }
         phoneErr.classList.remove('d-none');
       } finally {
         btnSendOtp.disabled = false;

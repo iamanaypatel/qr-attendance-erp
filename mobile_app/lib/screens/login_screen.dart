@@ -216,7 +216,11 @@ class _LoginScreenState extends State<LoginScreen> {
                             },
                             onVerificationFailed: (err) {
                               setModalState(() {
-                                dialogError = err.message ?? "Phone verification failed.";
+                                if (err.code == 'configuration-not-found' || (err.message != null && err.message!.contains('configuration-not-found'))) {
+                                  dialogError = "Phone Authentication is not enabled in Firebase project 'erpvsgoi'. Please enable 'Phone' in Firebase Console > Authentication > Sign-in method.";
+                                } else {
+                                  dialogError = err.message ?? "Phone verification failed.";
+                                }
                                 isVerifying = false;
                               });
                             },

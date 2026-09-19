@@ -63,24 +63,49 @@ class FirebaseAuthService {
 
   // 3. Phone Number Authentication
   initPhoneRecaptcha(containerId = 'recaptcha-container') {
-    if (!this.recaptchaVerifier) {
-      this.recaptchaVerifier = new RecaptchaVerifier(this.auth, containerId, {
-        size: 'invisible',
-        callback: () => {
-          // reCAPTCHA solved
-        },
-        'expired-callback': () => {
+    if (this.recaptchaVerifier) {
+      try {
+        this.recaptchaVerifier.clear();
+      } catch (e) {
+        // ignore
+      }
+      this.recaptchaVerifier = null;
+    }
+
+    this.recaptchaVerifier = new RecaptchaVerifier(this.auth, containerId, {
+      size: 'invisible',
+      callback: () => {
+        // reCAPTCHA solved
+      },
+      'expired-callback': () => {
+        if (this.recaptchaVerifier) {
+          try { this.recaptchaVerifier.clear(); } catch (e) {}
           this.recaptchaVerifier = null;
         }
-      });
-    }
+      }
+    });
     return this.recaptchaVerifier;
   }
 
   async sendPhoneOtp(phoneNumber, containerId = 'recaptcha-container') {
-    const verifier = this.initPhoneRecaptcha(containerId);
-    this.phoneConfirmationResult = await signInWithPhoneNumber(this.auth, phoneNumber, verifier);
-    return this.phoneConfirmationResult;
+    try {
+      const verifier = this.initPhoneRecaptcha(containerId);
+      this.phoneConfirmationResult = await signInWithPhoneNumber(this.auth, phoneNumber, verifier);
+      return this.phoneConfirmationResult;
+    } catch (err) {
+      if (this.recaptchaVerifier) {
+        try { this.recaptchaVerifier.clear(); } catch (e) {}
+        this.recaptchaVerifier = null;
+      }
+      if (err.code === 'auth/configuration-not-found' || (err.message && err.message.includes('configuration-not-found'))) {
+        const enhancedError = new Error(
+          "Phone Authentication is not enabled in Firebase project 'erpvsgoi'. Please enable 'Phone' under Firebase Console > Authentication > Sign-in method."
+        );
+        enhancedError.code = 'auth/configuration-not-found';
+        throw enhancedError;
+      }
+      throw err;
+    }
   }
 
   async verifyPhoneOtp(otpCode) {
