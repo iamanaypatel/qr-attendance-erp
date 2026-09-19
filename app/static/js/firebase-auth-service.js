@@ -56,9 +56,23 @@ class FirebaseAuthService {
 
   // 2. Google Sign-In
   async signInWithGoogle() {
-    const result = await signInWithPopup(this.auth, googleProvider);
-    const idToken = await result.user.getIdToken();
-    return this.syncWithBackend(idToken, result.user);
+    try {
+      const result = await signInWithPopup(this.auth, googleProvider);
+      const idToken = await result.user.getIdToken();
+      return this.syncWithBackend(idToken, result.user);
+    } catch (err) {
+      if (err.code === 'auth/unauthorized-domain' || (err.message && err.message.includes('unauthorized-domain'))) {
+        const host = window.location.hostname;
+        const enhancedError = new Error(
+          `Domain "${host}" is not in Firebase's Authorized Domains list for project 'erpvsgoi'. ` +
+          `Please add "${host}" under Firebase Console > Authentication > Settings > Authorized domains.`
+        );
+        enhancedError.code = 'auth/unauthorized-domain';
+        enhancedError.unauthorizedHost = host;
+        throw enhancedError;
+      }
+      throw err;
+    }
   }
 
   // 3. Phone Number Authentication

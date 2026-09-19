@@ -84,6 +84,9 @@
           <span class="fw-semibold">Sign in with Google</span>
         </button>
 
+        <!-- Google Auth Error Alert -->
+        <div class="alert alert-danger d-none small text-start mb-2 p-3 rounded-3" id="googleAuthError"></div>
+
         <!-- Phone Number OTP Button -->
         <button type="button" class="btn btn-outline-secondary w-100 py-2 d-flex align-items-center justify-content-center rounded-3 shadow-sm bg-body" data-bs-toggle="modal" data-bs-target="#phoneAuthModal">
           <i class="bi bi-phone-fill text-success me-2 fs-5"></i>
@@ -168,8 +171,10 @@
 
   // Firebase Google Sign-In
   const btnGoogle = document.getElementById('btnGoogleSignIn');
+  const googleErr = document.getElementById('googleAuthError');
   if (btnGoogle) {
     btnGoogle.addEventListener('click', async () => {
+      if (googleErr) googleErr.classList.add('d-none');
       try {
         btnGoogle.disabled = true;
         btnGoogle.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Google...';
@@ -184,7 +189,25 @@
         }
       } catch (err) {
         console.error("Google Sign-In error:", err);
-        alert(err.message || "Failed to sign in with Google.");
+        const host = window.location.hostname;
+        let msg = err.message || "Failed to sign in with Google.";
+
+        if (err.code === 'auth/unauthorized-domain' || msg.includes('unauthorized-domain')) {
+          msg = `<strong>Domain "${host}" is not authorized</strong> in Firebase project <code>erpvsgoi</code>.<br><br>
+                 <strong>How to fix:</strong><br>
+                 1. Open <a href="https://console.firebase.google.com/project/erpvsgoi/authentication/settings" target="_blank" class="alert-link text-decoration-underline">Firebase Console &rarr; Authentication &rarr; Settings &rarr; Authorized domains</a>.<br>
+                 2. Click <strong>Add domain</strong> and enter: <code>${host}</code><br>
+                 3. Click <strong>Add</strong> and try Google Sign-in again.<br>
+                 ${host === '127.0.0.1' ? '<div class="mt-2 text-primary fw-semibold"><i class="bi bi-info-circle me-1"></i> Quick local tip: You can open <code>http://localhost:5001</code> instead (localhost is authorized by default)!</div>' : ''}`;
+        }
+
+        if (googleErr) {
+          googleErr.innerHTML = msg;
+          googleErr.classList.remove('d-none');
+        } else {
+          alert(err.message || "Failed to sign in with Google.");
+        }
+
         btnGoogle.disabled = false;
         btnGoogle.innerHTML = `
           <svg class="me-2" width="18" height="18" viewBox="0 0 24 24">
