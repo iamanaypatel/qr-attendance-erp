@@ -352,6 +352,31 @@
     });
   </script>
 
+  <!-- Firebase Web SDK & Analytics (Project: erpvsgoi) -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-analytics.js";
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB7a8nt-kYYiT97sruPGD6-gCSErpRqTPg",
+      authDomain: "erpvsgoi.firebaseapp.com",
+      projectId: "erpvsgoi",
+      storageBucket: "erpvsgoi.firebasestorage.app",
+      messagingSenderId: "574936907832",
+      appId: "1:574936907832:web:65332fbb59cd2d3dfae6cd",
+      measurementId: "G-T4B0WJ3E7P"
+    };
+
+    try {
+      const app = initializeApp(firebaseConfig);
+      const analytics = getAnalytics(app);
+      window.firebaseApp = app;
+      window.firebaseAnalytics = analytics;
+    } catch (e) {
+      console.warn("Firebase Web initialization notice:", e);
+    }
+  </script>
+
   {% block scripts %}{% endblock %}
   {% block extra_js %}{% endblock %}
 </body>

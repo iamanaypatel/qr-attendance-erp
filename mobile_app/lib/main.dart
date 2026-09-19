@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobile_app/services/api_service.dart';
+import 'package:mobile_app/services/firebase_notification_service.dart';
 import 'package:mobile_app/screens/login_screen.dart';
 import 'package:mobile_app/screens/home_screen.dart';
 
@@ -11,6 +12,7 @@ void main() async {
     DeviceOrientation.portraitDown,
   ]);
 
+  await FirebaseNotificationService().initialize();
   await ApiService().init();
 
   runApp(const QRAttendanceApp());
