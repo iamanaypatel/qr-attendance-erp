@@ -154,6 +154,93 @@
       </div>
     </div>
   </div>
+  <!-- Destructive Operations / Reset Data Section -->
+  <div class="row mt-4">
+    <div class="col-12">
+      <div class="glass-card p-4 p-md-5 border border-danger-subtle shadow-sm" style="border-left: 5px solid #dc3545 !important;">
+        <div class="d-flex flex-column flex-md-row justify-content-between align-items-start align-items-md-center gap-2 mb-3">
+          <div>
+            <h5 class="fw-bold brand-font text-danger mb-1 d-flex align-items-center gap-2">
+              <i class="bi bi-exclamation-octagon-fill"></i> RESET DATA &amp; START FRESH
+            </h5>
+            <p class="text-muted small mb-0">Authorized Admin tools to purge operational records and initialize fresh academic cycles.</p>
+          </div>
+          <span class="badge bg-danger-subtle text-danger border border-danger-subtle font-mono px-3 py-1.5 fs-7">
+            <i class="bi bi-shield-lock-fill me-1"></i>ADMIN ONLY &bull; ATOMIC
+          </span>
+        </div>
+
+        <div class="alert alert-danger bg-danger-subtle border-danger-subtle text-danger-emphasis d-flex align-items-start gap-3 mb-4">
+          <i class="bi bi-shield-slash-fill fs-3 flex-shrink-0 text-danger"></i>
+          <div>
+            <div class="fw-bold fs-6">WARNING: DESTRUCTIVE ACTION</div>
+            <div class="small">
+              Resetting data is a permanent operation. Deleted records cannot be restored without an external database backup. All operations create a pre-reset snapshot and are recorded in the system audit trail. Database tables and schemas are never dropped.
+            </div>
+          </div>
+        </div>
+
+        <div class="row g-3">
+          <!-- Option 1: Reset Attendance Data -->
+          <div class="col-lg-4">
+            <div class="card h-100 border bg-body-tertiary p-3 rounded-3 d-flex flex-column justify-content-between">
+              <div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="badge bg-warning text-dark font-mono"><i class="bi bi-calendar-x me-1"></i>ATTENDANCE ONLY</span>
+                  <span class="badge badge-soft-info extra-small">Safe Roster</span>
+                </div>
+                <h6 class="fw-bold text-body mb-2">Reset Attendance Data</h6>
+                <p class="text-muted extra-small mb-3">
+                  Purges all daily attendance records, Time In/Out timestamps, and session logs. Retains all student rosters, faculty assignments, subjects, and sessions intact.
+                </p>
+              </div>
+              <button type="button" class="btn btn-outline-warning w-100 fw-bold btn-sm py-2" onclick="openResetModal('ATTENDANCE')">
+                <i class="bi bi-arrow-counterclockwise me-1"></i> Reset Attendance Data
+              </button>
+            </div>
+          </div>
+
+          <!-- Option 2: Reset Operational ERP Data -->
+          <div class="col-lg-4">
+            <div class="card h-100 border bg-body-tertiary p-3 rounded-3 d-flex flex-column justify-content-between">
+              <div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="badge bg-danger text-white font-mono"><i class="bi bi-people-fill me-1"></i>OPERATIONAL</span>
+                  <span class="badge badge-soft-warning extra-small">New Academic Intake</span>
+                </div>
+                <h6 class="fw-bold text-body mb-2">Reset Operational ERP Data</h6>
+                <p class="text-muted extra-small mb-3">
+                  Clears all student and teacher profiles, user accounts, attendance, and subject assignments. Retains Master Subjects, Academic Sessions, Departments, and Admin access.
+                </p>
+              </div>
+              <button type="button" class="btn btn-outline-danger w-100 fw-bold btn-sm py-2" onclick="openResetModal('OPERATIONAL')">
+                <i class="bi bi-person-x-fill me-1"></i> Reset Operational ERP Data
+              </button>
+            </div>
+          </div>
+
+          <!-- Option 3: Full Factory Reset -->
+          <div class="col-lg-4">
+            <div class="card h-100 border border-danger-subtle bg-danger-subtle bg-opacity-10 p-3 rounded-3 d-flex flex-column justify-content-between">
+              <div>
+                <div class="d-flex align-items-center justify-content-between mb-2">
+                  <span class="badge bg-dark text-danger border border-danger font-mono"><i class="bi bi-fire me-1 text-danger"></i>FULL FACTORY</span>
+                  <span class="badge bg-danger text-white extra-small">Complete Clean State</span>
+                </div>
+                <h6 class="fw-bold text-danger mb-2">Full Factory Reset</h6>
+                <p class="text-muted extra-small mb-3">
+                  Returns the entire ERP to a pristine fresh installation. Clears all operational records, subjects, and assignments. Super Admin access is preserved.
+                </p>
+              </div>
+              <button type="button" class="btn btn-danger w-100 fw-bold btn-sm py-2 shadow-xs" onclick="openResetModal('FACTORY')">
+                <i class="bi bi-radioactive me-1"></i> Full Factory Reset
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
 </div>
 
 <!-- Modal: Add Academic Session -->
@@ -252,7 +339,181 @@
   </div>
 </div>
 
+<!-- Modal: Reset Confirmation & Execution -->
+<div class="modal fade" id="resetConfirmModal" tabindex="-1" aria-labelledby="resetConfirmModalLabel" aria-hidden="true" data-bs-backdrop="static">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content glass-card border border-danger shadow-lg text-start">
+      <div class="modal-header border-bottom border-danger-subtle bg-danger-subtle bg-opacity-25 pb-3">
+        <h5 class="modal-title fw-bold text-danger d-flex align-items-center gap-2" id="resetConfirmModalLabel">
+          <i class="bi bi-exclamation-triangle-fill"></i> <span id="resetModalTitle">Confirm Data Reset</span>
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close" id="btnCloseResetModal"></button>
+      </div>
+      <form method="POST" action="{{ url_for('admin.settings_reset_execute') }}" id="resetExecutionForm" onsubmit="return handleResetSubmit(event)">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <input type="hidden" name="reset_type" id="hiddenResetType" value="ATTENDANCE">
+
+        <div class="modal-body p-4">
+          <!-- Scope Notice -->
+          <div class="p-3 rounded-3 bg-body-tertiary border mb-3">
+            <div class="fw-semibold text-body small mb-1" id="resetModalScopeDesc">Loading scope...</div>
+            <div class="text-muted extra-small" id="resetModalPreservedDesc"></div>
+          </div>
+
+          <!-- Live Record Counts Loading / Display -->
+          <div class="mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <span class="small fw-bold text-uppercase text-muted">AFFECTED DATABASE RECORDS</span>
+              <span class="spinner-border spinner-border-sm text-danger" id="resetCountsSpinner" role="status"></span>
+            </div>
+            <div class="row g-2 text-center font-mono" id="resetCountsGrid">
+              <div class="col-4">
+                <div class="p-2 rounded bg-body-secondary border">
+                  <div class="extra-small text-muted">Attendance</div>
+                  <div class="fs-6 fw-bold text-danger" id="countAttendance">-</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="p-2 rounded bg-body-secondary border">
+                  <div class="extra-small text-muted">Students</div>
+                  <div class="fs-6 fw-bold" id="countStudents">-</div>
+                </div>
+              </div>
+              <div class="col-4">
+                <div class="p-2 rounded bg-body-secondary border">
+                  <div class="extra-small text-muted">Teachers</div>
+                  <div class="fs-6 fw-bold" id="countTeachers">-</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Double Confirmation Step: Typed Confirmation -->
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-danger">
+              CONFIRMATION REQUIRED <span class="text-muted fw-normal">(Type exactly: <code class="text-danger fw-bold">RESET DATA</code>)</span>
+            </label>
+            <input type="text" name="confirmation_text" id="resetConfirmationTextInput" class="form-control font-mono" placeholder="RESET DATA" autocomplete="off" required oninput="checkResetFormValidity()">
+          </div>
+
+          <!-- Step 3: Admin Password Re-authentication (for OPERATIONAL / FACTORY) -->
+          <div class="mb-3" id="resetPasswordGroup" style="display: none;">
+            <label class="form-label small fw-bold text-body">
+              ADMINISTRATOR PASSWORD RE-AUTHENTICATION
+            </label>
+            <input type="password" name="admin_password" id="resetAdminPasswordInput" class="form-control font-mono" placeholder="Enter your current admin password" autocomplete="current-password" oninput="checkResetFormValidity()">
+            <div class="extra-small text-muted mt-1">High-risk destructive actions require password verification.</div>
+          </div>
+        </div>
+
+        <div class="modal-footer border-top pt-3">
+          <button type="button" class="btn btn-outline-secondary px-3" data-bs-dismiss="modal" id="btnCancelReset">Cancel</button>
+          <button type="submit" class="btn btn-danger px-4" id="btnConfirmResetSubmit" disabled>
+            <span class="spinner-border spinner-border-sm me-1 d-none" id="resetSubmitSpinner"></span>
+            <i class="bi bi-trash3-fill me-1" id="resetSubmitIcon"></i>
+            Execute Reset
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
 <script>
+let currentResetType = 'ATTENDANCE';
+let currentResetRequiresPassword = false;
+
+function openResetModal(type) {
+  currentResetType = type;
+  document.getElementById('hiddenResetType').value = type;
+  document.getElementById('resetConfirmationTextInput').value = '';
+  document.getElementById('resetAdminPasswordInput').value = '';
+  document.getElementById('btnConfirmResetSubmit').disabled = true;
+
+  const titleEl = document.getElementById('resetModalTitle');
+  const scopeEl = document.getElementById('resetModalScopeDesc');
+  const preservedEl = document.getElementById('resetModalPreservedDesc');
+  const pwdGroup = document.getElementById('resetPasswordGroup');
+
+  if (type === 'ATTENDANCE') {
+    titleEl.textContent = 'Confirm: Reset Attendance Data';
+    scopeEl.textContent = 'Clearing historical attendance records and punch sessions.';
+    preservedEl.textContent = 'All students, faculty, subjects, and assignments will be preserved.';
+    pwdGroup.style.display = 'none';
+    currentResetRequiresPassword = false;
+  } else if (type === 'OPERATIONAL') {
+    titleEl.textContent = 'Confirm: Reset Operational ERP Data';
+    scopeEl.textContent = 'Clearing all student and faculty profiles, attendance, and assignments.';
+    preservedEl.textContent = 'Master Subjects, Academic Sessions, Departments, and Admin access will be preserved.';
+    pwdGroup.style.display = 'block';
+    currentResetRequiresPassword = true;
+  } else {
+    titleEl.textContent = 'Confirm: FULL FACTORY RESET';
+    scopeEl.textContent = 'Completely wiping all non-admin operational records and subjects to return to a clean initial state.';
+    preservedEl.textContent = 'Super Admin login access will be preserved.';
+    pwdGroup.style.display = 'block';
+    currentResetRequiresPassword = true;
+  }
+
+  fetchResetPreviewCounts(type);
+
+  const modal = new bootstrap.Modal(document.getElementById('resetConfirmModal'));
+  modal.show();
+}
+
+async function fetchResetPreviewCounts(type) {
+  const spinner = document.getElementById('resetCountsSpinner');
+  if (spinner) spinner.style.display = 'inline-block';
+
+  try {
+    const res = await fetch(`/admin/settings/reset/preview?type=${encodeURIComponent(type)}`);
+    const data = await res.json();
+    if (data && data.success && data.preview) {
+      const p = data.preview;
+      document.getElementById('countAttendance').textContent = p.attendance_count;
+      document.getElementById('countStudents').textContent = p.students_count;
+      document.getElementById('countTeachers').textContent = p.teachers_count;
+      if (p.scope_description) {
+        document.getElementById('resetModalScopeDesc').textContent = p.scope_description;
+      }
+      if (p.preserved_description) {
+        document.getElementById('resetModalPreservedDesc').textContent = p.preserved_description;
+      }
+    }
+  } catch (e) {
+    console.error('Error fetching preview counts:', e);
+  } finally {
+    if (spinner) spinner.style.display = 'none';
+  }
+}
+
+function checkResetFormValidity() {
+  const confirmVal = (document.getElementById('resetConfirmationTextInput').value || '').trim();
+  const pwdVal = (document.getElementById('resetAdminPasswordInput').value || '').trim();
+  const submitBtn = document.getElementById('btnConfirmResetSubmit');
+
+  const textValid = confirmVal === 'RESET DATA';
+  const pwdValid = !currentResetRequiresPassword || (pwdVal.length > 0);
+
+  submitBtn.disabled = !(textValid && pwdValid);
+}
+
+function handleResetSubmit(e) {
+  const submitBtn = document.getElementById('btnConfirmResetSubmit');
+  const spinner = document.getElementById('resetSubmitSpinner');
+  const icon = document.getElementById('resetSubmitIcon');
+  const cancelBtn = document.getElementById('btnCancelReset');
+  const closeBtn = document.getElementById('btnCloseResetModal');
+
+  submitBtn.disabled = true;
+  if (spinner) spinner.classList.remove('d-none');
+  if (icon) icon.classList.add('d-none');
+  if (cancelBtn) cancelBtn.disabled = true;
+  if (closeBtn) closeBtn.disabled = true;
+
+  return true;
+}
+
 document.addEventListener('DOMContentLoaded', function() {
   const editButtons = document.querySelectorAll('.btn-edit-session');
   const editForm = document.getElementById('editSessionForm');

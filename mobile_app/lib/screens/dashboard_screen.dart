@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/services/api_service.dart';
+import 'package:mobile_app/screens/reset_data_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -876,6 +877,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         title: Text(isStudent ? "My Attendance" : "ERP Analytics Dashboard"),
         actions: [
+          if (user?['role'] == 'admin')
+            IconButton(
+              icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+              tooltip: "Reset Data & Start Fresh",
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ResetDataScreen()),
+                );
+                _loadData();
+              },
+            ),
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadData,

@@ -764,5 +764,67 @@ class ApiService {
 
     return {'error': 'PROFILE_NOT_LINKED', 'message': unlinkedMsg};
   }
+
+  // ==========================================================================
+  // Admin Reset Data API Methods
+  // ==========================================================================
+  Future<Map<String, dynamic>> getResetPreview(String type) async {
+    try {
+      final res = await http.get(
+        Uri.parse("$_baseUrl/api/admin/reset/preview?type=${Uri.encodeComponent(type)}"),
+        headers: _headers(isJson: true),
+      );
+      _updateCookie(res);
+
+      if (res.statusCode == 200) {
+        final data = jsonDecode(res.body);
+        return data is Map<String, dynamic> ? data : {'success': false, 'message': 'Invalid response'};
+      }
+      return {'success': false, 'message': 'Server returned HTTP ${res.statusCode}'};
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
+
+  Future<Map<String, dynamic>> executeResetData({
+    required String type,
+    required String confirmText,
+    String? password,
+  }) async {
+    try {
+      final payload = {
+        'reset_type': type,
+        'confirmation_text': confirmText,
+        if (password != null && password.isNotEmpty) 'admin_password': password,
+      };
+
+      final res = await http.post(
+        Uri.parse("$_baseUrl/api/admin/reset"),
+        headers: _headers(isJson: true),
+        body: jsonEncode(payload),
+      );
+      _updateCookie(res);
+
+      final data = jsonDecode(res.body);
+      if (res.statusCode == 200 && data['success'] == true) {
+        // Clear all cached local operational data
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.remove('cached_roster');
+        await prefs.remove('cached_subjects');
+        await prefs.remove('cached_today_scans');
+        await prefs.remove('cached_student_profile');
+        await prefs.remove('cached_attendance_stats');
+
+        return Map<String, dynamic>.from(data);
+      } else {
+        return {
+          'success': false,
+          'message': data['message'] ?? 'Failed with status ${res.statusCode}',
+        };
+      }
+    } catch (e) {
+      return {'success': false, 'message': 'Network error: $e'};
+    }
+  }
 }
 

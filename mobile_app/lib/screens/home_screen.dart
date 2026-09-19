@@ -4,6 +4,7 @@ import 'package:mobile_app/screens/take_attendance_screen.dart';
 import 'package:mobile_app/screens/dashboard_screen.dart';
 import 'package:mobile_app/screens/student_qr_screen.dart';
 import 'package:mobile_app/screens/login_screen.dart';
+import 'package:mobile_app/screens/reset_data_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onToggleTheme;
@@ -219,7 +220,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
+
+              if (user?['role'] == 'admin') ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: const BorderSide(color: Colors.redAccent),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                    icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+                    label: const Text(
+                      "Reset Data & Start Fresh",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () {
+                      Navigator.pop(ctx);
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const ResetDataScreen()),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
 
               // Action Buttons
               Row(

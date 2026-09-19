@@ -1292,3 +1292,62 @@ def student_subject_attendance_detail(subject_id):
         'records': records_list,
         'history': records_list
     })
+
+
+# ============================================================================
+# Admin Reset Data API Endpoints (Web & Mobile Clients)
+# ============================================================================
+@api_bp.route('/admin/reset/preview', methods=['GET'])
+@login_required
+def api_admin_reset_preview():
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Forbidden: Admin access required.'}), 403
+
+    from app.utils.reset_service import get_reset_preview
+    reset_type = request.args.get('type', 'ATTENDANCE')
+    preview = get_reset_preview(reset_type)
+    return jsonify({'success': True, 'preview': preview}), 200
+
+
+@api_bp.route('/admin/reset', methods=['POST'])
+@csrf.exempt
+@login_required
+def api_admin_reset_execute():
+    if not current_user.is_admin:
+        return jsonify({'success': False, 'message': 'Forbidden: Admin access required.'}), 403
+
+    from app.utils.reset_service import execute_reset, get_reset_preview
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+
+    reset_type = (data.get('reset_type') or data.get('type') or 'ATTENDANCE').strip().upper()
+    confirmation_text = (data.get('confirmation_text') or data.get('confirm_text') or '').strip()
+    password = data.get('admin_password') or data.get('password') or ''
+
+    if confirmation_text != 'RESET DATA':
+        return jsonify({
+            'success': False,
+            'message': "Verification failed: You must type 'RESET DATA' exactly to confirm this action."
+        }), 400
+
+    preview = get_reset_preview(reset_type)
+
+    if preview.get('requires_password', False):
+        if not password or not current_user.check_password(password):
+            return jsonify({
+                'success': False,
+                'message': 'Authentication failed: Incorrect administrator password. Destructive action rejected.'
+            }), 403
+
+    ip_addr = request.headers.get('X-Forwarded-For', request.remote_addr)
+    success, counts, msg = execute_reset(reset_type, current_user, ip_address=ip_addr)
+
+    if not success:
+        return jsonify({'success': False, 'message': msg}), 500
+
+    return jsonify({
+        'success': True,
+        'message': msg,
+        'deleted_counts': counts,
+        'reset_type': reset_type,
+        'timestamp': datetime.utcnow().isoformat()
+    }), 200

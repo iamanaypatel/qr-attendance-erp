@@ -1081,6 +1081,74 @@ def session_json(id):
 
 
 # ============================================================================
+# Reset Data / Start Fresh Management Endpoints
+# ============================================================================
+@admin_bp.route('/settings/reset/preview', methods=['GET'])
+@login_required
+@role_required('admin')
+def settings_reset_preview():
+    from app.utils.reset_service import get_reset_preview
+    reset_type = request.args.get('type', 'ATTENDANCE')
+    preview = get_reset_preview(reset_type)
+    return jsonify({'success': True, 'preview': preview})
+
+
+@admin_bp.route('/settings/reset', methods=['POST'])
+@login_required
+@role_required('admin')
+def settings_reset_execute():
+    from app.utils.reset_service import execute_reset, get_reset_preview
+
+    is_json = request.is_json or 'application/json' in request.headers.get('Accept', '')
+    data = request.get_json(silent=True) or request.form
+
+    reset_type = (data.get('reset_type') or data.get('type') or 'ATTENDANCE').strip().upper()
+    confirmation_text = (data.get('confirmation_text') or data.get('confirm_text') or '').strip()
+    password = data.get('admin_password') or data.get('password') or ''
+
+    # Validation 1: Exact confirmation text
+    if confirmation_text != 'RESET DATA':
+        err_msg = "Verification failed: You must type 'RESET DATA' exactly to confirm this action."
+        if is_json:
+            return jsonify({'success': False, 'message': err_msg}), 400
+        flash(err_msg, 'danger')
+        return redirect(url_for('admin.settings'))
+
+    preview = get_reset_preview(reset_type)
+
+    # Validation 2: Password re-authentication for high-risk operations
+    if preview.get('requires_password', False):
+        if not password or not current_user.check_password(password):
+            err_msg = "Authentication failed: Incorrect administrator password. Destructive action rejected."
+            if is_json:
+                return jsonify({'success': False, 'message': err_msg}), 403
+            flash(err_msg, 'danger')
+            return redirect(url_for('admin.settings'))
+
+    # Execution
+    ip_addr = request.headers.get('X-Forwarded-For', request.remote_addr)
+    success, counts, msg = execute_reset(reset_type, current_user, ip_address=ip_addr)
+
+    if not success:
+        if is_json:
+            return jsonify({'success': False, 'message': msg}), 500
+        flash(f"❌ Reset failed: {msg}", 'danger')
+        return redirect(url_for('admin.settings'))
+
+    if is_json:
+        return jsonify({
+            'success': True,
+            'message': msg,
+            'deleted_counts': counts,
+            'reset_type': reset_type,
+            'timestamp': datetime.utcnow().isoformat()
+        })
+
+    flash(f"✅ {msg}", 'success')
+    return redirect(url_for('admin.settings'))
+
+
+# ============================================================================
 # Subjects Management
 # ============================================================================
 @admin_bp.route('/subjects')
