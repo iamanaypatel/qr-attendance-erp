@@ -33,12 +33,7 @@ class FirebaseAuthService {
         return {'success': false, 'message': 'Failed to retrieve auth token.'};
       }
 
-      return await ApiService().syncFirebaseLogin(
-        idToken: idToken,
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-      );
+      return await ApiService().loginWithGoogle(idToken: idToken);
     } on FirebaseAuthException catch (e) {
       return {'success': false, 'message': e.message ?? 'Authentication error.'};
     } catch (e) {
@@ -46,7 +41,7 @@ class FirebaseAuthService {
     }
   }
 
-  // 2. Google Sign-In
+  // 2. Verified Google Sign-In
   Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
       final googleUser = await _googleSignIn.signIn();
@@ -71,12 +66,7 @@ class FirebaseAuthService {
         return {'success': false, 'message': 'Failed to retrieve auth token from Google.'};
       }
 
-      return await ApiService().syncFirebaseLogin(
-        idToken: idToken,
-        uid: user.uid,
-        email: user.email,
-        displayName: user.displayName,
-      );
+      return await ApiService().loginWithGoogle(idToken: idToken);
     } on FirebaseAuthException catch (e) {
       return {'success': false, 'message': e.message ?? 'Google authentication error.'};
     } catch (e) {
@@ -84,63 +74,14 @@ class FirebaseAuthService {
     }
   }
 
-  // 3. Phone Number Verification (SMS OTP)
-  Future<void> sendPhoneOtp({
-    required String phoneNumber,
-    required Function(String verificationId, int? resendToken) onCodeSent,
-    required Function(FirebaseAuthException error) onVerificationFailed,
-    required Function(PhoneAuthCredential credential) onAutoVerify,
-  }) async {
-    await _auth.verifyPhoneNumber(
-      phoneNumber: phoneNumber.trim(),
-      verificationCompleted: onAutoVerify,
-      verificationFailed: onVerificationFailed,
-      codeSent: onCodeSent,
-      codeAutoRetrievalTimeout: (String verificationId) {},
-      timeout: const Duration(seconds: 60),
-    );
-  }
-
-  Future<Map<String, dynamic>> verifyPhoneOtp({
-    required String verificationId,
-    required String smsCode,
-  }) async {
-    try {
-      final credential = PhoneAuthProvider.credential(
-        verificationId: verificationId,
-        smsCode: smsCode.trim(),
-      );
-
-      final userCred = await _auth.signInWithCredential(credential);
-      final user = userCred.user;
-      if (user == null) {
-        return {'success': false, 'message': 'Phone verification failed.'};
-      }
-
-      final idToken = await user.getIdToken();
-      if (idToken == null) {
-        return {'success': false, 'message': 'Failed to retrieve auth token.'};
-      }
-
-      return await ApiService().syncFirebaseLogin(
-        idToken: idToken,
-        uid: user.uid,
-        phoneNumber: user.phoneNumber,
-        displayName: user.displayName,
-      );
-    } on FirebaseAuthException catch (e) {
-      return {'success': false, 'message': e.message ?? 'Invalid verification code.'};
-    } catch (e) {
-      return {'success': false, 'message': 'Verification error: $e'};
-    }
-  }
-
-  // 4. Sign Out
+  // 3. Complete Sign Out
   Future<void> signOut() async {
     try {
       await _googleSignIn.signOut();
     } catch (_) {}
-    await _auth.signOut();
+    try {
+      await _auth.signOut();
+    } catch (_) {}
     await ApiService().logout();
   }
 }

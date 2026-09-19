@@ -5,6 +5,7 @@ import 'package:mobile_app/screens/dashboard_screen.dart';
 import 'package:mobile_app/screens/student_qr_screen.dart';
 import 'package:mobile_app/screens/login_screen.dart';
 import 'package:mobile_app/screens/reset_data_screen.dart';
+import 'package:mobile_app/services/firebase_auth_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final VoidCallback onToggleTheme;
@@ -81,7 +82,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onPressed: () async {
               Navigator.pop(ctx);
               final nav = Navigator.of(context);
-              await ApiService().logout();
+              await FirebaseAuthService().signOut();
               if (!mounted) return;
               nav.pushAndRemoveUntil(
                 MaterialPageRoute(

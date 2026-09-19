@@ -1,6 +1,6 @@
 import re
 from datetime import date, datetime
-from flask import jsonify, request, current_app
+from flask import jsonify, request, current_app, url_for
 from flask_login import current_user, login_required, login_user, logout_user
 from sqlalchemy import func
 from app.api import api_bp
@@ -1351,3 +1351,142 @@ def api_admin_reset_execute():
         'reset_type': reset_type,
         'timestamp': datetime.utcnow().isoformat()
     }), 200
+
+
+@api_bp.route('/auth/google', methods=['POST'])
+@csrf.exempt
+def api_auth_google():
+    """
+    Verified Google Sign-In endpoint via Firebase Authentication.
+    Flow:
+      1. Receives Firebase ID token from client.
+      2. Cryptographically verifies token server-side via Google Identity Toolkit / Firebase Admin.
+      3. Validates email_verified status.
+      4. Normalizes verified email (trim + lowercase).
+      5. Searches ERP database for existing account with matching normalized email.
+      6. Enforces single-account safety (checks for duplicate conflicting emails).
+      7. Validates account status (active/blocked).
+      8. STRICT: NO auto-registration! Rejects if email is not pre-registered in ERP database.
+      9. Optionally updates firebase_uid.
+      10. Establishes Flask-Login session cookie and returns API Bearer token with role dashboard redirect.
+    """
+    from app.utils.firebase_auth import verify_google_id_token, normalize_email
+
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    id_token = data.get('id_token')
+
+    if not id_token:
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'message': 'Missing Firebase ID token.'
+        }), 400
+
+    token_result = verify_google_id_token(id_token)
+    if not token_result.get('valid'):
+        err_msg = token_result.get('error', 'Invalid or expired Firebase ID token.')
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'message': err_msg
+        }), 401
+
+    if not token_result.get('email_verified', False):
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'message': 'Google email address is not verified.'
+        }), 403
+
+    raw_email = token_result.get('email', '')
+    normalized_email = normalize_email(raw_email)
+
+    if not normalized_email:
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'message': 'Verified email address was not found in Google identity token.'
+        }), 400
+
+    # Check for duplicate accounts in central User table
+    matching_users = User.query.filter(func.lower(User.email) == normalized_email).all()
+    if len(matching_users) > 1:
+        current_app.logger.error(f"Multiple User accounts found for email: {normalized_email}")
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'message': 'This email is linked to multiple ERP accounts. Please contact administrator.'
+        }), 409
+
+    user = matching_users[0] if matching_users else None
+
+    # If no central User record, check Student and Teacher tables
+    if not user:
+        stu = Student.query.filter(func.lower(Student.email) == normalized_email).first()
+        if stu and stu.user:
+            user = stu.user
+
+    if not user:
+        tch = Teacher.query.filter(func.lower(Teacher.email) == normalized_email).first()
+        if tch and tch.user:
+            user = tch.user
+
+    # STRICT: Never auto-register an unregistered Google account
+    if not user:
+        current_app.logger.warning(f"Rejected Google login for unregistered email: {normalized_email}")
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'message': 'Your Gmail address is not registered in the ERP system. Please contact the administrator.'
+        }), 401
+
+    # Check account active / blocked status
+    if not user.is_active:
+        current_app.logger.warning(f"Rejected Google login for inactive account: {user.username} ({normalized_email})")
+        return jsonify({
+            'success': False,
+            'authenticated': False,
+            'message': 'Your ERP account is inactive. Please contact the administrator.'
+        }), 403
+
+    # Optionally record Firebase UID
+    uid = token_result.get('uid')
+    if uid and not user.firebase_uid:
+        user.firebase_uid = uid
+        try:
+            db.session.commit()
+        except Exception as e:
+            db.session.rollback()
+            current_app.logger.warning(f"Could not persist firebase_uid on user {user.id}: {e}")
+
+    # Establish Flask-Login session cookie
+    login_user(user, remember=True)
+    AuditLog.log('GOOGLE_AUTH_LOGIN', f"Logged in via Google Sign-In: {user.username} ({normalized_email}) [{user.role}]", user_id=user.id)
+
+    # Issue API Bearer token for mobile APK and API clients
+    api_token = user.generate_auth_token()
+
+    if user.is_admin:
+        redirect_url = url_for('admin.dashboard')
+    elif user.is_teacher:
+        redirect_url = url_for('teacher.dashboard')
+    elif user.is_student:
+        redirect_url = url_for('student.dashboard')
+    else:
+        redirect_url = url_for('auth.login')
+
+    return jsonify({
+        'success': True,
+        'authenticated': True,
+        'token': api_token,
+        'redirect_url': redirect_url,
+        'message': f"Welcome back, {user.get_display_name()}!",
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'display_name': user.get_display_name()
+        }
+    }), 200
+

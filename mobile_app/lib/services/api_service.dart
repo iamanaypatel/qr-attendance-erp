@@ -827,22 +827,18 @@ class ApiService {
     }
   }
 
-  Future<Map<String, dynamic>> syncFirebaseLogin({
-    required String idToken,
-    required String uid,
-    String? email,
-    String? phoneNumber,
-    String? displayName,
-  }) async {
-    try {
-      final uri = Uri.parse('$_baseUrl/auth/firebase-login');
-      final payload = {
-        'id_token': idToken,
-        'uid': uid,
-        if (email != null && email.isNotEmpty) 'email': email,
-        if (phoneNumber != null && phoneNumber.isNotEmpty) 'phone_number': phoneNumber,
-        if (displayName != null && displayName.isNotEmpty) 'display_name': displayName,
+  Future<Map<String, dynamic>> loginWithGoogle({required String idToken}) async {
+    // Enforce strictly ONE active user session at a time in APK
+    if (_currentUser != null) {
+      return {
+        'success': false,
+        'message': 'Another user is already logged in. Please logout from the current account before signing in with another account.',
       };
+    }
+
+    try {
+      final uri = Uri.parse('$_baseUrl/api/auth/google');
+      final payload = {'id_token': idToken};
 
       final response = await http
           .post(
@@ -861,25 +857,47 @@ class ApiService {
         final data = jsonDecode(response.body);
         if (data['success'] == true) {
           _currentUser = data['user'];
+          if (data['token'] != null && data['token'].toString().isNotEmpty) {
+            _authToken = data['token'].toString();
+          }
           final prefs = await SharedPreferences.getInstance();
           await prefs.setString('current_user', jsonEncode(_currentUser));
+          if (_authToken != null) {
+            await prefs.setString('auth_token', _authToken!);
+          }
 
           return {
             'success': true,
-            'message': data['message'] ?? 'Signed in via Firebase successfully!',
+            'message': data['message'] ?? 'Signed in with Google successfully!',
             'user': _currentUser,
           };
         }
       }
 
-      final err = jsonDecode(response.body);
-      return {
-        'success': false,
-        'message': err['message'] ?? 'Failed to authenticate Firebase token with ERP server.',
-      };
+      try {
+        final err = jsonDecode(response.body);
+        return {
+          'success': false,
+          'message': err['message'] ?? 'Your Gmail address is not registered in the ERP system. Please contact the administrator.',
+        };
+      } catch (_) {
+        return {
+          'success': false,
+          'message': 'Your Gmail address is not registered in the ERP system. Please contact the administrator.',
+        };
+      }
     } catch (e) {
-      return {'success': false, 'message': 'Sync error: $e'};
+      return {'success': false, 'message': 'Network connection error: $e'};
     }
   }
-}
 
+  Future<Map<String, dynamic>> syncFirebaseLogin({
+    required String idToken,
+    required String uid,
+    String? email,
+    String? phoneNumber,
+    String? displayName,
+  }) async {
+    return loginWithGoogle(idToken: idToken);
+  }
+}
