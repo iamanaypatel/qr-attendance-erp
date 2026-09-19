@@ -65,14 +65,89 @@
           </button>
         </form>
 
+        <!-- Firebase Authentication Section (Google & Phone OTP) -->
+        <div class="position-relative my-4 text-center">
+          <hr class="text-muted opacity-25">
+          <span class="position-absolute top-50 start-50 translate-middle bg-body px-3 text-muted small fw-semibold">
+            OR CONTINUE WITH
+          </span>
+        </div>
+
+        <!-- Google Sign-In Button -->
+        <button type="button" class="btn btn-outline-secondary w-100 py-2 d-flex align-items-center justify-content-center mb-2 rounded-3 shadow-sm bg-body" id="btnGoogleSignIn">
+          <svg class="me-2" width="18" height="18" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span class="fw-semibold">Sign in with Google</span>
+        </button>
+
+        <!-- Phone Number OTP Button -->
+        <button type="button" class="btn btn-outline-secondary w-100 py-2 d-flex align-items-center justify-content-center rounded-3 shadow-sm bg-body" data-bs-toggle="modal" data-bs-target="#phoneAuthModal">
+          <i class="bi bi-phone-fill text-success me-2 fs-5"></i>
+          <span class="fw-semibold">Sign in with Phone OTP</span>
+        </button>
+
+        <!-- Hidden Recaptcha Container for Phone Auth -->
+        <div id="recaptcha-container"></div>
+
       </div>
 
+    </div>
+  </div>
+</div>
+
+<!-- Phone Authentication Modal -->
+<div class="modal fade" id="phoneAuthModal" tabindex="-1" aria-labelledby="phoneAuthModalLabel" aria-hidden="true">
+  <div class="modal-dialog modal-dialog-centered">
+    <div class="modal-content rounded-4 border-0 shadow">
+      <div class="modal-header border-bottom-0 pb-0">
+        <h5 class="modal-title fw-bold" id="phoneAuthModalLabel">
+          <i class="bi bi-shield-check text-primary me-2"></i>Phone Verification
+        </h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+      </div>
+      <div class="modal-body p-4">
+        <!-- Step 1: Enter Phone Number -->
+        <div id="phoneStep1">
+          <p class="text-muted small mb-3">Enter your registered mobile number to receive a one-time SMS verification code.</p>
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted">MOBILE NUMBER (WITH COUNTRY CODE)</label>
+            <div class="input-group">
+              <span class="input-group-text bg-transparent text-muted"><i class="bi bi-telephone"></i></span>
+              <input type="tel" class="form-control font-mono" id="phoneInput" placeholder="+91 9876543210" value="+91 ">
+            </div>
+          </div>
+          <button type="button" class="btn btn-primary w-100 py-2" id="btnSendOtp">
+            <span class="spinner-border spinner-border-sm d-none me-1" id="phoneSpinner"></span>
+            Send Verification Code
+          </button>
+        </div>
+
+        <!-- Step 2: Enter 6-digit OTP -->
+        <div id="phoneStep2" class="d-none">
+          <p class="text-muted small mb-3">Enter the 6-digit verification code sent to your phone.</p>
+          <div class="mb-3">
+            <label class="form-label small fw-bold text-muted">6-DIGIT OTP CODE</label>
+            <input type="text" class="form-control text-center font-mono fs-4 letter-spacing-2" id="otpInput" maxlength="6" placeholder="••••••">
+          </div>
+          <button type="button" class="btn btn-success w-100 py-2" id="btnVerifyOtp">
+            <span class="spinner-border spinner-border-sm d-none me-1" id="otpSpinner"></span>
+            Verify & Sign In
+          </button>
+        </div>
+
+        <div class="alert alert-danger mt-3 d-none small mb-0" id="phoneAuthError"></div>
+      </div>
     </div>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
+<script type="module" src="{{ url_for('static', filename='js/firebase-auth-service.js') }}"></script>
 <script>
   const toggleBtn = document.getElementById('togglePasswordBtn');
   const pwdInput = document.getElementById('password');
@@ -87,6 +162,101 @@
         pwdInput.type = 'password';
         icon.classList.remove('bi-eye-slash');
         icon.classList.add('bi-eye');
+      }
+    });
+  }
+
+  // Firebase Google Sign-In
+  const btnGoogle = document.getElementById('btnGoogleSignIn');
+  if (btnGoogle) {
+    btnGoogle.addEventListener('click', async () => {
+      try {
+        btnGoogle.disabled = true;
+        btnGoogle.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Connecting to Google...';
+        if (!window.FirebaseAuthService) {
+          throw new Error("Firebase Auth service initializing, please try again in a moment.");
+        }
+        const res = await window.FirebaseAuthService.signInWithGoogle();
+        if (res && res.success && res.redirect_url) {
+          window.location.href = res.redirect_url;
+        } else {
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error("Google Sign-In error:", err);
+        alert(err.message || "Failed to sign in with Google.");
+        btnGoogle.disabled = false;
+        btnGoogle.innerHTML = `
+          <svg class="me-2" width="18" height="18" viewBox="0 0 24 24">
+            <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+            <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+            <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"/>
+            <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"/>
+          </svg>
+          <span class="fw-semibold">Sign in with Google</span>
+        `;
+      }
+    });
+  }
+
+  // Firebase Phone OTP Authentication
+  const btnSendOtp = document.getElementById('btnSendOtp');
+  const btnVerifyOtp = document.getElementById('btnVerifyOtp');
+  const phoneErr = document.getElementById('phoneAuthError');
+
+  if (btnSendOtp) {
+    btnSendOtp.addEventListener('click', async () => {
+      phoneErr.classList.add('d-none');
+      const phoneVal = (document.getElementById('phoneInput').value || '').trim();
+      if (!phoneVal || phoneVal.length < 10) {
+        phoneErr.textContent = "Please enter a valid phone number with country code (e.g. +91 9876543210).";
+        phoneErr.classList.remove('d-none');
+        return;
+      }
+
+      try {
+        btnSendOtp.disabled = true;
+        document.getElementById('phoneSpinner').classList.remove('d-none');
+        await window.FirebaseAuthService.sendPhoneOtp(phoneVal, 'recaptcha-container');
+        document.getElementById('phoneStep1').classList.add('d-none');
+        document.getElementById('phoneStep2').classList.remove('d-none');
+      } catch (err) {
+        console.error("Phone OTP send error:", err);
+        phoneErr.textContent = err.message || "Failed to send SMS code. Ensure Phone provider is active in Firebase Console.";
+        phoneErr.classList.remove('d-none');
+      } finally {
+        btnSendOtp.disabled = false;
+        document.getElementById('phoneSpinner').classList.add('d-none');
+      }
+    });
+  }
+
+  if (btnVerifyOtp) {
+    btnVerifyOtp.addEventListener('click', async () => {
+      phoneErr.classList.add('d-none');
+      const otpVal = (document.getElementById('otpInput').value || '').trim();
+      if (!otpVal || otpVal.length < 6) {
+        phoneErr.textContent = "Please enter the complete 6-digit OTP code.";
+        phoneErr.classList.remove('d-none');
+        return;
+      }
+
+      try {
+        btnVerifyOtp.disabled = true;
+        document.getElementById('otpSpinner').classList.remove('d-none');
+        const res = await window.FirebaseAuthService.verifyPhoneOtp(otpVal);
+        if (res && res.success && res.redirect_url) {
+          window.location.href = res.redirect_url;
+        } else {
+          window.location.reload();
+        }
+      } catch (err) {
+        console.error("Phone OTP verify error:", err);
+        phoneErr.textContent = err.message || "Invalid or expired verification code.";
+        phoneErr.classList.remove('d-none');
+      } finally {
+        btnVerifyOtp.disabled = false;
+        document.getElementById('otpSpinner').classList.add('d-none');
       }
     });
   }

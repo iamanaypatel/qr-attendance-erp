@@ -1,0 +1,22 @@
+{
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "auth": {
+    "authorizedDomains": [
+      "localhost",
+      "127.0.0.1",
+      "erpvsgoi.firebaseapp.com",
+      "erpvsgoi.web.app",
+      "qr-attendance-erp.onrender.com"
+    ],
+    "providers": {
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "VSGOI Attendance ERP",
+        "supportEmail": "admin@vsmt.edu.in"
+      }
+    }
+  }
+}

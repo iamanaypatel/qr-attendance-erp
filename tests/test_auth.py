@@ -59,3 +59,34 @@ def test_role_based_access_control(client, seeded_db):
     response = client.get('/admin/dashboard', follow_redirects=False)
     assert response.status_code == 302
     assert response.headers['Location'] == '/student/dashboard'
+
+
+def test_firebase_login_endpoints(client, seeded_db, monkeypatch):
+    # 1. Missing token
+    res = client.post('/auth/firebase-login', json={})
+    assert res.status_code == 400
+    assert 'Missing Firebase ID token' in res.json['message']
+
+    # 2. Mock token verification for existing admin
+    import requests
+    class MockResp:
+        status_code = 200
+        def json(self):
+            return {
+                'users': [{
+                    'localId': 'mock_fb_uid_admin',
+                    'email': 'admin@test.local'
+                }]
+            }
+
+    monkeypatch.setattr(requests, 'post', lambda *args, **kwargs: MockResp())
+
+    res = client.post('/auth/firebase-login', json={
+        'id_token': 'mock_valid_token_123',
+        'email': 'admin@test.local'
+    })
+    assert res.status_code == 200
+    assert res.json['success'] is True
+    assert res.json['user']['role'] == 'admin'
+    assert res.json['redirect_url'] == '/admin/dashboard'
+

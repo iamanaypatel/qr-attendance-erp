@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:mobile_app/services/api_service.dart';
+import 'package:mobile_app/services/firebase_auth_service.dart';
 import 'package:mobile_app/screens/home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -76,6 +77,229 @@ class _LoginScreenState extends State<LoginScreen> {
         _errorMessage = res['message'] ?? "Invalid credentials. Please verify your login details.";
       });
     }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final res = await FirebaseAuthService().signInWithGoogle();
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoading = false;
+    });
+
+    if (res['success'] == true) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (_) => HomeScreen(onToggleTheme: widget.onToggleTheme),
+        ),
+      );
+    } else {
+      setState(() {
+        _errorMessage = res['message'] ?? "Google Sign-In failed.";
+      });
+    }
+  }
+
+  void _showPhoneSignInDialog() {
+    final phoneCtrl = TextEditingController(text: "+91 ");
+    final otpCtrl = TextEditingController();
+    bool codeSent = false;
+    bool isVerifying = false;
+    String? dialogError;
+    String verificationId = "";
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setModalState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Row(
+            children: [
+              Icon(Icons.phone_android_rounded, color: Color(0xFF2563EB)),
+              SizedBox(width: 10),
+              Text("Phone OTP Sign In", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              if (dialogError != null) ...[
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  margin: const EdgeInsets.only(bottom: 12),
+                  decoration: BoxDecoration(
+                    color: Colors.red.withValues(alpha: 0.1),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+                  ),
+                  child: Text(
+                    dialogError!,
+                    style: const TextStyle(color: Colors.red, fontSize: 12),
+                  ),
+                ),
+              ],
+              if (!codeSent) ...[
+                const Text(
+                  "Enter your registered mobile number to receive an SMS verification code.",
+                  style: TextStyle(fontSize: 12.5, color: Colors.grey),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: "Mobile Number",
+                    prefixIcon: const Icon(Icons.phone),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ] else ...[
+                Text(
+                  "Enter the 6-digit code sent to ${phoneCtrl.text.trim()}:",
+                  style: const TextStyle(fontSize: 12.5, color: Colors.grey),
+                ),
+                const SizedBox(height: 14),
+                TextField(
+                  controller: otpCtrl,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 6,
+                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, letterSpacing: 4),
+                  decoration: InputDecoration(
+                    labelText: "6-digit OTP",
+                    counterText: "",
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isVerifying ? null : () => Navigator.pop(ctx),
+              child: const Text("Cancel"),
+            ),
+            if (!codeSent)
+              ElevatedButton(
+                onPressed: isVerifying
+                    ? null
+                    : () async {
+                        final phone = phoneCtrl.text.trim();
+                        if (phone.length < 10) {
+                          setModalState(() {
+                            dialogError = "Please enter a valid phone number with country code.";
+                          });
+                          return;
+                        }
+
+                        setModalState(() {
+                          isVerifying = true;
+                          dialogError = null;
+                        });
+
+                        try {
+                          await FirebaseAuthService().sendPhoneOtp(
+                            phoneNumber: phone,
+                            onCodeSent: (vId, token) {
+                              setModalState(() {
+                                verificationId = vId;
+                                codeSent = true;
+                                isVerifying = false;
+                              });
+                            },
+                            onVerificationFailed: (err) {
+                              setModalState(() {
+                                dialogError = err.message ?? "Phone verification failed.";
+                                isVerifying = false;
+                              });
+                            },
+                            onAutoVerify: (cred) async {
+                              // Android auto-sms verify
+                              if (cred.smsCode != null && verificationId.isNotEmpty) {
+                                final res = await FirebaseAuthService().verifyPhoneOtp(
+                                  verificationId: verificationId,
+                                  smsCode: cred.smsCode!,
+                                );
+                                if (res['success'] == true && mounted) {
+                                  if (ctx.mounted) Navigator.pop(ctx);
+                                  if (context.mounted) {
+                                    Navigator.of(context).pushReplacement(
+                                      MaterialPageRoute(
+                                        builder: (_) => HomeScreen(onToggleTheme: widget.onToggleTheme),
+                                      ),
+                                    );
+                                  }
+                                }
+                              }
+                            },
+                          );
+                        } catch (e) {
+                          setModalState(() {
+                            dialogError = e.toString();
+                            isVerifying = false;
+                          });
+                        }
+                      },
+                child: isVerifying
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text("Send OTP"),
+              )
+            else
+              ElevatedButton(
+                onPressed: isVerifying
+                    ? null
+                    : () async {
+                        final code = otpCtrl.text.trim();
+                        if (code.length < 6) {
+                          setModalState(() {
+                            dialogError = "Please enter all 6 digits.";
+                          });
+                          return;
+                        }
+
+                        setModalState(() {
+                          isVerifying = true;
+                          dialogError = null;
+                        });
+
+                        final res = await FirebaseAuthService().verifyPhoneOtp(
+                          verificationId: verificationId,
+                          smsCode: code,
+                        );
+
+                        if (!mounted) return;
+
+                        if (res['success'] == true) {
+                          if (ctx.mounted) Navigator.pop(ctx);
+                          if (context.mounted) {
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => HomeScreen(onToggleTheme: widget.onToggleTheme),
+                              ),
+                            );
+                          }
+                        } else {
+                          setModalState(() {
+                            dialogError = res['message'] ?? "Invalid or expired OTP.";
+                            isVerifying = false;
+                          });
+                        }
+                      },
+                child: isVerifying
+                    ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text("Verify & Login"),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   void _showServerConfigDialog() {
@@ -519,6 +743,80 @@ class _LoginScreenState extends State<LoginScreen> {
                                       ),
                                     ],
                                   ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 16),
+
+                        // Divider
+                        Row(
+                          children: [
+                            const Expanded(child: Divider()),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 12),
+                              child: Text(
+                                "OR CONTINUE WITH",
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.grey.withValues(alpha: 0.8),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ),
+                            const Expanded(child: Divider()),
+                          ],
+                        ),
+
+                        const SizedBox(height: 14),
+
+                        // Google Sign-In Button
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _handleGoogleSignIn,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            side: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                          ),
+                          icon: Container(
+                            padding: const EdgeInsets.all(2),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.black.withValues(alpha: 0.1),
+                                  blurRadius: 4,
+                                  offset: const Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.g_mobiledata_rounded,
+                              color: Color(0xFF4285F4),
+                              size: 22,
+                            ),
+                          ),
+                          label: const Text(
+                            "Sign in with Google",
+                            style: TextStyle(fontWeight: FontWeight.w600),
+                          ),
+                        ),
+
+                        const SizedBox(height: 10),
+
+                        // Phone OTP Sign-In Button
+                        OutlinedButton.icon(
+                          onPressed: _isLoading ? null : _showPhoneSignInDialog,
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            side: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+                          ),
+                          icon: const Icon(Icons.phone_android_rounded, color: Colors.green, size: 20),
+                          label: const Text(
+                            "Sign in with Phone OTP",
+                            style: TextStyle(fontWeight: FontWeight.w600),
                           ),
                         ),
                       ],

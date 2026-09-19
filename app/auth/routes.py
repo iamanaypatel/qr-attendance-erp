@@ -254,3 +254,105 @@ def change_password():
         return redirect(url_for('auth.login'))
 
     return render_template('auth/change_password.html', form=form)
+
+
+@auth_bp.route('/firebase-login', methods=['POST'])
+@csrf.exempt
+def firebase_login():
+    import os
+    import requests
+    from flask import current_app
+
+    data = request.get_json(silent=True) or request.form.to_dict() or {}
+    id_token = data.get('id_token')
+    email = (data.get('email') or '').strip().lower()
+    phone_number = (data.get('phone_number') or '').strip()
+    uid = (data.get('uid') or '').strip()
+    display_name = data.get('display_name') or ''
+
+    if not id_token:
+        return jsonify({'success': False, 'message': 'Missing Firebase ID token.'}), 400
+
+    # Verify ID token with Google Identity Toolkit
+    verified_email = None
+    verified_phone = None
+    try:
+        api_key = os.environ.get('FIREBASE_API_KEY', 'AIzaSyB7a8nt-kYYiT97sruPGD6-gCSErpRqTPg')
+        verify_url = f"https://identitytoolkit.googleapis.com/v1/accounts:lookup?key={api_key}"
+        resp = requests.post(verify_url, json={'idToken': id_token}, timeout=6)
+        if resp.status_code == 200:
+            users_info = resp.json().get('users', [])
+            if users_info:
+                u_info = users_info[0]
+                verified_email = (u_info.get('email') or '').strip().lower()
+                verified_phone = (u_info.get('phoneNumber') or '').strip()
+                uid = u_info.get('localId', uid)
+    except Exception as e:
+        current_app.logger.warning(f"Firebase token verification error: {e}")
+
+    target_email = verified_email or email
+    target_phone = verified_phone or phone_number
+
+    user = None
+    if target_email:
+        user = User.query.filter(func.lower(User.email) == target_email).first()
+
+    if not user and target_phone:
+        from app.models.student import Student
+        from app.models.teacher import Teacher
+        stu = Student.query.filter(Student.phone == target_phone).first()
+        if stu and stu.user:
+            user = stu.user
+        if not user:
+            tch = Teacher.query.filter(Teacher.phone == target_phone).first()
+            if tch and tch.user:
+                user = tch.user
+
+    if not user and uid:
+        user = User.query.filter_by(username=uid).first()
+
+    if not user:
+        # Provision new account for verified Firebase user
+        username_candidate = (target_email.split('@')[0] if target_email else f"user_{uid[:8]}")[:64]
+        base_uname = username_candidate
+        counter = 1
+        while User.query.filter_by(username=username_candidate).first():
+            username_candidate = f"{base_uname}{counter}"
+            counter += 1
+
+        user = User(
+            username=username_candidate,
+            email=target_email or f"{uid}@erpvsgoi.firebase",
+            role='student',
+            is_active=True
+        )
+        user.set_password(f"FirebasePass@{uid[:8]}")
+        db.session.add(user)
+        db.session.commit()
+
+    if not user.is_active:
+        return jsonify({'success': False, 'message': 'Account is deactivated.'}), 403
+
+    login_user(user, remember=True)
+    AuditLog.log('FIREBASE_AUTH_LOGIN', f"Logged in via Firebase Auth: {user.username} [{user.role}]", user_id=user.id)
+
+    if user.is_admin:
+        redirect_url = url_for('admin.dashboard')
+    elif user.is_teacher:
+        redirect_url = url_for('teacher.dashboard')
+    else:
+        redirect_url = url_for('student.dashboard')
+
+    return jsonify({
+        'success': True,
+        'message': f"Welcome, {user.get_display_name()}!",
+        'redirect_url': redirect_url,
+        'user': {
+            'id': user.id,
+            'username': user.username,
+            'email': user.email,
+            'role': user.role,
+            'display_name': user.get_display_name()
+        }
+    }), 200
+

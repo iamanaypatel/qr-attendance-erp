@@ -826,5 +826,60 @@ class ApiService {
       return {'success': false, 'message': 'Network error: $e'};
     }
   }
+
+  Future<Map<String, dynamic>> syncFirebaseLogin({
+    required String idToken,
+    required String uid,
+    String? email,
+    String? phoneNumber,
+    String? displayName,
+  }) async {
+    try {
+      final uri = Uri.parse('$_baseUrl/auth/firebase-login');
+      final payload = {
+        'id_token': idToken,
+        'uid': uid,
+        if (email != null && email.isNotEmpty) 'email': email,
+        if (phoneNumber != null && phoneNumber.isNotEmpty) 'phone_number': phoneNumber,
+        if (displayName != null && displayName.isNotEmpty) 'display_name': displayName,
+      };
+
+      final response = await http
+          .post(
+            uri,
+            headers: {
+              'Content-Type': 'application/json',
+              'Accept': 'application/json',
+            },
+            body: jsonEncode(payload),
+          )
+          .timeout(const Duration(seconds: 12));
+
+      _updateCookie(response);
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        if (data['success'] == true) {
+          _currentUser = data['user'];
+          final prefs = await SharedPreferences.getInstance();
+          await prefs.setString('current_user', jsonEncode(_currentUser));
+
+          return {
+            'success': true,
+            'message': data['message'] ?? 'Signed in via Firebase successfully!',
+            'user': _currentUser,
+          };
+        }
+      }
+
+      final err = jsonDecode(response.body);
+      return {
+        'success': false,
+        'message': err['message'] ?? 'Failed to authenticate Firebase token with ERP server.',
+      };
+    } catch (e) {
+      return {'success': false, 'message': 'Sync error: $e'};
+    }
+  }
 }
 

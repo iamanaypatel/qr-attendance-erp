@@ -1,0 +1,172 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// Collection: users
+// Document ID: {userId} (matches request.auth.uid)
+// Fields:
+//   - uid: string (required, matches userId)
+//   - email: string (optional, valid email format)
+//   - phoneNumber: string (optional, phone format)
+//   - role: string (required, allowed: 'admin', 'teacher', 'student')
+//   - displayName: string (optional)
+//   - isActive: bool (required)
+//   - createdAt: timestamp (immutable)
+//
+// Collection: students
+// Document ID: {studentDocId}
+// Fields:
+//   - studentId: string (required)
+//   - fullName: string (required)
+//   - email: string (optional)
+//   - rollNumber: string (required)
+//   - department: string (required)
+//   - course: string (required)
+//   - semester: string (required)
+//   - section: string (required)
+//   - qrToken: string (optional)
+//   - userId: string (optional, links to users doc)
+//   - isActive: bool (required)
+//
+// Collection: teachers
+// Document ID: {teacherDocId}
+// Fields:
+//   - employeeId: string (required)
+//   - fullName: string (required)
+//   - email: string (required)
+//   - department: string (required)
+//   - designation: string (required)
+//   - userId: string (optional, links to users doc)
+//   - isActive: bool (required)
+//
+// Collection: subjects
+// Document ID: {subjectDocId}
+// Fields:
+//   - subjectCode: string (required)
+//   - subjectName: string (required)
+//   - department: string (required)
+//   - course: string (required)
+//   - semester: string (required)
+//   - sessionId: string (required)
+//   - isActive: bool (required)
+//
+// Collection: attendances
+// Document ID: {attendanceDocId}
+// Fields:
+//   - studentId: string (required)
+//   - subjectId: string (optional)
+//   - teacherId: string (optional)
+//   - semester: string (required)
+//   - section: string (required)
+//   - date: string (required, YYYY-MM-DD)
+//   - status: string (required, 'Present' or 'Absent')
+//   - attendanceType: string (required, 'SUBJECT', 'GENERAL', 'COMBINED')
+//   - timestamp: timestamp (required)
+//
+// Collection: academic_sessions
+// Document ID: {sessionId}
+// Fields:
+//   - name: string (required)
+//   - startDate: string (required)
+//   - endDate: string (required)
+//   - isActive: bool (required)
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Helper functions
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function getUserRole() {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid))
+        ? get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role
+        : null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && getUserRole() == 'admin';
+    }
+
+    function isTeacher() {
+      return isAuthenticated() && (getUserRole() == 'teacher' || isAdmin());
+    }
+
+    function isStudent() {
+      return isAuthenticated() && getUserRole() == 'student';
+    }
+
+    // Validation functions
+    function isValidUser(data) {
+      return data.size() >= 3
+        && ('role' in data) && (data.role in ['admin', 'teacher', 'student'])
+        && ('isActive' in data) && (data.isActive is bool);
+    }
+
+    function isValidAttendance(data) {
+      return data.size() >= 5
+        && ('studentId' in data) && (data.studentId is string)
+        && ('date' in data) && (data.date is string)
+        && ('status' in data) && (data.status in ['Present', 'Absent', 'present', 'absent'])
+        && ('attendanceType' in data) && (data.attendanceType in ['SUBJECT', 'GENERAL', 'COMBINED']);
+    }
+
+    // Default deny all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (isOwner(userId) || isAdmin() || isTeacher());
+      allow create: if isAuthenticated() && (isOwner(userId) || isAdmin()) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && (isAdmin() || (isOwner(userId) && request.resource.data.role == resource.data.role)) && isValidUser(request.resource.data);
+      allow delete: if isAdmin();
+    }
+
+    // Students Collection
+    match /students/{studentDocId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Teachers Collection
+    match /teachers/{teacherDocId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Subjects Collection
+    match /subjects/{subjectDocId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Academic Sessions Collection
+    match /academic_sessions/{sessionId} {
+      allow read: if isAuthenticated();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // Attendance Collection
+    match /attendances/{attendanceDocId} {
+      allow read: if isAuthenticated() && (
+        isTeacher() ||
+        isAdmin() ||
+        (isStudent() && resource.data.studentId == request.auth.uid)
+      );
+      allow create: if isTeacher() && isValidAttendance(request.resource.data);
+      allow update: if isTeacher() && isValidAttendance(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}
